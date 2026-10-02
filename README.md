@@ -682,6 +682,14 @@ Material decisions use a decision dossier that records drivers, constraints, alt
 
 See `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md`.
 
+# Enterprise evidence corpus
+
+PPC generates an **Enterprise Evidence Corpus** of documents, messages, reports, approvals, policies, operational notes and learning artifacts, in addition to structured source-system data.
+
+The corpus comes from the canonical PPC world, but each artifact shows only what its author role could know at that time. It includes controlled staleness, disagreement and uncertainty. Hidden truth stays isolated from evaluated agents.
+
+See `docs/PPC-018_Enterprise_Evidence_Corpus_and_Unstructured_Data_Generation_Strategy.md`.
+
 # User experiences
 
 PPC deliberately separates three interfaces.
@@ -835,6 +843,7 @@ PPC-014  Implementation Roadmap and Build Runbook
 PPC-015  Three-Repository Operating Model
 PPC-016  Evidence, Decision Provenance and Evaluation Architecture
 PPC-017  EPM Dependency, Semantic Authority and Process Conformance Contract
+PPC-018  Enterprise Evidence Corpus and Unstructured Data Generation Strategy
 
 PPC-REG-001  Architecture Decision Register
 PPC-REG-002  Data Source and Integration Register

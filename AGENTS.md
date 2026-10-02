@@ -9,7 +9,8 @@ Guidance for AI coding agents working in the Pearland Petroleum Corporation (PPC
 3. `docs/PPC-015_Three_Repository_Operating_Model.md`
 4. `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md` before working on evidence, decision provenance, agents or evaluations.
 5. `docs/PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md` before consuming EPM artifacts, defining KPIs or validating process behavior.
-6. `docs/PPC-014_Implementation_Roadmap_and_Build_Runbook.md` before changing implementation code.
+6. `docs/PPC-018_Enterprise_Evidence_Corpus_and_Unstructured_Data_Generation_Strategy.md` before generating documents, messages or other unstructured data.
+7. `docs/PPC-014_Implementation_Roadmap_and_Build_Runbook.md` before changing implementation code.
 
 ## Rules
 

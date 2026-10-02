@@ -81,6 +81,7 @@ EIA/NOAA/EPA/PHMSA               Twenty/ERPNext/Postgres/MySQL/SQLite
   Source/integration inventory?   PPC-REG-002
   KPI/data-product inventory?     PPC-REG-003
   What every tool does?           PPC-REF-001
+  Unstructured evidence corpus?   PPC-018
 
 ## EPM chain
 
@@ -108,3 +109,6 @@ PPC uses two independent axes: **data provenance** (`OBSERVED`, `DERIVED`, `ESTI
 PPC consumes versioned EPM architectural principles, business/process authority, semantic model, ontology/SHACL, measurement/KPI rules, data-product portfolio, KPI Store contract and competency questions. Read `PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md`.
 
 PPC adopts **Meaning does not compute** and compares executed synthetic processes with EPM's designed process authority.
+
+## Enterprise evidence corpus
+PPC generates documents, messages, reports, approvals, policies, operational notes and learning artifacts from the canonical world. Each artifact reflects only what its author role knew at that time. Read `PPC-018_Enterprise_Evidence_Corpus_and_Unstructured_Data_Generation_Strategy.md`.
