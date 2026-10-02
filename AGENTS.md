@@ -25,3 +25,9 @@ Guidance for AI coding agents working in the Pearland Petroleum Corporation (PPC
 ## Layout
 
 Folders follow the "Repository structure" section of `README.md`. Documents live in `docs/`. Original delivered baseline archive is in `docs/archive/`.
+
+## Cursor Cloud specific instructions
+
+PPC is in architecture baseline / implementation preparation. Implementation directories contain placeholders only. There is no package manager, service, or test suite.
+
+The Cloud Agent install command does not install packages and does not start a server. Prove the workspace by checking that the document set and repository layout in `README.md` are present. Do not start PostgreSQL, MySQL, Kafka, Dagster, Superset, Dash, or Grafana until those systems exist in this repository.
