@@ -1,0 +1,41 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Large generated data, model artifacts and synthetic releases belong in
+# the PPC Cloudflare R2 project bucket, not in Git.
+*.parquet
+*.duckdb
+*.ducklake
+*.sqlite
+*.sqlite3
+*.db
+*.csv.gz
+*.pkl
+*.joblib
+*.onnx
+data/
+artifacts/
+mlruns/
+.dagster/
