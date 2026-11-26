@@ -71,7 +71,7 @@ For output q set absolute tolerance in q's units and dimensionless relative tole
 |---|---|---|
 | T20–24, especially T24 lines 3574–3914 | §§1–4 | Owner adopted hybrid simulation. Assays, modes, utilities and blending are design proposals requiring qualification. |
 | T2–3, T23–27, T35 | §§2, 5–6 | Preserve case lineage, historical knowledge and execution constraints for fair attribution. |
-| T73, lines 15572 onward | §§1, 6 | Pillar 1 proposes physical checks at component, process-system and enterprise-network levels. |
+| T73, lines 15572–15625 | §§1, 6 | Pillar 1 proposes physical checks at component, process-system and enterprise-network levels. |
 | T74, lines 16030–16601 | §§1, 6 | The owner requests agent-neutral specifications, established equations with explanations, and assessment of formal verification where applicable. Tool selection remains open. |
 | T122, T125 lines 36752–36916; WORLD-001 §5 and WORLD-002 §6 | §§3–6 | Preserve original tank and derate inputs. Assay fractions, 5/6 t blend trial quantities and the overfill case are new synthetic exercises. |
 | PPC-005, PPC-011, PPC-019, ADR-001/019/034 | §§1–6 | Governed models calculate; semantic relationships and graph exposure aid interpretation. Existing ADRs retain their recorded scope. |
