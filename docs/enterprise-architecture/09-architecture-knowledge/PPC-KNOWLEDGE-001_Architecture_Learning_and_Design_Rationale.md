@@ -18,7 +18,7 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 **Meaning, projection and calculation.** EPM and future approved process packages define meaning. A graph projects typed relationships for traversal. Engineering and governed analytical tools compute quantities. If a graph path is described as a margin loss, the user cannot inspect the equation or assumptions. INFO-001, GRAPH-001, DATA-001 and ANALYTICS-001 keep those roles visible.
 
-**Historical knowledge is recipient-specific.** A source may record a correction at noon and release it to the planner at 13:00. At 12:45, the planner uses the last authorized 12:30 publication or returns unresolved. An inaccessible correction stays undisclosed. [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the reader-as-of query rule; a current database row cannot reconstruct that view without publication and access history.
+**Historical knowledge is recipient-specific.** [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the reader-as-of query rule; a current database row cannot reconstruct that view without publication and access history.
 
 **A branch preserves a decision comparison.** A counterfactual branch copies a declared checkpoint and changes one assumption. It must not overwrite the actual path, borrow sibling evidence or execute a real-world action. A difference between branch outputs is model evidence under its envelope, not automatically a causal claim about a real plant.
 

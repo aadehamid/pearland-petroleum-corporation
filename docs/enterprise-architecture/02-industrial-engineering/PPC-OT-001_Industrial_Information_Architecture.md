@@ -40,7 +40,7 @@ The pinned [ICE Level-0 contract](https://github.com/aadehamid/scada_harmonizati
 |---|---|
 | Run, world/branch, site, source system, stable observation key, revision and prior revision | Distinguish redelivery from a correction and prevent a counterfactual from leaking into baseline evidence. |
 | Native address, instrument assignment, observed property, value, unit, basis and native status | Preserve the source claim and support comparisons of like quantities. The tag, instrument and installed equipment each have a distinct identity. |
-| Sample time, source/server record times where available, receipt time and first authorized availability | Quantify delay and reconstruct the decision as it could have been made. Preserve the original clock domain, synchronization status and uncertainty. |
+| Sample time, source/server record times where available, publication ID, scoped ordinal, publication time, recipient/role-and-channel receipt time and authorization grant | Quantify delay and reconstruct the decision as it could have been made. Preserve the original clock domain, synchronization status and uncertainty. |
 | Effective mapping interval, time the mapping was recorded, conversion version and quality interpretation | Reproduce an old published result after a tag reassignment or correction. Keep original and normalized fields together. |
 | Delivery ID, publisher session, sequence where supported, payload digest and historical/live flag | Recover a buffered record without introducing a second observation. Equal key and different payload requires explicit revision or investigation. |
 
@@ -80,3 +80,5 @@ GAP-004 remains open. Which ICE mapping release will PPC consume, and who accept
 | T58 lines 11388–11437; T59–61 lines 11555–12282 | §§4–5. Integrated derate proposal and later edge-model exploration. §4 sample values and delays are new fixtures. |
 
 [Discussion register](../registers/PPC-Discussion-Decision-Traceability.md) · [Detailed source locators](../registers/PPC-Discussion-Source-Locators.csv) · [Architecture registry](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md)
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T6–10, T37–38, T48–49, T51–61, T63–70, T75 to this draft.

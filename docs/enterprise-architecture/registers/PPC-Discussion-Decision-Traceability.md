@@ -138,7 +138,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Physical and numerical engineering coverage
 
-[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) maps T20–24 to the model and quantity contracts (§§1–4), T2–3 and T35 to LP case comparison (§5), T73 Pillar 1 (line 15572) to the proposed engineering checks (§6), T74 (line 16033) to the owner's direction on equations and agent-neutral specifications (§§1, 6), and T122/T125 to the tank, compressor and branch references (§4). Its §7 crosswalk distinguishes source fixtures from new synthetic examples. Worked arithmetic is checked; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
+[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) §7 records its routed exchanges, including T37–38, T45, T51–52 and T114–115. Its worked arithmetic is a specification check; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
 
 ## Items still open
 
@@ -156,7 +156,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Enterprise ontology, identity and time coverage
 
-[INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) §1 records the separate upstream process release and EPM authority (T6–8, T32, T89–93 and T131–135). §2 covers the source, tag and enterprise identity questions in T56–57 and T68–70. §§2–4 connect T62, T98–99 and T101–105 to mapping strength, decision-time reconstruction and semantic compatibility. §4 records the SEM and EA05C verification targets and outstanding runtime evidence.
+[INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) §1 records the separate upstream process release and EPM authority (T6–8, T32, T89–92 and T131–135). §2 covers the source, tag and enterprise identity questions in T56–57 and T68–70. §§2–4 connect T62, T98–99 and T101–105 to mapping strength, decision-time reconstruction and semantic compatibility. T93 routes to PLAN-001 and ARCH-000. §4 records the SEM and EA05C verification targets and outstanding runtime evidence.
 
 ## Remaining draft destination crosswalk
 

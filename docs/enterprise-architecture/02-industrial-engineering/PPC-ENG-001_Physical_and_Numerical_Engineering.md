@@ -71,6 +71,9 @@ For output q set absolute tolerance in q's units and dimensionless relative tole
 |---|---|---|
 | T20–24, especially T24 lines 3574–3914 | §§1–4 | Owner adopted hybrid simulation. Assays, modes, utilities and blending are design proposals requiring qualification. |
 | T2–3, T23–27, T35 | §§2, 5–6 | Preserve case lineage, historical knowledge and execution constraints for fair attribution. |
+| T37–38, T45 | §§1, 3–4 | Use licensed, revision-scoped engineering evidence and public observation vintages. Aggregate observations do not become PPC measurements. |
+| T51–52 | §§1, 6 | Assess physical-simulation libraries and operating limits with independent evidence. |
+| T114–115 | §6 | Version model inputs and holdouts; qualify optimization, causal assumptions, uncertainty and feasibility. |
 | T73, lines 15572–15625 | §§1, 6 | Pillar 1 proposes physical checks at component, process-system and enterprise-network levels. |
 | T74, lines 16030–16601 | §§1, 6 | The owner requests agent-neutral specifications, established equations with explanations, and assessment of formal verification where applicable. Tool selection remains open. |
 | T122, T125 lines 36752–36916; WORLD-001 §5 and WORLD-002 §6 | §§3–6 | Preserve original tank and derate inputs. Assay fractions, 5/6 t blend trial quantities and the overfill case are new synthetic exercises. |
@@ -79,3 +82,5 @@ For output q set absolute tolerance in q's units and dimensionless relative tole
 Before declaring any model qualified, reviewers should identify who owns the parameter data and tolerances, which independent benchmark covers the envelope, which omitted streams affect closure and which commercial decision changes if a simplification fails. Defer verified operational signal semantics to OT-001, engineering revision and topology to EDI-001, and executable qualification evidence to VERIFY-001. The separate upstream business-process ontology release remains a dependency for semantic mappings.
 
 [Master index](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md) · [Discussion register](../registers/PPC-Discussion-Decision-Traceability.md) · [Canonical world](../01-enterprise-world/PPC-WORLD-001_Canonical_Enterprise_World.md) · [Time and replay](../01-enterprise-world/PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) · [Synthetic generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [Performance intelligence](../../PPC-011_Performance_Intelligence_ML_and_Causal_Analytics.md) · [Ontology reuse](../../PPC-019_Public_Ontology_Reuse_and_Implementation_Guide.md).
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T20–21, T23–24, T35, T37–38, T45, T51–52, T73–74, T114–115, T125 to this draft.

@@ -129,3 +129,5 @@ Versioned snapshots and generation manifests follow [PPC-013](../../PPC-013_Clou
 **Repository sources.** [Charter](../../PPC-001_Problem_Statement_and_Simulation_Charter.md) · [Synthetic data generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [Evidence and decision provenance](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md) · [Architecture decisions](../../PPC-REG-001_Architecture_Decision_Register.md) · [Master architecture index](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md).
 
 The recipient-specific evidence and as-of query rule is [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). This scenario fixes only its own observation and delivery times.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T11–21, T23–25, T27, T31, T34, T36, T43–45, T71–72, T83, T94, T97, T122, T125, T143–145 to this draft.
