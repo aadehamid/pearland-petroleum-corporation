@@ -2,7 +2,7 @@
 
 | Document control | Value |
 |---|---|
-| Artifact ID | `PPC-ARCH-000` (proposed; not yet registered in PPC) |
+| Artifact ID | `PPC-ARCH-000` (registered in §5; draft for review) |
 | Version | `0.1.0-draft` |
 | Status | **Draft for owner review and independent challenge**; not an approved architecture baseline |
 | Prepared | 2026-11-25 |
@@ -124,29 +124,29 @@ Original documentation URLs follow `https://github.com/aadehamid/pearland-petrol
 
 ## 5. Proposed comprehensive documentation registry
 
-All entries in this table are **planned documents, not created or approved files**. The ID prefix `PPC-` is required in published names; the short ID is used for readability. The final location is under `docs/enterprise-architecture/` in PPC. Each spec must cross-link to preserved PPC docs, source evidence and ADRs.
+The file status below describes this repository revision. A draft is available to read; a planned entry awaits authoring. Architecture approval is tracked separately. The ID prefix `PPC-` is required in published names; the short ID is used for readability. The final location is under `docs/enterprise-architecture/` in PPC. Each spec must cross-link to preserved PPC docs, source evidence and ADRs.
 
-| Short ID | Proposed title | Proposed area | Core normative question | Existing references |
-|---|---|---|---|---|
-| ARCH-000 | Master Architecture Index and Authority Baseline | `00-master-index/` | What is authoritative, proposed, required and traceable? | PPC-000, 015, 017, REG-001 |
-| WORLD-001 | Canonical Enterprise World | `01-enterprise-world/` | Which physical/business world state exists, and who can change it? | PPC-001, 005, 013 |
-| WORLD-002 | Simulation, Time, Replay and Branches | `01-enterprise-world/` | How are time, deterministic transitions and scenarios isolated? | PPC-005, 013, 016 |
-| ENG-001 | Physical and Numerical Engineering | `02-industrial-engineering/` | Which reduced-order equations, units and bounds are qualified? | PPC-005, 011, 019 |
-| OT-001 | Industrial Information Architecture | `02-industrial-engineering/` | How do source measurements, tags, historian and ICE mapping work? | PPC-006, 010; ICE |
-| EDI-001 | Engineering Information Integration | `02-industrial-engineering/` | How do approved engineering revisions/configurations enter PPC? | PPC-010, 019; EDI |
-| INFO-001 | Enterprise Ontology, Identity and Time | `03-enterprise-information/` | How do approved process/semantic concepts map to PPC identities? | PPC-003, 004, 017, 019 |
-| GRAPH-001 | Enterprise Instance Graph | `03-enterprise-information/` | How are instances projected, versioned, secured and queried? | PPC-010, 016 |
-| DATA-001 | Data Products, KPIs and Analytical Releases | `03-enterprise-information/` | How are facts, metrics, status, restatement and releases governed? | PPC-008, 013, 017 |
-| INT-001 | Source Lifecycles and Integration | `04-source-integration/` | What do source events, outbox/inbox, recovery and reconciliation mean? | PPC-006, 007 |
-| EVID-001 | Evidence and Decision Context | `04-source-integration/` | What evidence could an agent know, when, from which source? | PPC-016, 018; ECE |
-| ANALYTICS-001 | Performance Intelligence and Optimization | `05-intelligence-experience/` | Which validated numerical, causal, forecasting and optimization tools calculate impact? | PPC-011 |
-| UX-001 | Enterprise Intelligence Workspace | `05-intelligence-experience/` | What business workflows use graph and scenario tools, with what authorization? | PPC-012 |
-| AGENT-001 | Agent Tools and Consequential Actions | `05-intelligence-experience/` | What may an agent read, simulate, recommend or execute? | PPC-012, 016 |
-| PLATFORM-001 | Infrastructure, Security and Operations | `06-platform-operations/` | How are services deployed, recovered, monitored and secured? | PPC-002, 009, 013, 014 |
-| VERIFY-001 | Verification and Release Qualification | `07-scenarios-verification/` | What independently proves each behavioral and security contract? | PPC-005, 014, 016 |
-| SCENARIO-001 | Golden Enterprise Scenarios | `07-scenarios-verification/` | Which end-to-end fixtures demonstrate the enterprise? | PPC-001, 005, 014 |
-| PLAN-001 | Implementation Work Packages and Readiness | `08-implementation/` | What is the smallest safe, testable dependency order? | PPC-014 |
-| KNOWLEDGE-001 | Architecture Learning and Design Rationale | `09-architecture-knowledge/` | Why was each engineering choice made; what first-principles reasoning must be preserved? | OT/EA discussion series |
+| Short ID | Proposed title | Proposed area | Core normative question | Existing references | File status |
+|---|---|---|---|---|---|
+| ARCH-000 | Master Architecture Index and Authority Baseline | `00-master-index/` | What is authoritative, proposed, required and traceable? | PPC-000, 015, 017, REG-001 | Draft (this index) |
+| WORLD-001 | Canonical Enterprise World | `01-enterprise-world/` | Which physical/business world state exists, and who can change it? | PPC-001, 005, 013 | [Draft](../01-enterprise-world/PPC-WORLD-001_Canonical_Enterprise_World.md) |
+| WORLD-002 | Simulation, Time, Replay and Branches | `01-enterprise-world/` | How are time, deterministic transitions and scenarios isolated? | PPC-005, 013, 016 | [Draft](../01-enterprise-world/PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) |
+| ENG-001 | Physical and Numerical Engineering | `02-industrial-engineering/` | Which reduced-order equations, units and bounds are qualified? | PPC-005, 011, 019 | Planned |
+| OT-001 | Industrial Information Architecture | `02-industrial-engineering/` | How do source measurements, tags, historian and ICE mapping work? | PPC-006, 010; ICE | Planned |
+| EDI-001 | Engineering Information Integration | `02-industrial-engineering/` | How do approved engineering revisions/configurations enter PPC? | PPC-010, 019; EDI | Planned |
+| INFO-001 | Enterprise Ontology, Identity and Time | `03-enterprise-information/` | How do approved process/semantic concepts map to PPC identities? | PPC-003, 004, 017, 019 | Planned |
+| GRAPH-001 | Enterprise Instance Graph | `03-enterprise-information/` | How are instances projected, versioned, secured and queried? | PPC-010, 016 | Planned |
+| DATA-001 | Data Products, KPIs and Analytical Releases | `03-enterprise-information/` | How are facts, metrics, status, restatement and releases governed? | PPC-008, 013, 017 | Planned |
+| INT-001 | Source Lifecycles and Integration | `04-source-integration/` | What do source events, outbox/inbox, recovery and reconciliation mean? | PPC-006, 007 | Planned |
+| EVID-001 | Evidence and Decision Context | `04-source-integration/` | What evidence could an agent know, when, from which source? | PPC-016, 018; ECE | Planned |
+| ANALYTICS-001 | Performance Intelligence and Optimization | `05-intelligence-experience/` | Which validated numerical, causal, forecasting and optimization tools calculate impact? | PPC-011 | Planned |
+| UX-001 | Enterprise Intelligence Workspace | `05-intelligence-experience/` | What business workflows use graph and scenario tools, with what authorization? | PPC-012 | Planned |
+| AGENT-001 | Agent Tools and Consequential Actions | `05-intelligence-experience/` | What may an agent read, simulate, recommend or execute? | PPC-012, 016 | Planned |
+| PLATFORM-001 | Infrastructure, Security and Operations | `06-platform-operations/` | How are services deployed, recovered, monitored and secured? | PPC-002, 009, 013, 014 | Planned |
+| VERIFY-001 | Verification and Release Qualification | `07-scenarios-verification/` | What independently proves each behavioral and security contract? | PPC-005, 014, 016 | Planned |
+| SCENARIO-001 | Golden Enterprise Scenarios | `07-scenarios-verification/` | Which end-to-end fixtures demonstrate the enterprise? | PPC-001, 005, 014 | Planned |
+| PLAN-001 | Implementation Work Packages and Readiness | `08-implementation/` | What is the smallest safe, testable dependency order? | PPC-014 | Planned |
+| KNOWLEDGE-001 | Architecture Learning and Design Rationale | `09-architecture-knowledge/` | Why was each engineering choice made; what first-principles reasoning must be preserved? | OT/EA discussion series | Planned |
 
 Supplementary `registers/` should include `SOURCE-REGISTER`, `REQUIREMENTS-COVERAGE`, `ADR-RECONCILIATION`, `DEPENDENCY-AND-COMPATIBILITY`, `RISKS-AND-OPEN-QUESTIONS`, and `TERMINOLOGY`. `independent-review/` should store the later agent's instructions, findings, evidence and owner dispositions. Do not duplicate existing upstream normative artifacts within PPC; reference a pinned source instead.
 
