@@ -23,7 +23,7 @@ The owner accepted Round 3 Q16 via "Yes to all." (`docs/adr/answers/2026-11-26-f
 
 ## Consequences
 
-- `PPC-PLATFORM-001` and `PPC-PLAN-001` (WP-4) adopt this deployment topology and require a verified restore drill meeting the RPO/RTO targets before Slice 1 qualification.
+- `PPC-PLATFORM-001` and `PPC-PLAN-001` adopt this deployment topology: `WP-4A` provisions the platform and runs a synthetic stub-writer baseline drill in parallel with `WP-1`–`WP-3`, and `WP-4B` (`R4` gate, after `WP-3` delivers live outbox and Delta writers) executes the live restore drill proving the `RPO` and `RTO <= 1 hour` targets before `WP-5` Slice 1 qualification.
 
 ## Post-review clarification notes (2026-11-26)
 
