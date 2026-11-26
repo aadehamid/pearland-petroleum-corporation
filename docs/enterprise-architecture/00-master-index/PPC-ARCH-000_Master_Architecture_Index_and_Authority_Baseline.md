@@ -131,7 +131,7 @@ The file status below describes this repository revision. A draft is available t
 | ARCH-000 | Master Architecture Index and Authority Baseline | `00-master-index/` | What is authoritative, proposed, required and traceable? | PPC-000, 015, 017, REG-001 | Draft (this index) |
 | WORLD-001 | Canonical Enterprise World | `01-enterprise-world/` | Which physical/business world state exists, and who can change it? | PPC-001, 005, 013 | [Draft](../01-enterprise-world/PPC-WORLD-001_Canonical_Enterprise_World.md) |
 | WORLD-002 | Simulation, Time, Replay and Branches | `01-enterprise-world/` | How are time, deterministic transitions and scenarios isolated? | PPC-005, 013, 016 | [Draft](../01-enterprise-world/PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) |
-| ENG-001 | Physical and Numerical Engineering | `02-industrial-engineering/` | Which reduced-order equations, units and bounds are qualified? | PPC-005, 011, 019 | Planned |
+| ENG-001 | Physical and Numerical Engineering | `02-industrial-engineering/` | Which reduced-order equations, units and bounds are qualified? | PPC-005, 011, 019 | [Draft](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) |
 | OT-001 | Industrial Information Architecture | `02-industrial-engineering/` | How do source measurements, tags, historian and ICE mapping work? | PPC-006, 010; ICE | Planned |
 | EDI-001 | Engineering Information Integration | `02-industrial-engineering/` | How do approved engineering revisions/configurations enter PPC? | PPC-010, 019; EDI | Planned |
 | INFO-001 | Enterprise Ontology, Identity and Time | `03-enterprise-information/` | How do approved process/semantic concepts map to PPC identities? | PPC-003, 004, 017, 019 | Planned |
