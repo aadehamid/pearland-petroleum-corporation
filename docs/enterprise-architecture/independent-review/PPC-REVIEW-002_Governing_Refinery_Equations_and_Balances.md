@@ -33,18 +33,49 @@ flowchart LR
     CDU -->|"VGO"| FCC["4A. FCC Unit\n(Lee 4-Lump + Heat Bal.)"]
     CDU -->|"VGO"| HCU["4B. Hydrocracker\n(Polytropic Comp. + H2/Quench)"]
     CDU -->|"Kero / AGO"| DHT["5A. DHT Interface\n(Feed-Dependent S, Cetane, H2)"]
+    CDU -->|"LSR Naphtha"| BL["7. Product Blending\n(BOB 84.2/88.6 + ULSD) & Quality Hold"]
+    CDU -->|"Heavy Naphtha"| REF["5C. Reformer / Export Boundary\n(Pending ADR-0040 WP-0 Choice)"]
+    CDU -->|"Vacuum Residue"| EX["9. Heavy / Coproduct / SRU Sinks\n(Resid, Slurry, LPG, Fuel Gas, Sulfur)"]
     FCC -->|"LCO"| DHT
     FCC -->|"FCC Naphtha"| FDS["5B. FCC Selective HDS\n(or Boundary Spec Route)"]
-    CDU -->|"Heavy Naphtha"| REF["5C. Reformer / Import Boundary\n(Pending ADR-0040 WP-0 Choice)"]
+    FCC -->|"Slurry / Dry Gas / LPG"| EX
+    HCU -->|"Heavy Naphtha"| REF
+    HCU -->|"UCO Recycle / Export"| FCC
+    HCU -->|"Acid Gas / Dry Gas / LPG"| EX
+    HCU -->|"ULSD & Light Naphtha"| BL
+    HCU -->|"Jet / Kerosene"| FT["8. Finished Tankage, Jet A-1,\nTerminal E10 & Dispatch"]
     SMR["6. H2 Supply Boundary (SMR +\nReformer or Pipeline H2) & Utilities"] <--> HCU
     SMR <--> DHT
     SMR <--> FDS
-    DHT -->|"Hydrotreated Dist."| BL["7. Product Blending\n(BOB 84/88 + ULSD) & Quality Hold"]
-    HCU -->|"ULSD, Naphtha, LPG"| BL
+    DHT -->|"Hydrotreated Dist."| BL
     FDS -->|"Treated FCC Naphtha"| BL
     REF -->|"Reformate / Purchased Octane"| BL
-    BL --> FT["8. Finished Tankage, Terminal E10\n& Pipeline / Truck / Marine Dispatch"]
+    BL --> FT
 ```
+
+### Complete Refinery A v1 stream-to-sink closure table (`PO-02`)
+
+Every stream leaving a Refinery A v1 control volume has a declared downstream unit, product pool, utility header, or refinery-gate export sink so plant-wide mass and sulfur closure holds without orphan streams:
+
+| Source unit | Output stream | Declared v1 destination / sink |
+|---|---|---|
+| CDU + VDU | Light Straight-Run (LSR) Naphtha | Gasoline Blending (`BL`) after optional sweetening interface |
+| CDU + VDU | Heavy Naphtha | Catalytic Reformer (`5C`, Option A) or Heavy Naphtha Export (Option B); never directly to gasoline blending |
+| CDU + VDU | Kerosene / AGO | Diesel Hydrotreater (`5A`, DHT) -> ULSD Blending (`BL`) or Jet A-1 Tankage (`FT`) |
+| CDU + VDU | Vacuum Gas Oil (VGO) | Split between FCC (`4A`) and Hydrocracker (`4B`) |
+| CDU + VDU | Vacuum Residue | Heavy Fuel Oil / Asphalt / Resid Export Boundary (`9`; no delayed coker in v1) |
+| FCC (`4A`) | FCC Naphtha (Gasoline) | FCC Selective HDS (`5B`, Option A) or treated-naphtha boundary -> Gasoline Blending (`BL`) |
+| FCC (`4A`) | Light Cycle Oil (LCO) | Diesel Hydrotreater (`5A`, DHT) -> ULSD Blending (`BL`); never directly to ULSD blending |
+| FCC (`4A`) | Slurry / Decant Oil | Heavy Fuel Oil / Slurry Export Boundary (`9`) |
+| FCC (`4A`) | Dry Gas (`C1`–`C2`) & LPG (`C3`–`C4`) | Refinery Fuel Gas Header (`6`) and LPG Sales / Butane-to-Blending Boundary (`9`) |
+| Hydrocracker (`4B`) | Acid Gas (`H2S + NH3`) | Sulfur Recovery Unit (`SRU`) & Sour-Water Stripper Boundary (`9`) -> Elemental Sulfur Export |
+| Hydrocracker (`4B`) | Dry Gas (`C1`–`C2`) & LPG (`C3`–`C4`) | Refinery Fuel Gas Header (`6`) and LPG Sales / Butane-to-Blending Boundary (`9`) |
+| Hydrocracker (`4B`) | Light Naphtha | Gasoline Blending (`BL`) |
+| Hydrocracker (`4B`) | Heavy Naphtha | Catalytic Reformer (`5C`, Option A) or Heavy Naphtha Export (Option B); never directly to gasoline blending |
+| Hydrocracker (`4B`) | Jet / Kerosene | Finished Jet A-1 Tankage & Dispatch (`FT`; or seasonal No. 1-D / ULSD blend component) |
+| Hydrocracker (`4B`) | ULSD | ULSD Blending & Finished Tankage (`BL` -> `FT`) |
+| Hydrocracker (`4B`) | Unconverted Oil (UCO) | FCC VGO Feed Recycle (`4A`) or Lube/UCO Export Boundary (`9`) |
+| DHT / FDS (`5A`/`5B`) | Sour off-gas (`H2S`) | Sulfur Recovery Unit (`SRU`, `9`) |
 
 ### Physical boundaries and explicit v1 exclusions
 
@@ -95,9 +126,9 @@ SI mass (`kg` or metric tonnes `t`) is the sole conservation basis. Standard liq
 - **Class:** Empirical petroleum characterization plus exact mass-fraction separation.
 - **Primary source:** Riazi, ASTM Manual 50 (2005), Ch. 2–3 (Watson $K_w$, ASTM D2892 TBP ↔ ASTM D86); J. H. Gary, G. E. Handwerk, & M. J. Kaiser, *Petroleum Refining: Technology and Economics*, 5th ed. (CRC Press, 2007), Ch. 3–4.
 - **Equations:**
-  $$K_w = \frac{T_b^{1/3}}{\text{SG}_{60/60}}\;\;(T_b\text{ in }^\circ\text{R}), \qquad y_{c,j}(T_{j-1}^{\text{cut}}, T_j^{\text{cut}}) = F_c^{\text{TBP}}(T_j^{\text{cut}}) - F_c^{\text{TBP}}(T_{j-1}^{\text{cut}}) + \delta_{\text{overlap},j}$$
-  $$\sum_{j=1}^{J} \delta_{\text{overlap},j} = 0, \qquad \sum_{j=1}^{J} y_{c,j} + y_{c,\text{loss}} = 1, \qquad \dot{m}_j = \sum_c \dot{m}_{\text{crude},c}\, y_{c,j}, \qquad w_{j,S} = \frac{\sum_c \dot{m}_{\text{crude},c}\, y_{c,j}\, w_{c,j,S}}{\dot{m}_j}$$
-- **Zero-sum overlap rule:** Adjacent-cut fractionation overlap shifts mass only between neighboring cuts so $\sum_j \delta_{\text{overlap},j} = 0$ identically, while broadening cut boiling tails (T90/T95 and flash point). Cut-point shifts stay within $\pm 15^\circ\text{C}$ of nominal column design.
+  $$K_w = \frac{T_b^{1/3}}{\text{SG}_{60/60}}\;\;(T_b\text{ in }^\circ\text{R}), \qquad y_{c,j}(T_{j-1}^{\text{cut}}, T_j^{\text{cut}}) = (1 - y_{c,\text{loss}})\left[F_c^{\text{TBP}}(T_j^{\text{cut}}) - F_c^{\text{TBP}}(T_{j-1}^{\text{cut}})\right] + \delta_{c,\text{overlap},j}$$
+  $$\sum_{j=1}^{J} \delta_{c,\text{overlap},j} = 0, \qquad \sum_{j=1}^{J} y_{c,j} + y_{c,\text{loss}} = 1, \qquad \dot{m}_j = \sum_c \dot{m}_{\text{crude},c}\, y_{c,j}, \qquad w_{j,S} = \frac{\sum_c \dot{m}_{\text{crude},c}\, y_{c,j}\, w_{c,j,S}}{\dot{m}_j}$$
+- **Zero-sum overlap and loss rule:** Column/unaccounted loss $y_{c,\text{loss}} \ge 0$ is explicitly separated from the assay partition so $\sum_{j=1}^J y_{c,j} = 1 - y_{c,\text{loss}}$ while per-crude fractionation overlap $\delta_{c,\text{overlap},j}$ shifts mass only between neighboring cuts ($\sum_j \delta_{c,\text{overlap},j} = 0$ identically) and broadens cut boiling tails (T90/T95 and flash point). Cut-point shifts stay within $\pm 15^\circ\text{C}$ of nominal column design.
 
 ### EQ-05 — Hydrocracker recycle-gas compressor, quench, $P_{\text{H2}}$, and lumped conversion
 
@@ -126,7 +157,7 @@ SI mass (`kg` or metric tonnes `t`) is the sole conservation basis. Standard liq
 ### EQ-06 — FCC 4-lump kinetics and reactor–regenerator heat/coke balance
 
 - **Class:** Lumped catalytic kinetics plus macroscopic energy balance.
-- **Primary sources:** L.-S. Lee, Y.-W. Chen, T.-N. Huang, & W.-Y. Chen, *Can. J. Chem. Eng.* 67(4), 615–619 (1989) (4-lump FCC kinetic model with separate coke lump, extending the 3-lump model of V. W. Weekman Jr. & D. M. Nace, *AIChE J.* 16(3), 397–404 (1970)); Gary, Handwerk, & Kaiser, 5th ed. (2007), Ch. 6.
+- **Primary sources:** L.-S. Lee, Y.-W. Chen, T.-N. Huang, & W.-Y. Pan, *Can. J. Chem. Eng.* 67(4), 615–619 (1989) (4-lump FCC kinetic model with separate coke lump, extending the 3-lump model of V. W. Weekman Jr. & D. M. Nace, *AIChE J.* 16(3), 397–404 (1970)); Gary, Handwerk, & Kaiser, 5th ed. (2007), Ch. 6.
 - **Equations (strictly mass-conservative inlet CCR split):**
   1. *Initial condition at riser inlet ($\tau = 0$):* Partition feed Conradson Carbon Residue (`CCR`) additive coke strictly into initial coke precursor so the sum of mass fractions equals `1` at $\tau = 0$:
      $$y_D(0) = f_{\text{add}}\, w_{\text{CCR,feed}} \quad (f_{\text{add}} \in [0.5, 1.0]), \qquad y_A(0) = 1 - y_D(0), \qquad y_B(0) = 0, \qquad y_C(0) = 0$$
@@ -158,7 +189,7 @@ SI mass (`kg` or metric tonnes `t`) is the sole conservation basis. Standard liq
   - *RON / MON:* W. C. Healy Jr., C. W. Maassen, & R. T. Peterson, *Proc. API Div. Refining* 39(III), 132–143 (1959) (Ethyl RT-70).
   - *Flash point:* R. O. Wickey & D. H. Chittenden, *Hydrocarbon Processing* 42(6), 157–158 (1963).
   - *Cloud point:* J. Hu & A. M. Burns, *Hydrocarbon Processing* 49(11), 213–216 (1970); Riazi, ASTM Manual 50 (2005), Ch. 10.
-  - *Diesel cetane:* ASTM D975 (ASTM D613 Cetane Number $\ge 40$, or alternative ASTM D4737 Cetane Index $\ge 40$ paired with max 35 vol% aromatics).
+  - *Diesel cetane:* ASTM D975 Table 1 and 40 CFR 1090 (mandatory ASTM D613 Cetane Number $\ge 40$, approximated via ASTM D4737 when D613 engine testing is unavailable, **AND** at least one of ASTM D976 Cetane Index $\ge 40$ **OR** ASTM D1319 aromatics $\le 35\text{ vol}\%$).
 - **Equations:**
   1. *Mass-basis sulfur and ideal-volume density:*
      $$w_{S,\text{blend}} = \frac{\sum_i m_i w_{S,i}}{\sum_i m_i}, \qquad \rho_{\text{blend}} = \frac{\sum_i m_i}{\sum_i (m_i / \rho_i)}$$
@@ -166,13 +197,13 @@ SI mass (`kg` or metric tonnes `t`) is the sole conservation basis. Standard liq
      $$\text{RVP}_{\text{blend}} = \left[\sum_i x_{v,i}\,(\text{RVP}_i)^{1.25}\right]^{0.8}$$
   3. *Ethyl RT-70 nonlinear RON and MON interaction model (verify exact regression constants against Healy et al. 1959 primary tables before WP-1 coding):*
      $$\text{RON}_{\text{blend}} = \bar{r} + a_1(\overline{rs} - \bar{r}\bar{s}) + a_2(\overline{O^2} - \bar{O}^2)$$
-     $$\text{MON}_{\text{blend}} = \bar{m} + b_1(\overline{ms} - \bar{m}\bar{s}) + b_2(\overline{O^2} - \bar{O}^2) + b_3\frac{\overline{A^2} - \bar{A}^2}{100}$$
-     where $s_i = \text{RON}_i - \text{MON}_i$ (sensitivity), $O_i$ is vol% olefins, $A_i$ is vol% aromatics, and published reference values are $a_1 \approx 0.03224$, $a_2 \approx 0.00101$.
+     $$\text{MON}_{\text{blend}} = \bar{m} + b_1(\overline{ms} - \bar{m}\bar{s}) + b_2(\overline{O^2} - \bar{O}^2) + b_3\left(\frac{\overline{A^2} - \bar{A}^2}{100}\right)^2$$
+     where $s_i = \text{RON}_i - \text{MON}_i$ (sensitivity), $O_i$ is vol% olefins, $A_i$ is vol% aromatics, and published reference values are $a_1 \approx 0.03224$, $a_2 \approx 0.00101$, $b_1 \approx 0.04450$, $b_2 \approx 0.00081$, $b_3 \approx -0.0645$.
   4. *Wickey–Chittenden flash point ($T_{\text{fp},i}$ in °F) and Hu–Burns / Riazi cloud point ($T_{\text{cp},i}$ in K):*
      $$\log_{10}(I_{\text{fp},i}) = -6.1188 + \frac{4345.2}{T_{\text{fp},i} + 383}, \quad I_{\text{fp,blend}} = \sum_i x_{v,i}\, I_{\text{fp},i}, \qquad T_{\text{cp,blend}} = \left(\sum_i x_{v,i}\, T_{\text{cp},i}^{20}\right)^{0.05}$$
 - **Release specification gates:**
-  - **ULSD (ASTM D975 S15):** sulfur $\le 15\text{ ppmw}$, flash point $\ge 52^\circ\text{C}$, ASTM D613 Cetane Number $\ge 40$ (or D4737 Cetane Index $\ge 40$ with aromatics $\le 35\text{ vol}\%$), cloud point $\le T_{\text{seasonal}}$.
-  - **Gasoline blendstock at refinery gate (RBOB / CBOB before 10 vol% ethanol):** sub-octane blendstock `(R+M)/2 >= 84.0` (regular BOB) or `>= 88.0` (premium BOB), seasonal BOB RVP cap, Tier 3 sulfur `<= 10 ppmw` annual refinery average and `<= 80 ppmw` per-gallon cap (40 CFR 1090). Terminal splash-blending with `10 vol%` denatured ethanol (`E10`, effective blending octane `~113 (R+M)/2`) raises finished retail grades to `87.0` (regular) and `91.0` (premium).
+  - **ULSD (ASTM D975 S15 & 40 CFR 1090):** sulfur $\le 15\text{ ppmw}$, flash point $\ge 52^\circ\text{C}$, ASTM D613 Cetane Number $\ge 40$ (D4737 estimate when D613 is unavailable) **AND** at least one of (ASTM D976 Cetane Index $\ge 40$ **OR** ASTM D1319 aromatics $\le 35\text{ vol}\%$), cloud point $\le T_{\text{seasonal}}$.
+  - **Gasoline blendstock at refinery gate (RBOB / CBOB before 10 vol% ethanol):** sub-octane blendstock `(R+M)/2 >= 84.2` (regular BOB) or `>= 88.6` (premium BOB), seasonal BOB RVP cap (accounting for the EPA `9.00 psi` conventional / `7.80 psi` ozone-nonattainment / Houston RFG summer limits and the `~1.0 psi` ethanol RVP bump where no 1 psi waiver applies), Tier 3 sulfur `<= 10 ppmw` annual refinery average and `<= 80 ppmw` per-gallon cap (40 CFR 1090). Terminal splash-blending with `10 vol%` denatured ethanol (`E10`, effective blending octane `~113 (R+M)/2`) raises finished retail grades to `>= 87.0` (`87.08`) regular and `>= 91.0` (`91.04`) premium.
 
 ### EQ-09 — Economic objective, planning LP separation, and fair backcasting
 
@@ -192,9 +223,9 @@ All figures below were verified to full double precision using $\rho_{w,60^\circ
    - *Baseline `T125`:* $V(0) = 10{,}000\text{ bbl}$ (`1,334,179.15 kg`), working cap `12,000 bbl`, inflow `500 bbl/h` (`66,708.96 kg/h`), outflow `700 bbl/h` (`93,392.54 kg/h`) for `2 h`. Closing stock is `9,600 bbl` (`1,280,811.99 kg`), mass residual `0.00 kg`.
    - *Intermediate overflow fixture:* $V(0) = 11{,}800\text{ bbl}$ (`1,574,331.40 kg`), cap `12,000 bbl`. Hour 1 net `+400 bbl/h` (`600 in / 200 out`), hour 2 net `-500 bbl/h` (`0 in / 500 out`). An unsplit 2-hour balance yields `11,700 bbl` (`1,560,989.61 kg`), falsely appearing legal while hiding a `200 bbl` overflow at hour 1 (`12,200 bbl` = `1,627,698.57 kg`). Exact crossing detection splits at $t^* = (12{,}000 - 11{,}800)/400 = 0.5\text{ h}$.
 2. **HCU compressor derate, complete product/coproduct mass slate, and liquid volumetric gain (`EQ-01`, `EQ-05`, `EQ-07`):**
-   - Nominal VGO charge `40,000 bbl/day` at $\text{SG}_{60/60} = 0.910$ equals `5,781.44 t/day`. Under the `SCENARIO_ASSUMPTION` compressor derate (assuming the unit runs at $R_{\min}$ at `40,000 bbl/day` with quench and shared $\text{H}_2$ non-binding), feasible feed drops to `30,000 bbl/day` (`4,336.08 t/day`).
+   - Nominal VGO charge `40,000 bbl/day` at $\text{SG}_{60/60} = 0.910$ equals `5,781.44 t/day`. Under normal `SCN-A-T125` plant operation, net plant $\text{H}_2$ supply is `170.00 t/day` (`165.00 t/day` allocable after `5.00 t/day` header loss; `125.00 t/day` headroom after `40.00 t/day` DHT), which covers nominal (`115.63 t/day`) and planned (`104.07 t/day`) HCU demand so shared $\text{H}_2$ is non-binding. Under the `SCENARIO_ASSUMPTION` compressor derate (assuming the unit runs at $R_{\min}$ at `40,000 bbl/day` with quench non-binding), feasible feed freezes at **`30,000 bbl/day`** (`4,336.08 t/day`).
    - Unit cancellation check for `EQ-05`: for `R_{min,vol} = 4,000 SCF H2 / bbl` at `60 °F, 14.696 psia`, $R_{\min,\text{mass}} = (4000 \times 2.01588 / 379.48 \times 0.45359237) / (909.10456 \times 0.158987294928) = 0.06669\text{ kg pure H}_2/\text{kg feed}$. A nominal pure-$\text{H}_2$ recycle flow of `385.56 t/day` (`w_H2,rec * m_dot_rec`) supports `385.56 / 0.06669 = 5,781.44 t/day` (`40,000 bbl/day`); cutting recycle to 75% (`289.17 t/day`) yields `289.17 / 0.06669 = 4,336.08 t/day` (`30,000 bbl/day`).
-   - With `2.0 wt%` synthetic chemical $\text{H}_2$ uptake (`86.72 t/day`, equivalent to `1,199.7 SCF/bbl` — a synthetic mild-to-moderate conversion figure), total input mass is `4,422.80 t/day`. The complete synthetic output slate closes mass identically (`0.000000 t/day` residual) while separating non-liquid gas/acid-gas streams from liquid barrels:
+   - With `2.0 wt%` synthetic chemical $\text{H}_2$ uptake (`86.72 t/day`, equivalent to `1,199.7 SCF/bbl` — a synthetic illustrative distillate-mode balance at the lower end of the `1,000–2,500 SCF/bbl` `PO-12` benchmark band; high-conversion `90%` industrial hydrocrackers typically consume `1,500–2,200 SCF/bbl` with `+12` to `+20%` liquid gain, which WP-1 process-engineer calibration sets), total input mass is `4,422.80 t/day`. The complete synthetic output slate closes mass identically (`0.000000 t/day` residual) while separating non-liquid gas/acid-gas streams from liquid barrels:
 
    | Output stream | wt% of total input | Mass (`t/day`) | $\text{SG}_{60/60}$ | Liquid volume (`bbl/day`) |
    |---|---:|---:|---:|---:|
@@ -209,10 +240,10 @@ All figures below were verified to full double precision using $\rho_{w,60^\circ
    | **Total** | **100.00%** | **4,422.80** | — | **32,643.6 ($\text{C}_5+$) / 34,448.4 ($\text{C}_3+$)** |
 
    - Liquid $\text{C}_5+$ volumetric gain vs `30,000 bbl/day` feed is `+8.81%` (`+14.83%` including LPG), while total mass residual is `0.00 t/day`.
-   - *Constant-uptake shared-$\text{H}_2$ boundary check (zero purge/dissolved loss, fixed $\xi$):* If shared $\text{H}_2$ headroom is `75.00 t/day`, constant `2.0 wt%` uptake caps feed at `75.00 / 0.02 = 3,750.00 t/day` (`25,945 bbl/day`). In full runtime mode, `c_H2,net(ξ)` includes purge/dissolved loss and updates $\xi$ at lower LHSV.
-3. **FCC 4-lump mass-closure countercheck with positive CCR (`EQ-06`, Lee et al. 1989):**
+   - *Separate SMR-turndown shared-$\text{H}_2$ boundary sub-case (`SCN-A-H2CONT`, zero purge/dissolved loss, fixed $\xi$):* If a concurrent SMR turndown lowers net plant $\text{H}_2$ supply to `120.00 t/day` (`75.00 t/day` headroom after `5.00 t/day` loss and `40.00 t/day` DHT), constant `2.0 wt%` uptake overrides the compressor cap at `75.00 / 0.02 = 3,750.00 t/day` (`25,945 bbl/day`). In full runtime mode, `c_H2,net(ξ)` includes purge/dissolved loss and updates $\xi$ at lower LHSV.
+3. **FCC 4-lump mass-closure countercheck with positive CCR (`EQ-06`, Lee, Chen, Huang, & Pan 1989):**
    - Feed `w_CCR,feed = 0.04` with $f_{\text{add}} = 0.75$ gives $y_D(0) = 0.030$, $y_A(0) = 0.970$, $y_B(0) = y_C(0) = 0$. Integrating with synthetic test constants $(k_1=2.2, k_2=0.35, k_3=0.55, k_4=0.18, \beta_{BC}=0.80, \alpha_d=0.40)$ to $\tau = 1$ yields $y_A = 0.290206$, $y_B = 0.419304$, $y_C = 0.200504$, $y_D = 0.089986$; sum $= 1.000000000000$ (exact closure).
 4. **Realistic summer gasoline RVP blending check (`EQ-08`):**
-   - `95 vol%` summer RBOB base (`7.00 psi`, $BI = 11.3860$) plus `5 vol%` $n$-butane (`52.00 psi`, $BI = 139.6382$) gives $BI_{\text{blend}} = 17.7986$ and $\text{RVP}_{\text{blend}} = 10.01\text{ psi}$ (versus linear average `9.25 psi`, a `+0.76 psi` error that pushes a `9.50 psi` summer gasoline blend off-spec).
+   - `96 vol%` conventional summer gasoline base (`6.80 psi`, $BI = 10.9809$) plus `4 vol%` $n$-butane (`52.00 psi`, $BI = 139.6382$) gives $BI_{\text{blend}} = 16.1271$ and $\text{RVP}_{\text{blend}} = 9.25\text{ psi}$ (versus linear average `8.61 psi`, a `+0.64 psi` nonlinear error that makes an off-spec blend look legal against the `9.00 psi` EPA federal summer conventional cap, 40 CFR 1090.215; ozone-nonattainment `7.80 psi` / Houston RFG limits and the `~1.0 psi` E10 ethanol RVP bump lower BOB targets further).
 5. **Mass sulfur blending check (`T24`, `EQ-08`):**
    - `100 t` at `10 ppmw` sulfur plus $x$ tonnes at `100 ppmw` $\le 15\text{ ppmw}$ requires $x \le 100/17\text{ t}$ (`5.88235 t`). At `5 t`, $w_S = 100/7$ (`14.286 ppmw`, PASS); at `6 t`, $w_S = 800/53$ (`15.094 ppmw`, HOLD).

@@ -1,5 +1,7 @@
 # PPC-008 --- Data Products, Medallion, and KPI Store Architecture
 
+> **Reconciliation Notice (2026-11-26):** This baseline document is preserved for historical continuity. Owner decisions `ADR-0045` (Delta Lake on Cloudflare R2 with `delta-rs` `aws_conditional_put="etag"` sole writer and DuckDB read-only, plus Databricks Free Edition synced-copy verification in `WP-8`) and `ADR-0046` (atomic Postgres Silver staging + `InboxReceipt`) govern the active analytical pipeline. See `docs/enterprise-architecture/03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md` for current authority.
+
 **Purpose:** Define reusable data products, medallion layers,
 measurement governance and KPI persistence.
 

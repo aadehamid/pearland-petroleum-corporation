@@ -19,14 +19,16 @@ Distinguish five non-interchangeable states: `PROPOSED` (draft spec), `DECIDED` 
 ```mermaid
 flowchart LR
     WP0["WP-0: Authority, Pins & Probes\n(R0, R1, PPC-014 Ph 0–1)"] --> WP1["WP-1: Canonical Refinery A World\n(Ph 2–3, R2 physics)"]
-    WP0 --> WP4["WP-4: Platform & Restore Drill\n(exe.dev, R2, Delta, R4)"]
+    WP0 --> WP4A["WP-4A: Platform Provisioning &\nStub-Writer Restore Drill (exe.dev, R2)"]
     WP1 --> WP2["WP-2: Source Apps, OT/ICE & EDI\n(Ph 4–5, Outbox/NATS)"]
     WP1 --> WP3A["WP-3A: Planning LP vs World\n(Ph 9, R3 Numerical Gate)"]
     WP2 --> WP3["WP-3: Delta Products, KPIs, Graph & Evidence\n(Ph 6–8, R2 info)"]
     WP3 --> WP3B["WP-3B: FastAPI/Dash, LangGraph & Policy\n(Ph 10)"]
+    WP3 --> WP4B["WP-4B: Live Chaos & Restore\nQualification (R4)"]
+    WP4A --> WP4B
     WP3A --> WP3B
     WP3B --> WP5["WP-5: First End-to-End Slice\n(Scenario A Derate, R5)"]
-    WP4 --> WP5
+    WP4B --> WP5
     WP5 --> WP5B["WP-5B: Slice 1.5 Relate WASM\n(Business Context Explorer)"]
     WP5 --> WP6["WP-6: Scenario B Quality Rejection\n(Segregated Tank/LIMS, R5)"]
     WP5 --> WP8["WP-8: Databricks Parity &\nWorldExportBundle v1"]
@@ -37,13 +39,13 @@ flowchart LR
 
 - **Critical path:** `WP-0 → WP-1 → WP-2 → WP-3 → WP-3B → WP-5 → WP-6 → WP-7`.
 - **Parallel tracks:**
-  - `WP-4` (platform provisioning, secrets, per-store backup/restore drill) runs in parallel with `WP-1`–`WP-3B` and joins before `WP-5`.
+  - `WP-4A` (platform provisioning, secret isolation, backup wiring, and synthetic stub-writer restore drill) runs in parallel with `WP-1`–`WP-3`; `WP-4B` (`R4` live chaos/restore qualification killing real outbox and Delta writers) runs once `WP-3` delivers live writers and gates `WP-5`.
   - `WP-3A` (deliberately reduced Pyomo Planning LP vs mechanistic World Kernel benchmarks for `R3`) runs in parallel with `WP-2`–`WP-3` once `WP-1` world schemas freeze, and gates `WP-3B`.
   - `WP-5B` (Slice 1.5 Relate WASM explorer), `WP-6` (Scenario B quality rejection), and `WP-8` (Databricks Free Edition synced-copy parity + `WorldExportBundle` v1 certification) run in parallel after `WP-5` passes `R5`.
 - **What must wait for owner approvals, probes, or calibration:**
   - `WP-0` blocks Phase 0 code until the owner resolves the WP-0 gate items ([PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#open-owner-decisions-required-in-wp-0-before-phase-0-code)):
     1. **Proposed `ADR-0040` flowsheet closure:** Option A (add SMR, Catalytic Reformer, and FCC Selective HDS as declared bounded interfaces plus terminal 10 vol% ethanol) vs Option B (external boundary imports for pipeline $\text{H}_2$, reformate/alkylate, and terminal ethanol, exporting heavy naphtha).
-    2. **Clarification of `ADR-0045` / `ADR-0051`:** Confirm T86 Databricks Free Edition synced-copy ingest path, `exe.dev` two-VM split (12–16 GB RAM floor with ClickHouse-backed Langfuse v3) vs lightweight OTel trace collector in Slice 1, and Cloudflare D1 retention (with R2 export backups) vs consolidating workflow state into PostgreSQL.
+    2. **Clarification of `ADR-0045` / `ADR-0051`:** Confirm T86 Databricks Free Edition synced-copy ingest path, `exe.dev` RAM sizing (`16 GB` two-VM split with ClickHouse-backed Langfuse v3 vs `12 GB` lightweight OTel collector in Slice 1), and Cloudflare D1 retention (with R2 export backups) vs consolidating workflow state into PostgreSQL.
     3. **Governance parameters:** Named steward for identity conflicts, numeric `AUTO_EXECUTE` vs `REQUIRE_APPROVAL` thresholds, and Refinery A v1 synthetic parameter ranges/owners. (Numeric calibration sign-off itself moves to the **`WP-1` exit gate** once the world engine produces trajectories.)
   - Binding generalized process IRIs waits for the separate upstream `ds-business-process/1.0` release (`ADR-0042`, `0044`); provisional adapters unblock `WP-1`–`WP-6`.
   - Archiving or deleting `LEGACY_PRE_WORLD_MODEL` objects waits until `WP-1` passes all conservation and replay gates (`ADR-0053`).
@@ -76,7 +78,7 @@ flowchart LR
 - **Ordered implementation tasks:**
   1. Implement public API ingestion landing raw EIA/NOAA/EPA/PHMSA payloads and vintages to R2.
   2. Implement `EQ-01` rational density/mass basis and `EQ-02`/`EQ-03` tank (including segregated hold tank `TK-101H`), transit, Churchill/Colebrook/Darcy–Weisbach hydraulics, and ANSI/HI 9.6.7 pump curves with exact root-finding intra-step crossings (`t*`).
-  3. Implement `EQ-04` CDU/VDU zero-sum TBP cut separation, `EQ-05` HCU polytropic compressor + mass-basis $R_{\min,\text{mass}}$ + quench duty + $P_{\text{H2}}$ purity + lumped conversion/H2 stoichiometry, `EQ-06` Lee et al. (1989) 4-lump FCC with inlet CCR split + heat/coke balance, `EQ-07` shared H2/utility header with feed-dependent DHT (routing LCO/kero/AGO) and WP-0 H2/octane closure units, and `EQ-08` conservative + nonlinear blending (Chevron RVP, Healy RT-70, Wickey–Chittenden flash, Hu–Burns cloud, ASTM D975 cetane, refinery BOB `84/88` + terminal E10) with `QUALITY_HOLD`/`RELEASE` states.
+  3. Implement `EQ-04` CDU/VDU zero-sum TBP cut separation, `EQ-05` HCU polytropic compressor + mass-basis $R_{\min,\text{mass}}$ + quench duty + $P_{\text{H2}}$ purity + lumped conversion/H2 stoichiometry, `EQ-06` Lee, Chen, Huang, & Pan (1989) 4-lump FCC with inlet CCR split + heat/coke balance, `EQ-07` shared H2/utility header with feed-dependent DHT (routing LCO/kero/AGO) and WP-0 H2/octane closure units, and `EQ-08` conservative + nonlinear blending (Chevron RVP, Healy RT-70, Wickey–Chittenden flash, Hu–Burns cloud, ASTM D975 cetane, refinery BOB `>= 84.2 / >= 88.6` + terminal E10) with `QUALITY_HOLD`/`RELEASE` states.
   4. Implement deterministic `WORLD-002` hybrid clock, semantic-keyed paired RNG streams, atomic R2 checkpoints, and branch fork/replay.
   5. Execute Quint (`PO-01`, `PO-09`) and Python+Z3+Hypothesis (`PO-01`, `02`, `04`–`07`, `11`) verification suites.
   6. Obtain process/controls engineer numeric calibration sign-off (`PO-12`, `PPC-REVIEW-004 §4`); only after WP-1 passes, authorize archival/retirement of `LEGACY_PRE_WORLD_MODEL` data (`ADR-0053`).
@@ -145,24 +147,24 @@ flowchart LR
 - **Verification method & independent oracle:** Quint `PO-10` pass; API negative security tests (mutated payload, expired approval, cross-branch approval, unauthorized role, hidden-truth access denied, restricted trace leak test); golden agent evaluation cases.
 - **Acceptance evidence & exit criteria:** Zero policy bypasses or hidden-truth leaks, exact `ActionReceipt` idempotency, saved investigation replay matches pinned cutoff.
 
-### WP-4 — Platform Deployment (`exe.dev` + R2) and Full Per-Store Recovery Qualification (`R4`)
+### WP-4A / WP-4B — Platform Provisioning (`exe.dev` + R2) and Live Per-Store Recovery Qualification (`R4`)
 
-- **Objective & boundaries:** Deploy the Slice 1 runtime onto `exe.dev` persistent VM(s) wired to Cloudflare R2 (`ADR-0051`, sizing matrix in `PPC-REVIEW-003 §2`), verify secret isolation, and execute a live per-store backup/restore drill proving `RPO` and `RTO <= 1 hour` for Slice 1 data volumes (`<= 5 GB` compressed) before Slice 1 integration.
-- **Predecessors & blocking decisions:** `WP-0` (runs in parallel with `WP-1`–`WP-3B`); gated on WP-0 `exe.dev` VM/Langfuse sizing and D1 disposition.
+- **Objective & boundaries:** Split cleanly into two stages to avoid a circular dependency: **`WP-4A`** provisions the Slice 1 `exe.dev` persistent VM(s) wired to Cloudflare R2 (`ADR-0051`, sizing matrix in `PPC-REVIEW-003 §2`), enforces secret isolation, and runs a baseline per-store backup/restore drill against synthetic stub writers; **`WP-4B`** executes the live `R4` chaos/restore qualification against the real `WP-2`/`WP-3` outbox and `delta-rs` writers, proving `RPO`, outbox-sequence gap detection (`RECOVERY_GAP`), and `RTO <= 1 hour` for Slice 1 data volumes (`<= 5 GB` compressed) before Slice 1 integration.
+- **Predecessors & blocking decisions:** `WP-4A` depends on `WP-0` (runs in parallel with `WP-1`–`WP-3`, gated on WP-0 `exe.dev` VM/Langfuse sizing and D1 disposition). `WP-4B` depends on `WP-4A` and `WP-3`, and gates `WP-5`.
 - **Accountable role & upstream owners:** Platform / DevOps Engineer.
 - **Governing IDs:** `PLATFORM-001`, `PPC-013`, `PPC-REVIEW-003 §2`; `ADR-0051`.
-- **Inputs, outputs & affected components:** Inputs: Compose/VM manifests, R2 bucket, secret store. Outputs: `infra/` deployment configs, `ServiceDescriptor`/`BackupManifest` automation, per-store backups (Postgres WAL + basebackup, MySQL binlog/dump, SQLite Litestream, Neo4j offline `neo4j-admin dump`, D1 export if retained, NATS outbox re-derivation proof), restore runbook.
+- **Inputs, outputs & affected components:** Inputs: Compose/VM manifests, R2 bucket, secret store, and (for `WP-4B`) live `WP-2`/`WP-3` outbox and `delta-rs` writers. Outputs: `infra/` deployment configs, `ServiceDescriptor`/`BackupManifest` automation, per-store backups (Postgres WAL + basebackup, MySQL binlog/dump, SQLite Litestream, Neo4j offline `neo4j-admin dump`, D1 export if retained, NATS outbox re-derivation proof), post-restore outbox-sequence vs `InboxReceipt` gap checker, restore runbook.
 - **Ordered implementation tasks:**
-  1. Provision `exe.dev` VM(s) matching the approved WP-0 RAM sizing table (`PPC-REVIEW-003 §2`).
-  2. Enforce least-privilege credentials separating world truth (`evaluation/hidden/`), integration, retrieval, and approval execution.
-  3. Execute full chaos/restore drill covering every active store: kill worker mid-outbox and mid-Delta commit, corrupt local Postgres/MySQL/SQLite/Neo4j state, restore from R2 backups/manifests, verify single business effect and `RTO <= 1 hour`.
-- **Verification method & independent oracle:** Timed restore drill log for every store, pre/post restore state and Delta manifest hash equality, failed-secret and denied-route penetration tests, VM RAM/CPU telemetry under Slice 1 load.
+  1. (`WP-4A`) Provision `exe.dev` VM(s) matching the approved WP-0 RAM sizing table (`PPC-REVIEW-003 §2`) and enforce least-privilege credentials separating world truth (`evaluation/hidden/`), integration, retrieval, and approval execution.
+  2. (`WP-4A`) Wire per-store backups to R2 and pass a baseline restore drill using synthetic stub writers.
+  3. (`WP-4B`, after `WP-3`) Execute the full live chaos/restore drill across every active store: kill real workers mid-outbox and mid-Delta commit, corrupt local Postgres/MySQL/SQLite/Neo4j state, restore from R2 backups/manifests, verify outbox-sequence vs `InboxReceipt` gap detection, single business effect, and `RTO <= 1 hour`.
+- **Verification method & independent oracle:** Timed restore drill log for every store, pre/post restore state and Delta manifest hash equality, outbox-vs-`InboxReceipt` reconciliation check, failed-secret and denied-route penetration tests, VM RAM/CPU telemetry under Slice 1 load.
 - **Acceptance evidence & exit criteria (`R4`):** Signed `BackupManifest` restore evidence across all active stores meeting `RPO` and `RTO <= 1 hour`, verified access isolation.
 
 ### WP-5 — First End-to-End Vertical Slice: Scenario A Hydrocracker Compressor Derate (`UC-1`, `UC-3`, `R5`)
 
-- **Objective & boundaries:** Connect the full physical-to-decision chain end to end on `exe.dev` + R2 for Scenario A (`SCN-A-T125`): physical compressor restriction (`EQ-05`) → H2 circulation/quench/shared-header bound (`EQ-07`) → ULSD yield & tank trajectory (`EQ-02`/`EQ-08`) → OT/Sparkplug B/TimescaleDB (`OT-DELAY-01` & `08:12` fixture) → EDI topology → Neo4j `POTENTIAL_EXPOSURE` contracts → Planning LP response & `UC-3` backcasting (`EQ-09`) → EPM KPI decomposition → Dash workspace + LangGraph recommendation → policy-gated approval → isolated branch execution & replay.
-- **Predecessors & blocking decisions:** `WP-3B` and `WP-4` (`R2`, `R3`, `R4` passed).
+- **Objective & boundaries:** Connect the full physical-to-decision chain end to end on `exe.dev` + R2 for Scenario A (`SCN-A-T125`, frozen `30,000 bbl/day` compressor-circulation cap under normal `170.00 t/day` plant $\text{H}_2$ supply, plus separate SMR-turndown boundary sub-case `SCN-A-H2CONT`): physical compressor restriction (`EQ-05`) → H2 circulation/quench/shared-header bound (`EQ-07`) → ULSD yield & tank trajectory (`EQ-02`/`EQ-08`) → OT/Sparkplug B/TimescaleDB (`OT-DELAY-01` & `08:12` fixture) → EDI topology → Neo4j `POTENTIAL_EXPOSURE` contracts → Planning LP response & `UC-3` backcasting (`EQ-09`) → EPM KPI decomposition → Dash workspace + LangGraph recommendation → policy-gated approval → isolated branch execution & replay.
+- **Predecessors & blocking decisions:** `WP-3B` and `WP-4B` (`R2`, `R3`, `R4` passed).
 - **Accountable role & upstream owners:** Cross-functional PPC Integration Lead.
 - **Governing IDs:** `SCENARIO-001 §2`, `WORLD-001 §5`, `WORLD-002 §6`, `ENG-001 §4`, `VERIFY-001`; `PO-01`–`PO-12`.
 - **Inputs, outputs & affected components:** Frozen `SCN-A-T125` manifest; outputs: full `RunEvidence` bundle, baseline vs child branch diffs, KPI decomposition report, `UC-3` backcast dossier, negative-test logs.
@@ -205,7 +207,7 @@ flowchart LR
 ### WP-8 — Databricks Free Edition Parity & Certified `WorldExportBundle` v1 Handoff (`UC-6`, `ADR-0045`, `0053`)
 
 - **Objective & boundaries:** Prove cross-engine equivalence by syncing/ingesting PPC's R2 Delta Gold/KPI tables into **Databricks Free Edition workspace-managed Delta tables** (per T86, since Free Edition lacks custom R2 external locations; documenting paid-tier Unity Catalog external-location Approach A and managed migration Approach B), and assemble + certify **`WorldExportBundle` v1** strictly split into `observable/` (for EPM, ICE, EDI, ECE) and `hidden_truth/` (restricted under `evaluation/hidden/`).
-- **Predecessors & blocking decisions:** `WP-5` (runs after WP-2/WP-3 observable records and WP-5 Slice 1 pass, fixing bundle sequencing!).
+- **Predecessors & blocking decisions:** `WP-5` (runs after `WP-2`/`WP-3` observable records and `WP-5` Slice 1 pass so `observable/` bundle artifacts exist before certification).
 - **Accountable role & upstream owners:** Lakehouse & Cross-Repo Integration Lead; sister-repo owners (EPM, ICE, EDI, ECE).
 - **Governing IDs:** `DATA-001`, `PLATFORM-001`, `PPC-015`, `ADR-0045`, `0053`.
 - **Inputs, outputs & affected components:** R2 Delta tables + WP-2/WP-3 observable records + WP-1 hidden snapshot. Outputs: Databricks Free Edition cross-engine parity report (`EA03C-11`), certified `WorldExportBundle` v1 (`observable/` + separate `hidden_truth/`), sister-repo smoke tests.
@@ -241,7 +243,7 @@ Later phases — higher-fidelity tray-by-tray distillation, dynamic reactor bed 
 
 ## 5. Crosswalk to `PPC-014` and traceability
 
-`WP-0` executes `PPC-014` Phases 0–1 (`R0`, `R1`); `WP-1` executes Phases 2–3 (`R2` physics); `WP-2` executes Phases 4–5; `WP-3` executes Phases 6–8 (`R2` info); `WP-3A` executes Phase 9 (`R3`); `WP-3B` executes Phase 10; `WP-4` qualifies `R4`; `WP-5`/`WP-5B`/`WP-6`/`WP-8` qualify `R5`, Databricks parity, and certified `WorldExportBundle` v1; `WP-7` executes Phases 11–12 (`R6`).
+`WP-0` executes `PPC-014` Phases 0–1 (`R0`, `R1`); `WP-1` executes Phases 2–3 (`R2` physics); `WP-2` executes Phases 4–5; `WP-3` executes Phases 6–8 (`R2` info); `WP-3A` executes Phase 9 (`R3`); `WP-3B` executes Phase 10; `WP-4A`/`WP-4B` provision `exe.dev`+R2 and qualify `R4`; `WP-5`/`WP-5B`/`WP-6`/`WP-8` qualify `R5`, Databricks parity, and certified `WorldExportBundle` v1; `WP-7` executes Phases 11–12 (`R6`).
 
 The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T21, T34, T46–47, T63–65, T76–77, T93, T122–124, T126–130, T136–145 to this draft.
 
