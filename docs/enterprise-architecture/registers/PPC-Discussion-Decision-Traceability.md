@@ -138,7 +138,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Physical and numerical engineering coverage
 
-[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) maps T20–24 to the model and quantity contracts (§§1–4), T2–3 and T35 to LP case comparison (§5), T54 and T73–75 to verification (§6), and T122/T125 to the tank, compressor and branch references (§4). Its §7 crosswalk distinguishes source fixtures from new synthetic examples. Worked arithmetic is checked; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
+[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) maps T20–24 to the model and quantity contracts (§§1–4), T2–3 and T35 to LP case comparison (§5), T73 Pillar 1 (line 15572) to the proposed engineering checks (§6), T74 (line 16033) to the owner's direction on equations and agent-neutral specifications (§§1, 6), and T122/T125 to the tank, compressor and branch references (§4). Its §7 crosswalk distinguishes source fixtures from new synthetic examples. Worked arithmetic is checked; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
 
 ## Items still open
 
