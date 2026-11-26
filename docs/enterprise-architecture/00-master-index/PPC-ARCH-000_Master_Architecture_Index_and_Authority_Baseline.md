@@ -229,7 +229,7 @@ Source: [PPC-REG-001](../../PPC-REG-001_Architecture_Decision_Register.md) prese
 
 ### 7.2 Resolution of `CAN-*` candidate topics
 
-Nine of the 13 `CAN-*` candidate topics (`CAN-WORLD-AUTHORITY`, `CAN-ENGINEERING-QUALIFICATION`, `CAN-ICE-EDI-REUSE`, `CAN-DS-BUSINESS-PROCESS`, `CAN-EVENT-RECOVERY`, `CAN-RELEASE-CONSISTENCY`, `CAN-RELATE-UX`, `CAN-GOLDEN-SCENARIOS`, `CAN-VERIFICATION-GATES`) are closed by `ADR-0040`–`0053`. The remaining four (`CAN-SCENARIO-ISOLATION`, `CAN-TEMPORAL-IDENTITY`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`) have reconciled normative specifications awaiting only WP-0 operational sign-off on identity-conflict steward assignment and numeric action-approval thresholds ([PPC-REVIEW-003 §2](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#2-complete-adr-and-candidate-decision-register-adr-001053-and-can-)).
+Nine of the 13 `CAN-*` candidate topics (`CAN-WORLD-AUTHORITY`, `CAN-ENGINEERING-QUALIFICATION`, `CAN-ICE-EDI-REUSE`, `CAN-DS-BUSINESS-PROCESS`, `CAN-EVENT-RECOVERY`, `CAN-RELEASE-CONSISTENCY`, `CAN-RELATE-UX`, `CAN-GOLDEN-SCENARIOS`, `CAN-VERIFICATION-GATES`) are closed by `ADR-0040`–`0053`. The remaining four (`CAN-SCENARIO-ISOLATION`, `CAN-TEMPORAL-IDENTITY`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`) have reconciled normative specifications awaiting only WP-0 operational sign-off on identity-conflict steward assignment and numeric action-approval thresholds ([PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#3-complete-adr-transcript-item-and-wp-0-owner-disposition-register)).
 
 ## 8. Versioned dependency and scenario manifest policy
 
@@ -240,7 +240,7 @@ The existing PPC-017 requires EPM manifests and semantic tests. A complete PPC r
 - Engineering source revision identifies a source configuration; EDI publication identifies an accepted engineering projection; PPC adoption is a separate event.
 - World state version and scenario branch identify simulated physical reality and scenario-specific changes.
 - Transaction/event IDs identify source records and message delivery, not the underlying physical event by default.
-- Delta/DuckLake table snapshot identifies a technical read state; a business-consistent data-product release pins aligned inputs and declared watermarks.
+- Delta Lake table snapshot on Cloudflare R2 (`ADR-0045`) identifies a technical read state; a business-consistent data-product release pins aligned inputs and declared watermarks.
 - Graph snapshot identifies one derived instance projection and its source/effective/recorded-time boundaries.
 - Model version identifies numerical/ML formulation and parameters; a result also requires seed/input snapshot/solver profile.
 - Evidence/decision release identifies eligibility, visibility and a historical knowledge cutoff.
@@ -377,7 +377,7 @@ The independent agent must read pinned source files and the complete normative/r
 |---|---|---|---|
 | GAP-001 | `DS_Business_Process` generalized release pending (derived from `kpi-store/1.2`) | **Open upstream**; decoupled via provisional adapter ([ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md), [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)) | Bind approved release in WP-7 once separate upstream track lands |
 | GAP-002 | T1–T145 transcript decision audit vs `ef4eb08` docs | **Closed for Markdown transcript** ([PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002)); 5 unexported external images/attachments remain unavailable | No normative claims depend on unavailable external assets |
-| GAP-003 | Existing PPC technology choices differed from later proposals | **Decided** in [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)–[ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md), [ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md), [ADR-0052](../../adr/0052-two-stage-ux-dash-and-relate-wasm.md) and [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md) | Propagated across all 19 specs; execute in WP-0–WP-8 |
+| GAP-003 | Existing PPC technology choices differed from later proposals | **Decided** in [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)–[ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md), [ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md), [ADR-0052](../../adr/0052-two-stage-ux-dash-and-relate-wasm.md) and [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md) | Reconciled across `docs/enterprise-architecture/` and flagged by dated reconciliation notices on baseline `PPC-002`, `006`, `007`, `010`–`014` (`PPC-REG-001` preserved verbatim) |
 | GAP-004 | ICE identity/mapping YAML unwritten as of `scada_harmonization` PR #68 (`30c20c3`) | **Open upstream**; decoupled via provisional adapter (`ADR-0042`) and `WorldExportBundle` (`ADR-0053`) | Adopt upstream ICE mapping release when published |
 | GAP-005 | EDI flat-drawing extraction/recovery lifecycle unqualified | **Open upstream**; Slice 1/2 use structured DEXPI route via provisional adapter (`ADR-0042`) | Qualify flat-drawing route in later EDI milestone |
 | GAP-006 | ECE reusable schema package not yet published (`750b398`) | **Open upstream**; decoupled via provisional adapter (`ADR-0042`) | Reconcile local `EVID-001` schemas when ECE publishes |
@@ -386,7 +386,7 @@ The independent agent must read pinned source files and the complete normative/r
 | GAP-009 | Multi-store atomic `ReleaseManifest` and single-writer Delta-on-R2 commit unexecuted | **Design reconciled** (`ADR-0045`); runtime **planned** | Verify single-writer Delta-on-R2 commit & restore in WP-0/WP-3/WP-4 |
 | GAP-010 | Relate WASM browser security and Cypher compatibility unproven | **Decided** as Slice 1.5 explorer (`ADR-0052`); runtime **planned** | Pass WP-5B security and Cypher parity gate before promotion |
 | GAP-011 | `exe.dev` + R2 integrated deployment and restore drill unexecuted | **Topology & RPO/RTO decided** (`ADR-0051`); runtime **planned** | Pass WP-4 restore drill (`RTO <= 1 hour`) before WP-5 |
-| GAP-012 | Formal owner approval of new ADR candidates | **14 ADRs decided** (`ADR-0040`–`0053`); 4 WP-0 operational micro-decisions remain | Close 4 WP-0 micro-decisions (steward, thresholds, VM sizing, calibration sign-off) before Phase 0 code |
+| GAP-012 | Formal owner approval of new ADR candidates and WP-0 gates | **14 ADRs decided** (`ADR-0040`–`0053`); WP-0 owner gate items remain | Close WP-0 owner items in [PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#open-owner-decisions-required-in-wp-0-before-phase-0-code) (`ADR-0040` SMR/Reformer/FCC HDS flowsheet closure, T86 Free Edition & `exe.dev`/Langfuse/D1 sizing, steward/thresholds, parameter ranges) before Phase 0 code |
 
 ## 13. Verification of this draft
 

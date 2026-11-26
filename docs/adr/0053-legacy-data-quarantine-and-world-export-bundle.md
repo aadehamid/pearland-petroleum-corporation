@@ -21,3 +21,10 @@ The owner accepted Round 3 Q18 via "Yes to all." (`docs/adr/answers/2026-11-26-f
 ## Consequences
 
 - `PPC-WORLD-001`, `PPC-PLAN-001`, and `PPC-PLATFORM-001` define the `LEGACY_PRE_WORLD_MODEL` isolation rule and the versioned `WorldExportBundle` handoff schema.
+
+## Post-review clarification notes (2026-11-26)
+
+This note records two boundary clarifications surfaced by the independent external-model review. It does not alter the owner decision recorded above.
+
+- **Two-part bundle split:** `WorldExportBundle` is partitioned into `observable/` (consumed by operational/analytical pipelines and sister repositories ICE, EDI, EPM, ECE) and `hidden_truth/` (stored exclusively under `evaluation/hidden/` for replay grading and backcasting attribution, unreadable by operational agents or integration pipelines).
+- **Certification timing:** While `WP-1` defines the `WorldExportBundle` manifest schema and certifies the canonical world checkpoint, the complete cross-repository `WorldExportBundle` (including OT L0 streams from `WP-2`, source/Delta tables from `WP-3`, EDI/EPM graph fixtures from `WP-5`, and ECE dossier fixtures from `WP-6`) is assembled and certified in `WP-8`.

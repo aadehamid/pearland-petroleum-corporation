@@ -24,3 +24,11 @@ The owner accepted Round 3 Q16 via "Yes to all." (`docs/adr/answers/2026-11-26-f
 ## Consequences
 
 - `PPC-PLATFORM-001` and `PPC-PLAN-001` (WP-4) adopt this deployment topology and require a verified restore drill meeting the RPO/RTO targets before Slice 1 qualification.
+
+## Post-review clarification notes (2026-11-26)
+
+This note records operational sizing and storage dispositions surfaced by the independent external-model review for owner confirmation in `WP-0`. It does not alter the owner decision recorded above.
+
+- **`exe.dev` memory sizing and Langfuse v3 footprint:** Self-hosted Langfuse v3 requires ClickHouse and Redis alongside PostgreSQL, MySQL, Neo4j Community, Dagster daemon/webserver, FastAPI, Dash, NATS, and Mosquitto. Combined steady-state memory requires `12–16 GB RAM` across two `exe.dev` VMs (or an `8 GB` single VM if Slice 1 defers Langfuse v3 in favor of a lightweight OpenTelemetry collector). See the per-service sizing and backup/RPO/RTO table in `docs/enterprise-architecture/independent-review/PPC-REVIEW-003_System_and_Decision_Register.md` Section 1.
+- **Cloudflare D1 disposition:** `ADR-005` named Cloudflare D1 for lightweight workflow state, while `ADR-0051` hosts operational stores on `exe.dev` PostgreSQL. `WP-0` tracks the owner choice between consolidating lightweight workflow state into `exe.dev` PostgreSQL or retaining D1 with automated R2 SQL-dump backups.
+- **Databricks Free Edition ingest:** Consistent with `ADR-0045` (`T86`, lines 19603–19607), paid Databricks tiers read R2 Delta prefixes directly while Databricks Free Edition verification (`WP-8`) syncs pinned Delta copies into workspace-managed storage.

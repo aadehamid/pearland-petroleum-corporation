@@ -1,5 +1,7 @@
 # PPC-011 --- Performance Intelligence, ML, and Causal Analytics
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 analytics guide. Amended by [ADR-0045](adr/0045-delta-lake-on-r2-and-databricks-portability.md) (Delta Lake on R2 replaces DuckLake) and [ADR-0048](adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md) (Pyomo + HiGHS/IPOPT replaces OR-Tools). See [PPC-ANALYTICS-001](enterprise-architecture/05-intelligence-experience/PPC-ANALYTICS-001_Performance_Intelligence_and_Optimization.md).
+
 **Purpose:** Define how PPC explains performance, forecasts outcomes,
 quantifies uncertainty and optimizes alternatives.
 

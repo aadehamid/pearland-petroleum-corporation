@@ -1,5 +1,7 @@
 # PPC-013 --- Cloudflare R2 Durability and Project Storage Standard
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 R2 standard. Amended by [ADR-0045](adr/0045-delta-lake-on-r2-and-databricks-portability.md) (Delta Lake via `delta-rs` replaces DuckLake), [ADR-0051](adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md), and [ADR-0053](adr/0053-legacy-data-quarantine-and-world-export-bundle.md) (adds `delta/`, `exports/world_bundle/observable/`, and `legacy_quarantine/` prefixes). See [PPC-PLATFORM-001](enterprise-architecture/06-platform-operations/PPC-PLATFORM-001_Infrastructure_Security_and_Operations.md).
+
 **Purpose:** Apply the user's generic R2 agent standard to PPC.
 
 ## Core rule

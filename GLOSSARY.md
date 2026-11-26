@@ -44,6 +44,32 @@ _Avoid_: Effective time, availability time
 The instant a specific recipient or role can access a published revision through a named channel under historical authorization grants.
 _Avoid_: Published time, current permission
 
+**UNRESOLVED**:
+The nondisclosing access-check result returned when no publication satisfies reader authorization, channel, delivery receipt, and cutoff rules, or when a required identity mapping resolves to zero eligible targets.
+_Avoid_: Unknown, access denied error
+
+**UNKNOWN**:
+An epistemic claim status stating that the accessible, authorized evidence cannot responsibly answer a question.
+_Avoid_: Unresolved, missing permission
+
+**Hidden Truth**:
+The restricted canonical simulation ledger, ground-truth decision rationales, and evaluation scoring keys stored under separate credentials and excluded from integration pipelines and blind agent retrieval.
+_Avoid_: Visible corpus, agent context
+
+### Process interface units
+
+**Steam Methane Reformer (SMR)**:
+A hydrogen production interface unit that converts natural gas and steam into plant makeup hydrogen, fuel offgas, and carbon dioxide.
+_Avoid_: Unmodeled H2 source
+
+**Diesel Hydrotreater (DHT)**:
+A hydrotreating interface unit that removes sulfur and saturates aromatics in straight-run distillates and FCC light cycle oil (LCO) using plant hydrogen before ULSD blending.
+_Avoid_: Direct LCO blending
+
+**Catalytic Reformer**:
+A naphtha-upgrading interface unit that converts hydrotreated heavy naphtha into high-octane reformate and byproduct hydrogen.
+_Avoid_: Straight-run gasoline blendstock
+
 ### Ecosystem boundaries
 
 **Enabling System**:
@@ -79,7 +105,7 @@ A formally stated invariant or quantitative property paired with its governing e
 _Avoid_: Unit test, sanity check
 
 **WorldExportBundle**:
-A versioned export package published by PPC from one verified Refinery A world containing pinned Delta tables, OT tag schedules, engineering topology manifests, KPI fixtures, and role-scoped evidence fixtures for sister repositories.
+A versioned export package published by PPC after observable source, graph, KPI, and evidence generation, strictly split into an `observable/` layer for sister repositories and a separately credentialed `hidden_truth/` evaluation layer under `evaluation/hidden/`.
 _Avoid_: Shared database, canonical shortcut
 
 **Legacy Pre-World-Model Data**:
