@@ -153,3 +153,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 ## Engineering information integration coverage
 
 [EDI-001](../02-industrial-engineering/PPC-EDI-001_Engineering_Information_Integration.md) §§1–2 and §5 cover T37–38 (lines 6504–6917), which explored P&ID topology and the evidence and licensing needed to reuse public drawings. For T39–42 (lines 6918–7265), §§1–3 describe how the engineering specialist reviews and publishes a revision and how PPC adopts it. T43–44 maps to §§1 and 4 on coherent company history and reusable test fixtures. T84 maps to §§2 and 5 on extraction evidence and accuracy. §4 reconciles the pinned upstream structured results with the new PPC adoption example. GAP-005 and PPC runtime qualification remain open.
+
+## Enterprise ontology, identity and time coverage
+
+[INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) §1 records the separate upstream process release and EPM authority (T6–8, T32, T89–93 and T131–135). §2 covers the source, tag and enterprise identity questions in T56–57 and T68–70. §§2–4 connect T62, T98–99 and T101–105 to mapping strength, decision-time reconstruction and semantic compatibility. §4 records the SEM and EA05C verification targets and outstanding runtime evidence.
