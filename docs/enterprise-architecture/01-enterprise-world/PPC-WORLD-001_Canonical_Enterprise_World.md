@@ -1,6 +1,6 @@
 # PPC-WORLD-001 — Canonical Enterprise World
 
-**Draft 0.1 for owner review · 25 November 2026.** This proposed specification extends PPC-001 and PPC-005. The repository baseline is [08e7b33](https://github.com/aadehamid/pearland-petroleum-corporation/tree/08e7b3356f9b3ad18ce6a632d82615ad5a4e3847). Source references T1–T145 resolve through the [discussion and decision register](../registers/PPC-Discussion-Decision-Traceability.md). Example identifiers, times and numbers below describe fictional fixtures. Passing a paper arithmetic check does not qualify a process model.
+**Draft 0.1 for owner review · 25 November 2026.** This proposed specification extends PPC-001 and PPC-005. The repository baseline is [08e7b33](https://github.com/aadehamid/pearland-petroleum-corporation/tree/08e7b3356f9b3ad18ce6a632d82615ad5a4e3847). Source references T1–T145 resolve through the [discussion and decision register](../registers/PPC-Discussion-Decision-Traceability.md). Example identifiers, times and input quantities below are `SYNTHETIC` unless marked as `SCENARIO_ASSUMPTION`; calculated example quantities are `DERIVED`. Passing a paper arithmetic check does not qualify a process model.
 
 ## 1. Purpose and boundary
 
@@ -68,7 +68,7 @@ Independent operational evidence may disagree for good reasons. In T23, a planne
 
 ## 5. Worked slice — hydrocracker compressor derate
 
-The original EA-09C example gives a nominal hydrocracker maximum of **40,000 bbl/day** and a fictional availability fraction of **0.75**. The proposed reduced-order model gives an upper bound on the feed rate:
+The original EA-09C example gives a nominal hydrocracker maximum of **40,000 bbl/day** and a `SCENARIO_ASSUMPTION` availability fraction of **0.75**. The proposed reduced-order model gives an upper bound on the feed rate:
 
 `0 ≤ feed rate ≤ availability × nominal capacity = 30,000 bbl/day`.
 
@@ -83,9 +83,9 @@ This equation applies to the stated reference unit, interval and illustrative pa
 | Scenario comparison | Compare authorized options such as rescheduling a commitment, using available inventory or sourcing a replacement lot. Check product specification, route, time and cost before claiming feasibility. |
 | Reconciliation | Use actual executed flows and the approved accounting revision for the period. Store the LP case, model settings, changed assumptions, constraints, result and evidence cutoff for each feasible comparison. |
 
-**Arithmetic check.** For a six-hour interval entirely under the restriction, a constant 36,000 bbl/day request corresponds to 9,000 bbl and a constant 30,000 bbl/day bound to 7,500 bbl. The 1,500 bbl difference is a gap between *requested feed and maximum permitted feed*. Actual processed feed can be lower. Product shortfall, customer impact and margin each need additional evidence. The six-hour interval and 36,000 request are new synthetic test inputs; the 40,000 and 0.75 values come from T125, lines 36857–36916.
+**Arithmetic check.** For a six-hour interval entirely under the restriction, a constant 36,000 bbl/day request corresponds to 9,000 bbl and a constant 30,000 bbl/day bound to 7,500 bbl. The 1,500 bbl difference is a gap between *requested feed and maximum permitted feed*. Actual processed feed can be lower. Product shortfall, customer impact and margin each need additional evidence. The six-hour interval is a `SCENARIO_ASSUMPTION` and the 36,000 request is a `SYNTHETIC` test input; the 40,000 and 0.75 values come from T125, lines 36857–36916.
 
-**Independent inventory check.** The separate T125 tank fixture starts with 10,000 bbl, receives 500 bbl/h and dispatches 700 bbl/h for two hours. With no other flows, closing inventory is 9,600 bbl against a 12,000 bbl tank limit. The exercise uses one liquid on a consistent reference-volume basis. When a receipt or dispatch would cross a bound *during* the interval, split at the boundary and reject or reschedule the infeasible remainder. An acceptable closing balance alone cannot establish intraperiod feasibility.
+**Independent inventory check.** The separate T125 tank fixture starts with 10,000 bbl, receives 500 bbl/h and dispatches 700 bbl/h for two hours. With no other flows, the `DERIVED` closing inventory is 9,600 bbl against a `SYNTHETIC` 12,000 bbl tank limit. The exercise uses one liquid on a consistent reference-volume basis. When a receipt or dispatch would cross a bound *during* the interval, split at the boundary and reject or reschedule the infeasible remainder. An acceptable closing balance alone cannot establish intraperiod feasibility.
 
 **Backcasting attribution.** Compare the approved plan, reconciled actual and feasible alternative at a common period and basis. Re-run with a revised calibration while holding the event, decisions and execution fixed to isolate model effects. Then compare alternatives under the same model and decision-time evidence. Record execution deviations separately. If the result depends on case ordering, report the order and interaction or residual. A favorable hindsight case can bound opportunity; availability of a feasible option at decision time is a separate finding. **Sources:** T2–3, T23–27, T58, T115, T122, T125.
 
@@ -127,3 +127,7 @@ Versioned snapshots and generation manifests follow [PPC-013](../../PPC-013_Clou
 **Open for qualification.** Pin a real parameter source and valid range for each engineering assumption, validate units and tolerances, specify utility and yield curves, reconcile the first-slice order with PPC-014, and pin the eventual approved process mappings. Review whether each scenario needs dynamic fidelity beyond the reduced-order contract. Technology comparisons (including Delta/DuckLake) stay in their governed documents and ADRs. The companion [WORLD-002 specification](PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) defines the execution and replay rules. No source-system deployment or model qualification is implied by this draft.
 
 **Repository sources.** [Charter](../../PPC-001_Problem_Statement_and_Simulation_Charter.md) · [Synthetic data generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [Evidence and decision provenance](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md) · [Architecture decisions](../../PPC-REG-001_Architecture_Decision_Register.md) · [Master architecture index](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md).
+
+The recipient-specific evidence and as-of query rule is [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). This scenario fixes only its own observation and delivery times.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T11–21, T23–25, T27, T31, T34, T36, T43–45, T71–72, T83, T94, T97, T122, T125, T143–145 to this draft.

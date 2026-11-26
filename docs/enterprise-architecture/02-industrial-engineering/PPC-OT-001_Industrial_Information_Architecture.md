@@ -1,6 +1,6 @@
 # PPC-OT-001 — Industrial Information Architecture
 
-**Draft for review.** Baseline [PPC at 35cdd80](https://github.com/aadehamid/pearland-petroleum-corporation/tree/35cdd808b30b2c2f9d3332de0fd425c35c4aa4fe). Decision question: when a compressor restricts hydrocracker feed, which observations could the operator and planner see, what equipment did they describe, and how much confidence should each place in them?
+**Draft for review.** Baseline [PPC at 35cdd80](https://github.com/aadehamid/pearland-petroleum-corporation/tree/35cdd808b30b2c2f9d3332de0fd425c35c4aa4fe). Decision question: when a compressor restricts hydrocracker feed, which observations could the operator and planner see, what equipment did they describe, and how much confidence should each place in them? PPC fixture signals and values below are `SYNTHETIC`. Unit conversions and integrated totals are `DERIVED`. The upstream ICE row counts and cadence are source-reported test facts, not PPC observations.
 
 ## 1. Authority and scope
 
@@ -40,7 +40,7 @@ The pinned [ICE Level-0 contract](https://github.com/aadehamid/scada_harmonizati
 |---|---|
 | Run, world/branch, site, source system, stable observation key, revision and prior revision | Distinguish redelivery from a correction and prevent a counterfactual from leaking into baseline evidence. |
 | Native address, instrument assignment, observed property, value, unit, basis and native status | Preserve the source claim and support comparisons of like quantities. The tag, instrument and installed equipment each have a distinct identity. |
-| Sample time, source/server record times where available, receipt time and first authorized availability | Quantify delay and reconstruct the decision as it could have been made. Preserve the original clock domain, synchronization status and uncertainty. |
+| Sample time, source/server record times where available, publication ID, scoped ordinal, publication time, recipient/role-and-channel receipt time and authorization grant | Quantify delay and reconstruct the decision as it could have been made. Preserve the original clock domain, synchronization status and uncertainty. |
 | Effective mapping interval, time the mapping was recorded, conversion version and quality interpretation | Reproduce an old published result after a tag reassignment or correction. Keep original and normalized fields together. |
 | Delivery ID, publisher session, sequence where supported, payload digest and historical/live flag | Recover a buffered record without introducing a second observation. Equal key and different payload requires explicit revision or investigation. |
 
@@ -48,7 +48,7 @@ Site normalization resolves native aliases and units to site measurement identit
 
 ## 4. Worked observations
 
-**Compressor derate.** In WORLD-002 §6 the plan remains 36,000 bbl/day. At 08:10 a restriction caps executed feed at 30,000. The 08:40 fork is a distinct decision boundary. For this *new synthetic observation fixture*, a flow indication samples 1,250 bbl/h at 08:12, reaches the site historian at 08:13 and first reaches the planner at 08:16. At the same reference basis, 1,250 × 24 = 30,000 bbl/day. The four-minute sample-to-planner delay makes the sample unavailable to an 08:15 planning decision. Its later arrival can support a revised decision. One point cannot establish sustained throughput, compressor causality, product yield or margin. A late alarm acknowledgement records a human action and leaves the original observation intact.
+**Compressor derate.** In independent fixture `OT-DELAY-01`, using the WORLD-002 §6 physical plan but a different observation delivery schedule, the plan remains 36,000 bbl/day. At 08:10 a restriction caps executed feed at 30,000. The 08:40 fork is a distinct decision boundary. For this `SYNTHETIC` observation fixture, a flow indication samples 1,250 bbl/h at 08:12, reaches the site historian at 08:13 and first reaches the planner at 08:16. At the same reference basis, 1,250 × 24 = 30,000 bbl/day. The four-minute sample-to-planner delay makes the sample unavailable to an 08:15 planning decision. Its later arrival can support a revised decision. One point cannot establish sustained throughput, compressor causality, product yield or margin. A late alarm acknowledgement records a human action and leaves the original observation intact.
 
 **Equivalent signals across sites.** For a mapping test only, two fictional adapters report temperatures of 212 °F and 100 °C. Conversion gives (212 − 32) × 5/9 = 100 °C. Retain distinct source, measurement and asset IDs even when quantity and normalized value match. A tag reassigned at noon resolves to its old instrument for an 11:59 sample delivered at 12:03. An overlapping assignment fails uniqueness. This fixture adds no operating site to the charter.
 
@@ -63,7 +63,7 @@ T53 proposes FUXA and comparisons with Rapid SCADA Community and Scada-LTS. T54 
 | OT-01. Unit and time-valid identity | §4 temperature values agree on the same basis. Reassignment, incompatible unit and ambiguous identity produce distinct dispositions. | Conversion checked; mapping release pending. |
 | OT-02. Quality and compression | §4 deadband emits three records, including the quality transition. Querying an empty interval returns a gap with coverage metadata. | Hand-worked sequence; historian behavior untested. |
 | OT-03. Partition, restart and backfill | Persist buffered records across restart. Reconcile identical live/backfill observations once; flag payload conflicts and expose any unrecoverable loss. | Proposed evidence: source counts and keys, checksums, delivery log and reconciled export. |
-| OT-04. Alarm and evidence cutoff | Reproduce raise, acknowledge and return-to-normal times independently. The planner at 08:15 cannot use the 08:16 record on replay. | Timeline checked; replay and permissions untested. |
+| OT-04. Alarm and evidence cutoff | Reproduce raise, acknowledge and return-to-normal times independently. In `OT-DELAY-01`, the planner at 08:15 cannot use the 08:16 record on replay. WORLD-002 §6 and `SCN-A-T125` use their own 08:12 delivery. | Timeline checked; replay and permissions untested. |
 | OT-05. Session and control isolation | Recover metric definitions after publisher restart. Unauthorized write attempts produce no world transition. Enterprise/edge outage leaves the local loop active. | Proposed tests; no deployed broker, hardware or isolation evidence. |
 | OT-06. Numerical comparison | Compare qualified historian aggregates with independent interval integration on a common basis. Record sample coverage, quality exclusions and approximation. | ENG-001 and WORLD-002 supply paper references. A single instantaneous reading cannot qualify an interval total. |
 
@@ -80,3 +80,5 @@ GAP-004 remains open. Which ICE mapping release will PPC consume, and who accept
 | T58 lines 11388–11437; T59–61 lines 11555–12282 | §§4–5. Integrated derate proposal and later edge-model exploration. §4 sample values and delays are new fixtures. |
 
 [Discussion register](../registers/PPC-Discussion-Decision-Traceability.md) · [Detailed source locators](../registers/PPC-Discussion-Source-Locators.csv) · [Architecture registry](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md)
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T6–10, T37–38, T48–49, T51–61, T63–70, T75 to this draft.

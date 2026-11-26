@@ -6,7 +6,7 @@ Draft for owner review · 25 November 2026 · Companion to [PPC-ARCH-000](../00-
 
 The source is **ChatGPT-Downstream Backcasting Research-20261125-2232.md**, exported 25 November at 22:32:53. Line numbers refer to the 40,519-line Markdown export, including its header. T1–T145 identify consecutive user prompts and their responses. The table below accounts for every exchange; grouped rows identify a related sequence, and their standing describes the sequence. The [source locator CSV](PPC-Discussion-Source-Locators.csv) provides finer addresses inside those ranges. For example, filter the CSV on exchange `27` and source ID `WORLD-07` to find the original decision-quality question at line 4591, or `EA-DBX-002` for the Delta *recommendation* at line 19736. Use `(exchange, source_id)` plus the unique source line when an ID recurs. T27 lines 4585–4586 are competency questions WORLD-01/02. T122 lines 35138–35139 reuse those labels for work packages. In T71 line 14934 the exported heading is literally `,000 bbl/day`; it follows an interactive control whose selected value is unavailable. It supplies no numerical fixture.
 
-**Scope of the check.** This is a complete exchange inventory for this export, with 1955 discussion headings and 1281 individually addressed table rows containing source identifiers. The CSV retains original subjects and recorded standing where available. Its categories aid navigation; the surrounding exchange determines meaning. The ADR and destination columns on CSV rows are exchange-level routing, not proof that an ADR approves each detail. Unnumbered rationale, equations, code, diagrams and examples remain anchored by the surrounding line range. Interactive output sometimes exports as an empty widget or SVG. Where fidelity affects a design decision, verify the original artifact. No access to the private transcript is required to read the architecture specification.
+**Scope of the check.** This is a complete exchange inventory for this export, with 1955 discussion headings and 1281 individually addressed table rows containing source identifiers. The CSV has 3236 fine locators across 135 exchanges; T10, T12, T16–18, T28, T30, T77, T131 and T137 have no fine CSV row and remain reachable through the exchange ranges below. The CSV retains original subjects and recorded standing where available. Its categories aid navigation; the surrounding exchange determines meaning. The ADR and destination columns on CSV rows are exchange-level routing, not proof that an ADR approves each detail. Unnumbered rationale, equations, code, diagrams and examples remain anchored by the surrounding line range. Interactive output sometimes exports as an empty widget or SVG. Where fidelity affects a design decision, verify the original artifact. No access to the private transcript is required to read the architecture specification.
 
 **Authority.** An explicit user requirement or correction establishes direction. An existing ADR governs its recorded scope until formally changed. An assistant recommendation, a table cell labeled “Required,” or a request to continue does not by itself approve a replacement. For conflicting sources, preserve the incumbent and the proposed change and identify the owner decision. The repository baseline for this check is [PPC at 08e7b33](https://github.com/aadehamid/pearland-petroleum-corporation/tree/08e7b3356f9b3ad18ce6a632d82615ad5a4e3847). Document identifiers below use the short forms in ARCH-000.
 
@@ -26,7 +26,7 @@ The source is **ChatGPT-Downstream Backcasting Research-20261125-2232.md**, expo
 
 ## Exchange register
 
-Read the ADR column as related baseline context. Where an exchange spans several decisions, consult the CSV and the original line range. The linked WORLD-001 draft uses section numbers for the reconciled world decisions above. Other destinations are planned documents in the master index.
+Read the ADR column as related baseline context. Where an exchange spans several decisions, consult the CSV and the original line range. The registered destinations are draft documents in the master index. A topic destination does not establish item-level or attachment coverage.
 
 
 ### Backcasting and the enterprise world
@@ -138,7 +138,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Physical and numerical engineering coverage
 
-[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) maps T20–24 to the model and quantity contracts (§§1–4), T2–3 and T35 to LP case comparison (§5), T73 Pillar 1 (line 15572) to the proposed engineering checks (§6), T74 (line 16033) to the owner's direction on equations and agent-neutral specifications (§§1, 6), and T122/T125 to the tank, compressor and branch references (§4). Its §7 crosswalk distinguishes source fixtures from new synthetic examples. Worked arithmetic is checked; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
+[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) §7 records its routed exchanges, including T37–38, T45, T51–52 and T114–115. Its worked arithmetic is a specification check; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
 
 ## Items still open
 
@@ -156,4 +156,23 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Enterprise ontology, identity and time coverage
 
-[INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) §1 records the separate upstream process release and EPM authority (T6–8, T32, T89–93 and T131–135). §2 covers the source, tag and enterprise identity questions in T56–57 and T68–70. §§2–4 connect T62, T98–99 and T101–105 to mapping strength, decision-time reconstruction and semantic compatibility. §4 records the SEM and EA05C verification targets and outstanding runtime evidence.
+[INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) §1 records the separate upstream process release and EPM authority (T6–8, T32, T89–92 and T131–135). §2 covers the source, tag and enterprise identity questions in T56–57 and T68–70. §§2–4 connect T62, T98–99 and T101–105 to mapping strength, decision-time reconstruction and semantic compatibility. T93 routes to PLAN-001 and ARCH-000. §4 records the SEM and EA05C verification targets and outstanding runtime evidence.
+
+## Remaining draft destination crosswalk
+
+This table reproduces the destinations recorded in the Exchange Register above. It is generated from those rows by `check_package.py`; editorial coverage in each draft can cite additional exchanges, but those citations do not change recorded routing. It does not establish exhaustive OT/EA disposition or approval. The CSV supplies finer line locators. Original images, market attachments and interactive output still need source checks under GAP-002.
+
+| Draft | Source exchanges and destination sections | Standing and limit |
+|---|---|---|
+| [GRAPH-001](../03-enterprise-information/PPC-GRAPH-001_Enterprise_Instance_Graph.md) | T62, T79, T103–105, T110–112 → §§1–4 | Projection and browser proposals; no deployed graph proof |
+| [DATA-001](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) | T4–5, T50, T80–82, T85–87, T95–96, T98–102, T107–109, T120–121 → §§1–4 | Product, release and Delta proposals; ADR-017 remains |
+| [INT-001](../04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md) | T33–34, T55, T66–67, T94–97, T120–121 → §§1–4 | Integration and recovery proposals; ADR-015/016 remain |
+| [EVID-001](../04-source-integration/PPC-EVID-001_Evidence_and_Decision_Context.md) | T3–5, T26–27, T31–33, T72, T84, T106–109, T116–118 → §§1–4 | Evidence and corpus direction; source assets unqualified |
+| [ANALYTICS-001](../05-intelligence-experience/PPC-ANALYTICS-001_Performance_Intelligence_and_Optimization.md) | T1–3, T24, T26, T35, T59–61, T100, T110–115 → §§1–3 | Model proposals; arithmetic examples need independent runtime qualification |
+| [UX-001](../05-intelligence-experience/PPC-UX-001_Enterprise_Intelligence_Workspace.md) | T2, T13–18, T36, T53, T71, T88, T107–112 → §§1–3 | Owner requested an impact explorer; Relate remains a candidate |
+| [AGENT-001](../05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md) | T116–118 → §§1–3 | Bounded tools and authorization; no agent evaluation |
+| [PLATFORM-001](../06-platform-operations/PPC-PLATFORM-001_Infrastructure_Security_and_Operations.md) | T46–52, T59–61, T66–67, T75, T78–82, T85–87, T106, T116–121 → §§1–3 | Open/free preference and R2 exception; deployment options untested |
+| [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) | T1, T25–26, T54, T58, T73–74, T113, T125–126 → §§1–3 | Proposed gates; no suite executed |
+| [SCENARIO-001](../07-scenarios-verification/PPC-SCENARIO-001_Golden_Enterprise_Scenarios.md) | T1, T19, T45, T58, T72, T83, T97, T122 → §§1–4 | Two proposed slices and preserved hurricane charter; market assets unqualified |
+| [PLAN-001](../08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) | T21, T34, T46–47, T63–65, T76–77, T93, T122–124, T126–130, T136–145 → §§1–3 | Suggested order; no implementation authorization |
+| [KNOWLEDGE-001](../09-architecture-knowledge/PPC-KNOWLEDGE-001_Architecture_Learning_and_Design_Rationale.md) | T22, T25, T28–30, T46–47, T63–65, T74, T76–77, T123–124, T126, T136–142 → §§1–4 | Explanatory rationale; not an ADR |

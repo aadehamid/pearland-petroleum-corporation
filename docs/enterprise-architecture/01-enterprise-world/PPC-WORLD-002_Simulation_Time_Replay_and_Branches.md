@@ -1,8 +1,10 @@
 # PPC-WORLD-002 — Simulation, Time, Replay and Branches
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is the original PPC source-inspection reference, not this draft's content revision or owner approval. Later linked specifications are read at the current branch revision.
+
 **Draft 0.1 for owner review.** Companion to [PPC-WORLD-001](PPC-WORLD-001_Canonical_Enterprise_World.md). This specification answers two questions central to downstream backcasting. Can PPC reproduce a completed operating period from the information and events that produced it? Can a planner test a different decision from that period and identify exactly what changed?
 
-The conversation establishes a logical simulation clock, hybrid event and numerical execution, explicit decision-time visibility, and reproducible branches. The ordering convention, manifest fields, fixture timings and acceptance procedures below are proposed engineering details. The owner can review them independently of the simulation library, database or solver. A recorded historical outcome and a simulated alternative have different evidence and must retain their labels in reports.
+The conversation establishes a logical simulation clock, hybrid event and numerical execution, explicit decision-time visibility, and reproducible branches. The ordering convention, manifest fields, fixture timings and acceptance procedures below are proposed engineering details. The owner can review them independently of the simulation library, database or solver. Fixture event times and physical quantities are `SYNTHETIC`; hypothetical interventions are `SCENARIO_ASSUMPTION`; arithmetic totals are `DERIVED`. A recorded historical outcome and a simulated alternative have different evidence and must retain their labels in reports.
 
 ## 1. Execution boundary
 
@@ -29,7 +31,7 @@ Use one logical timeline per branch. Represent instants on a declared UTC time b
 | Decision and execution time | When did the actor choose or approve an option, and when did an authorized execution change the world? |
 | Commit position | Which immutable record and revision did this branch actually commit? The position disambiguates events at the same instant and defines the snapshot boundary. |
 
-A historical knowledge query names **branch, role, channel, effective interval and as-of cutoff**, including commit position when events tie. Select revisions effective for the question that were accessible to that role at that cutoff. Apply the access rules and supersession facts in force then. Return the evidence IDs and availability times used. If recipient access cannot be established, mark availability unknown. An upstream timestamp or current permission alone cannot establish historical knowledge.
+A historical knowledge query pins release, branch, subject scope, effective time, knowledge cutoff, actor/role, channel and purpose under [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). A source-local commit position resolves tied events within a publication; it does not replace the publication ordinal or reader cutoff. On success, return evidence IDs and availability times only for the eligible publication used. If no publication qualifies, return only `UNRESOLVED`, with no evidence ID, availability time or separate access error. An upstream timestamp or current permission alone cannot establish historical knowledge.
 
 A 09:20 lab correction referring to an 08:00 sample can update a later reconciliation and a new backcast release. At 09:00 the planner still sees the earlier accessible revision. A sensor correction updates the assertion ledger. If a corrected *physical driving input* requires the past trajectory to be recomputed, create a separately identified restatement run from a checkpoint before its effective time. Retain the historical run and its decisions.
 
@@ -155,3 +157,7 @@ Source line numbers refer to the [discussion register](../registers/PPC-Discussi
 ENG-001 owns qualified equations, internal-state requirements and tolerances. INT-001 owns source delivery, watermarks and recovery semantics. EVID-001 owns role-visible claims and dossiers. VERIFY-001 owns the independent execution record. Before qualifying a runtime, select a scheduler, confirm how each engine snapshots numerical state, specify externally atomic manifest publication, and test the fixture and failure cases. These choices stay open for review. In the master index authoring order, **ENG-001 — Physical and Numerical Engineering** follows the two world specifications.
 
 [World specification](PPC-WORLD-001_Canonical_Enterprise_World.md) · [Synthetic generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [R2 storage and recovery](../../PPC-013_Cloudflare_R2_Durability_and_Project_Storage_Standard.md) · [Evidence and decision provenance](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md) · [Architecture decision register](../../PPC-REG-001_Architecture_Decision_Register.md).
+
+The recipient-specific evidence and as-of query rule is [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). This scenario fixes only its own observation and delivery times.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T27, T35–36, T71 to this draft.
