@@ -91,7 +91,7 @@ Do not collapse these identities: physical asset; functional position; installed
 
 ## 4. Existing PPC baseline: preservation and navigation
 
-`PPC-000` through `PPC-019` and `PPC-REG-001` are the existing foundational documents. **None is declared superseded by this draft.** Proposed disposition here means a future review or supplemental specification, not an instruction to overwrite a source document.
+`PPC-000` through `PPC-019`, `PPC-REG-001` through `PPC-REG-003`, and `PPC-REF-001` are the existing foundational documents and registers/reference materials. **None is declared superseded by this draft.** Proposed disposition here means a future review or supplemental specification, not an instruction to overwrite a source document.
 
 | Existing ID | Current primary subject | Draft disposition / linkage |
 |---|---|---|
@@ -116,6 +116,9 @@ Do not collapse these identities: physical asset; functional position; installed
 | PPC-018 | Enterprise evidence corpus | Retain; extend golden scenario templates and time-cutoff fixtures |
 | PPC-019 | Public ontology reuse candidates and mapping rules | Retain as **proposed ontology candidates**, not automatic adopted dependencies; note generalized process priority |
 | PPC-REG-001 | ADR-001 to ADR-039 | Preserve verbatim until approved amendments/decisions are made |
+| PPC-REG-002 | Source and integration inventory | Retain as the existing source/integration register; reconcile future INT-001 specifications without superseding it |
+| PPC-REG-003 | KPI and data-product inventory | Retain as the existing KPI/data-product register; align future DATA-001 and EPM mappings without superseding it |
+| PPC-REF-001 | Reference explaining what each tool does | Retain as the existing tool reference; distinguish documented tools from proposed technology alternatives |
 
 Original documentation URLs follow `https://github.com/aadehamid/pearland-petroleum-corporation/blob/01027a84be5d453cbb4e2ea091e4884729918b15/docs/<exact-filename>`. Exact file names are in the original `docs/` directory and the existing master index. This index's new links should be generated/validated at publication rather than guessing paths.
 
@@ -213,7 +216,7 @@ Source: [PPC-REG-001 at inspected revision](https://github.com/aadehamid/pearlan
 | ADR-017 | DuckDB/DuckLake analytical history | Delta on R2 versus DuckLake (or scoped coexistence) | Concurrent-write qualification, Databricks interoperability, restore and migration |
 | ADR-018 | Databricks as parallel enterprise-like implementation | Exact role, tiers, scope and timing | Actual entitlement/feature qualification, cost and portability |
 
-Other technology choices (OR-Tools vs Pyomo/HiGHS, LangGraph vs Pydantic AI, Langfuse vs OTel/Logfire) appear in PPC-011/012 and should receive **new or amended ADRs** before replacement, even though they are not independently numbered choices in `PPC-REG-001`.
+PPC-011 documents **OR-Tools** as an existing optimization choice, while PPC-012 documents **LangGraph** and **Langfuse** as existing agent/observability choices. **Pyomo/HiGHS**, **Pydantic AI**, and **OpenTelemetry/Logfire** are candidate alternatives raised for future assessment; they are **not recorded choices or alternatives in PPC-011/012**. Any proposed replacement should receive **new or amended ADRs** before it changes the existing baseline; these alternatives are not independently numbered choices in `PPC-REG-001`.
 
 ### 7.2 New ADR candidate topics (not assigned/approved)
 
