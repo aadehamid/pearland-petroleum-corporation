@@ -1,5 +1,7 @@
 # PPC-KNOWLEDGE-001 — Architecture Learning and Design Rationale
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 | Control | Value |
 |---|---|
 | ID / status | PPC-KNOWLEDGE-001 / explanatory draft, 0.1.0, 2026-11-25 |
@@ -26,8 +28,11 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 | Question | Recorded baseline | Proposal and missing evidence |
 |---|---|---|
+| Catalog | OpenMetadata, ADR-007 | First-slice scope remains open |
 | Formal and applied graph | Jena/Fuseki and Neo4j Community, ADR-009/010 | Standing semantic server scope and Relate browser require measured needs and access tests |
+| Source capture | Debezium CDC, ADR-016 | Python-native or source-native capture is a candidate requiring measured comparison and owner disposition |
 | Event transport | Kafka with Dagster orchestration, ADR-015 | NATS JetStream comparison requires retry/replay and operations evidence |
+| Databricks | Parallel implementation, ADR-018 | Exact role, tier, entitlement and timing remain open |
 | Analytical history | DuckLake, ADR-017 | Delta on R2 or coexistence requires writer, recovery and Databricks parity tests |
 | Workspace | Dash, ADR-014 | Relate WASM or another frontend needs workflow and permission prototype |
 | Optimization and agents | OR-Tools; LangGraph/Langfuse in PPC-011/012 | Pyomo/HiGHS, Pydantic AI and OpenTelemetry/Logfire need comparative evidence |
@@ -35,6 +40,10 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 ## 4. Worked check and unresolved coverage
 
-For a `SYNTHETIC` tank, 1,000 + 200 − 150 = 1,050 bbl (`DERIVED`). If an integration retry produces 1,250 bbl, the defect is duplicate business effect even if each message was delivered according to broker policy. If a decision at 12:45 cites a correction released at 13:00, the defect is future evidence even if its record time was noon. These examples illustrate two distinct failure modes; [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) owns their executable oracles.
+For separate `SYNTHETIC` integration retry fixture `INT-RETRY-01` on one liquid at constant density and a common reference-volume basis, 1,000 + 200 − 150 = 1,050 bbl (`DERIVED`). If a duplicate 200 bbl receipt produces 1,250 bbl, the defect is duplicate business effect even if each message was delivered according to broker policy. If a decision at 12:45 cites a correction released at 13:00, the defect is future evidence even if its record time was noon. These examples illustrate two distinct failure modes; [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) owns their executable oracles.
 
 GAP-002 remains open: T1–T145 have topic locators, but OT-01–12 and EA-01–09D have not received an item-by-item, attachment-checked disposition. Numerical source examples and supplied diagrams still need source checks. T22, T25, T63–65, T74–77, T123–126 and T136–142 support this companion. Do not mark the discussion exhaustive or a choice approved from this explanatory file.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T22, T25, T28–30, T46–47, T63–65, T74–77, T123–126 and T136–142 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+
+[INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.

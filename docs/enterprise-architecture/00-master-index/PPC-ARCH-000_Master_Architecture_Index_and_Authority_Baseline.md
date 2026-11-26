@@ -201,11 +201,11 @@ Source: [PPC-REG-001 at inspected revision](https://github.com/aadehamid/pearlan
 | Proposed disposition | Count | ADR IDs | Treatment |
 |---|---:|---|---|
 | **Retain** | 26 | 001, 002, 003, 004, 008, 010, 012, 013, 019, 020, 021, 022, 023, 024, 025, 027, 028, 029, 030, 031, 032, 034, 036, 037, 038, 039 | Keep existing rationale and authority; add acceptance criteria where needed |
-| **Extend** | 7 | 005, 006, 011, 016, 026, 033, 035 | Preserve existing choice; clarify modeling roles, validation and versioned dependencies |
-| **Reassess** | 6 | 007, 009, 014, 015, 017, 018 | Compare approved original with proposed alternative, with evidence and user decision |
+| **Extend** | 6 | 005, 006, 011, 026, 033, 035 | Preserve existing choice; clarify modeling roles, validation and versioned dependencies |
+| **Reassess** | 7 | 007, 009, 014, 015, 016, 017, 018 | Compare approved original with proposed alternative, with evidence and user decision |
 | **Total** | **39** | Each ADR appears exactly once | No ADR marked superseded by this document |
 
-### 7.1 Six changes that require explicit architecture decisions
+### 7.1 Seven changes that require explicit architecture decisions
 
 | Existing ADR | Earlier selection | Candidate/current question | Evidence needed |
 |---|---|---|---|
@@ -213,6 +213,7 @@ Source: [PPC-REG-001 at inspected revision](https://github.com/aadehamid/pearlan
 | ADR-009 | Jena/Fuseki for formal semantics | Which semantic consumers require a standing RDF server? | Upstream release flows, SPARQL needs, community deployment compatibility |
 | ADR-014 | Dash decision application | Is a different frontend necessary for Relate WASM and integrated scenario UX? | User workflow prototypes, data/API permissions, deployment footprint |
 | ADR-015 | Dagster orchestrates; Kafka transports | NATS JetStream initially versus Kafka while keeping orchestration separate | Delivery semantics, replay, CDC, operations, failure tests |
+| ADR-016 | Debezium CDC | Python-native or source-native capture versus the incumbent | Capture completeness, recovery, ordering and measured operations |
 | ADR-017 | DuckDB/DuckLake analytical history | Delta on R2 versus DuckLake (or scoped coexistence) | Concurrent-write qualification, Databricks interoperability, restore and migration |
 | ADR-018 | Databricks as parallel enterprise-like implementation | Exact role, tiers, scope and timing | Actual entitlement/feature qualification, cost and portability |
 
@@ -385,7 +386,7 @@ The independent agent must read pinned source files and the complete normative/r
 
 This document was prepared from read-only inspection of the pinned GitHub source baseline and architecture discussion. At initial drafting, the six source repository commits were retrieved; the ontology `ds-business-process/1.0` and `kpi-store/1.2` branch pointers both resolved to `ddf6b68b...`. PPC's existing 20 numbered architecture documents and 39-ADR register had been inspected in that review sequence. The new specifications in this branch are draft documentation, not a refreshed upstream status audit.
 
-For the 2026-11-26 documentation pass, all 19 registered spec IDs had unique, existing files and matching headings. Read-only checks found no broken local link or anchor among 148 local links and 6 anchors, and no malformed row among 67 Markdown tables in the 26 Markdown files under `docs/enterprise-architecture/`. Independent arithmetic and ordering checks covered the published tank, derate, replay, assay, blend, unit-conversion and noon/13:00 examples. The exchange register covered T1–T145; the finer CSV had 3236 locators across 135 exchanges. These checks do not close GAP-002 or substitute for source-asset review, owner approval or independent architecture review.
+For the 2026-11-26 documentation pass, all 19 registered spec IDs had unique, existing files and matching headings. The package completeness audit reported 19/19 registered documents and zero findings after the review fixes. The earlier pass checked links and tables on its then-current draft; its exact counts are not claimed for this revision. Arithmetic checks covered the stated tank, derate, replay, assay, blend and unit-conversion examples. The earlier noon/13:00 temporal fixture failed review; INFO-001 §3 now specifies complete chained publications. An in-memory SQL query over its documented rows returned A for (09:59, 13:00) and (10:30, 12:45), and B for (10:00, 13:00) and (10:30, 13:00). With P2 hidden it returned A; a second P2 occupant triggered the uniqueness check. These are specification-fixture checks, not application tests. No runtime implementation is qualified by this documentation pass. The exchange register covered T1–T145; the finer CSV had 3236 locators across 135 exchanges. These checks do not close GAP-002 or substitute for source-asset review, owner approval or independent architecture review.
 
 No application tests, formal proofs, physical simulations or deployment checks are claimed. This pass changed documentation only on the existing branch; it did not push, merge or change branches.
 

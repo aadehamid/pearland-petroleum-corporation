@@ -1,5 +1,7 @@
 # PPC-EVID-001 — Evidence and Decision Context
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 | Control | Value |
 |---|---|
 | ID / status | PPC-EVID-001 / proposed draft for owner review |
@@ -13,9 +15,9 @@ ECE owns reusable evidence and decision-context patterns. PPC owns fictional art
 
 ## 2. Typed assertions and decision state
 
-`Artifact`: immutable ID/revision, source system, author role, content digest, document locator, effective and authored times, source-record time, publication time, recipient or route, access label, branch and provenance class. `SourceAssertion`: artifact ID, exact field/page/span locator, quoted or structured proposition, status and supersession. `Claim`: proposition, `EVIDENCE|INFERENCE|CONTRADICTION|UNKNOWN`, source-assertion IDs, model result if inferred, and explicit unknown reason. `DecisionDossier`: decision ID, branch, actor, cutoff, policy version, options and constraints, evidence release, selected/deferred option, approval and execution events, expected and later observed outcome. A dossier's later outcome is sealed from its earlier decision view.
+`Artifact`: immutable ID/revision, source system, author role, content digest, document locator, valid-from/to and authored times, source-record time, publication time, recipient-specific `available_at` or `delivered_at`, `ingested_at`, recipient or route, access label, branch and provenance class. `SourceAssertion`: artifact ID, exact field/page/span locator, quoted or structured proposition, valid-from/to, source-record and publication times, recipient-specific `available_at`, `ingested_at`, access label, status and supersession. `EvidenceItem` binds an eligible assertion, artifact revision, role, branch, release and knowledge cutoff. `Claim`: proposition, `EVIDENCE|INFERENCE|CONTRADICTION|UNKNOWN`, evidence-item and source-assertion IDs, model result if inferred, and explicit unknown reason. `DecisionDossier`: decision ID, branch, actor, cutoff, policy version, options and constraints, evidence release, selected/deferred option, approval and execution events, expected and later observed outcome. A dossier's later outcome is sealed from its earlier decision view.
 
-An assertion flows `DRAFT → PUBLISHED → DELIVERED → SUPERSEDED` with recipient-specific access. `PUBLISHED` does not mean every recipient has it. A decision flows `OPEN → RECOMMENDED → APPROVED|REJECTED → EXECUTED|EXPIRED`; recommendation cannot transition directly to execution when policy requires approval. A historical query selects the pinned release, branch, effective interval, publication/receipt and role availability at cutoff. It filters access before retrieval and explanation. Unknown historical access returns `UNKNOWN`, not presumed permission.
+An assertion flows `DRAFT → PUBLISHED → DELIVERED → SUPERSEDED` with recipient-specific access. `PUBLISHED` does not mean every recipient has it. Decision transitions are `OPEN → RECOMMENDED|ESCALATED|EXPIRED`, `RECOMMENDED → APPROVED|REJECTED|ESCALATED|EXPIRED`, and `APPROVED → EXECUTED|EXPIRED`. An explicitly preapproved bounded action may follow `RECOMMENDED → AUTO_EXECUTED` after its policy check. `REJECTED`, `EXPIRED`, `ESCALATED`, `AUTO_EXECUTED` and `EXECUTED` are terminal for that decision; renewed work creates a new decision ID. A historical query selects the pinned release, branch, effective interval, publication/receipt and role availability at cutoff. It filters access before retrieval and explanation. Unknown historical access returns `UNKNOWN`, not presumed permission.
 
 ## 3. Synthetic noon correction fixture
 
@@ -26,3 +28,7 @@ A conflicting accessible maintenance note does not silently override P1. The ans
 ## 4. Qualification and decisions
 
 Test exact locator resolution, citation support, contradictory and missing evidence, publication delay, later corrections, current versus historical permission, restricted-result side channels, branch leakage and hidden-truth isolation. Record expected/observed claim sets, cutoff, actor, manifest, authorization policy and evaluation scorer version. PPC-016's target percentages remain goals, not measured outcomes here. ECE package maturity and access-history representation remain open. T3–5, T31–33, T72, T84, T106–109 and T116–118 in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) motivate the design; external screenshots and market attachments remain unqualified source material.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T3–5, T26–27, T31–33, T72, T84, T106–109 and T116–118 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+
+[INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.

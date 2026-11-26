@@ -1,5 +1,7 @@
 # PPC-INT-001 — Source Lifecycles and Integration
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 | Control | Value |
 |---|---|
 | ID / status | PPC-INT-001 / proposed draft for owner review |
@@ -18,7 +20,7 @@ source commit + outbox intent → transport → inbox receipt → source respons
 
 ## 2. Message and recovery contract
 
-`SourceEvent` has `event_id`, `source_system`, `source_incarnation`, `native_entity_key`, `source_revision`, `event_type`, `schema_version`, `effective_at`, `recorded_at`, `published_at`, `branch_id`, `classification`, immutable payload digest, predecessor and correlation IDs. Source sequence is ordered only within its declared partition. The outbox entry and source transaction commit together. Delivery attempts carry a stable key; a consumer inbox records applied revision and result before acknowledgement. An identical duplicate returns its prior receipt. Same key with different digest is a conflict. Out-of-order revision waits for a predecessor or enters quarantine with a reason; timeout must not invent a missing business event.
+`SourceEvent` has `event_id`, `source_system`, `source_incarnation`, `native_entity_key`, `source_revision`, `event_type`, `schema_version`, `effective_at`, `recorded_at`, `published_at`, `branch_id`, `partition_key`, `source_sequence`, `provenance_class`, `access_label`, recipient `available_at`, immutable payload digest, predecessor and correlation IDs. Source sequence is ordered only within its declared partition. The outbox entry and source transaction commit together. Delivery attempts carry a stable key; a consumer inbox records applied revision and result before acknowledgement. An identical duplicate returns its prior receipt. Same key with different digest is a conflict. Out-of-order revision waits for a predecessor or enters quarantine with a reason; timeout must not invent a missing business event.
 
 For each source keep captured, durable, applied and published watermarks separately. A crash after source commit but before publish resumes the outbox. A crash after consumer apply but before ack reuses the inbox receipt. A partial downstream batch cannot advance the published watermark. `RECEIVED → VALIDATED → APPLIED → PUBLISHED` is a processing lifecycle; `QUARANTINED`, `RETRYING` and `REJECTED` are explicit states. Reconciliation compares source counts, IDs, quantities and revision cutoffs; a mismatch is evidence, not an automatic correction. Authenticated source identity, least-privilege route and branch scope are preconditions.
 
@@ -33,3 +35,5 @@ If transport fails after ticket commit, the world retains one physical receipt a
 Acceptance must inject crashes at source commit, outbox publish, inbox apply, acknowledgement and release publication. Check duplicate/conflicting IDs, reordered revisions, stale policy, poison payload, backlog recovery, branch separation, role filtering and quantity reconciliation. Retain source logs, inbox/outbox state, watermarks, expected/observed effects and replay hashes. No runtime result is claimed.
 
 ADR-015 and ADR-016 remain in force. NATS versus Kafka, CDC versus source-native capture, ordering partition, retention and backpressure thresholds require measured comparison and owner disposition. T94–97 and T120–121 in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) are the discussion sources; T95–96 were proposals, not deployment evidence.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T33–34, T55, T66–67, T94–97 and T120–121 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.

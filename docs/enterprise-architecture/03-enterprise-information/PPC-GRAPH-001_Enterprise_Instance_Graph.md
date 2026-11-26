@@ -1,5 +1,7 @@
 # PPC-GRAPH-001 — Enterprise Instance Graph
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 | Control | Value |
 |---|---|
 | ID / status | PPC-GRAPH-001 / proposed draft for owner review |
@@ -9,7 +11,7 @@
 
 ## 1. Boundary and authority
 
-The enterprise instance graph is a derived projection for relationship queries. EPM Turtle and shapes own formal meaning. Source applications own recorded transactions; the PPC world owns simulated physical state; governed models own quantities. Neo4j Community is the baseline operational graph under ADR-010. A graph edge can show possible exposure, but cannot calculate volume, margin or causation. A proposed Relate browser and translation tools need separate qualification. No real plant is represented.
+The enterprise instance graph is a derived projection for relationship queries. EPM Turtle and shapes own formal meaning. Source applications own recorded transactions; the PPC world owns simulated physical state; governed models own quantities. Neo4j Community is the baseline operational graph under ADR-010; T79 states that PPC has no Neo4j Enterprise entitlement. A graph edge can show possible exposure, but cannot calculate volume, margin or causation. A proposed Relate browser and translation tools need separate qualification. No real plant is represented.
 
 ```text
 Released source + identity + evidence + semantic inputs
@@ -23,7 +25,7 @@ Released source + identity + evidence + semantic inputs
 
 ## 2. Projection contract
 
-`GraphNode` has `node_id: opaque string`, `kind: governed IRI and version`, `branch_id`, `valid_from/to: UTC instant`, `recorded_from/to: UTC instant`, `source_refs: nonempty list`, `mapping_assertion_id` where mapped, and `classification`. `GraphEdge` adds `edge_id`, `relation_iri`, typed `from_id/to_id`, `assertion_status`, `confidence_basis`, and authorization label. Intervals are half-open. A source reference includes immutable revision and locator. `GraphSnapshot` has snapshot ID, parent, branch, semantic and mapping digests, per-source watermarks, input release IDs, projection version, creation time and integrity digest. Optional unknown endpoints remain unresolved assertions, not invented nodes.
+`GraphNode` has `node_id: opaque string`, `kind: governed IRI and version`, `branch_id`, `valid_from/to: UTC instant`, `recorded_from/to: UTC instant`, `source_refs: nonempty list`, `mapping_assertion_id` where mapped, and `provenance_class`, `authorization_label`, `published_at` and recipient `available_at`. `GraphEdge` adds `edge_id`, `relation_iri`, typed `from_id/to_id`, `assertion_status`, `confidence_basis`, and its own authorization label, `published_at` and recipient `available_at`. Intervals are half-open. A source reference includes immutable revision and locator. `GraphSnapshot` has snapshot ID, parent, branch, semantic and mapping digests, per-source watermarks, input release IDs, projection version, creation time, publication time, recipient availability and integrity digest. Both the snapshot and returned assertions must pass the reader cutoff. Optional unknown endpoints remain unresolved assertions, not invented nodes.
 
 Allowed lifecycle: `CANDIDATE → VALIDATED → PUBLISHED → SUPERSEDED`; rejection or quarantine branches from candidate/validation. Publication needs a consistent input cut. A correction creates a new snapshot and retains the prior one for replay. A source deletion becomes a scoped tombstone; it does not silently erase historical evidence. One projection rule has one owner and version. The conversion report lists every source assertion, projected target, loss or rejection. Required meaning lost in RDF-to-property-graph conversion blocks publication.
 
@@ -40,3 +42,5 @@ If K is restricted to another role, an unauthorized planner sees no K, path coun
 Acceptance evidence must include a projection manifest, round-trip assertion comparison, negative false-equivalence fixture, shape and competency results, as-of replay, branch isolation, restricted-path side-channel test, duplicate delivery test, corruption/rebuild test and measured query results on the chosen workload. Expected and observed results, exact digests and reviewer disposition are required. None is reported as run here.
 
 ADR-009 and ADR-010 remain baseline. Open choices: standing Jena service versus validation at release; Relate WASM permissions and deployment; graph retention and query bounds; supported RDF construct subset. Compare each against access, conversion loss and operating evidence before an ADR change. Source discussion: T62, T103–106 and T110–112 in the [exchange register](../registers/PPC-Discussion-Decision-Traceability.md), with line locators in its CSV. Those exchanges propose projection and browser exploration; they do not prove deployment.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T62, T79, T103–106 and T110–112 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.

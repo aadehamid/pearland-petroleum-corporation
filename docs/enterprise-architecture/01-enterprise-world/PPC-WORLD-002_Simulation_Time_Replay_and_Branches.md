@@ -1,5 +1,7 @@
 # PPC-WORLD-002 — Simulation, Time, Replay and Branches
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 **Draft 0.1 for owner review.** Companion to [PPC-WORLD-001](PPC-WORLD-001_Canonical_Enterprise_World.md). This specification answers two questions central to downstream backcasting. Can PPC reproduce a completed operating period from the information and events that produced it? Can a planner test a different decision from that period and identify exactly what changed?
 
 The conversation establishes a logical simulation clock, hybrid event and numerical execution, explicit decision-time visibility, and reproducible branches. The ordering convention, manifest fields, fixture timings and acceptance procedures below are proposed engineering details. The owner can review them independently of the simulation library, database or solver. Fixture event times and physical quantities are `SYNTHETIC`; hypothetical interventions are `SCENARIO_ASSUMPTION`; arithmetic totals are `DERIVED`. A recorded historical outcome and a simulated alternative have different evidence and must retain their labels in reports.

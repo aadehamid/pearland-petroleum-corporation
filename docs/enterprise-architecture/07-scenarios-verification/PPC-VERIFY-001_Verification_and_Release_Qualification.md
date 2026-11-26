@@ -1,9 +1,11 @@
 # PPC-VERIFY-001 — Verification and Release Qualification
 
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+
 | Control | Value |
 |---|---|
 | ID / status | PPC-VERIFY-001 / proposed draft, 0.1.0, 2026-11-25 |
-| Authority | [PPC-005](../../PPC-005_Synthetic_Data_Generation_Strategy.md), [PPC-014](../../PPC-014_Implementation_Roadmap_and_Build_Runbook.md), [PPC-016](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md), [ARCH-000](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md) |
+| Authority | [PPC-005](../../PPC-005_Synthetic_Data_Generation_Strategy.md), [PPC-014](../../PPC-014_Implementation_Roadmap_and_Build_Runbook.md), [PPC-016](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md), [ARCH-000](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md), [PPC-REG-001](../../PPC-REG-001_Architecture_Decision_Register.md) ADR-025, 031, 037 |
 | Contract | Versioned requirement and independent oracle → observed result, deviation and qualification decision |
 
 ## 1. What counts as evidence
@@ -23,10 +25,14 @@ Architecture prose, a passing schema check and a self-authored unit test do not 
 | Evidence and action | Decision-time and role cutoff, restricted-result side channel, hidden-truth isolation, approval exactness, idempotent replay |
 | Platform | Backup/restore drill, corrupted object detection, secret scope, release compatibility and rollback |
 
-For the `SYNTHETIC` tank fixture, 1,000 + 200 − 150 = 1,050 bbl is the independent `DERIVED` expected close. Apply the 200 bbl receipt twice with one source ID; expected close remains 1,050 bbl. Restart after the source commit but before acknowledgement; expected physical receipt count remains one. A 12:45 planner query cannot use a noon-recorded correction released at 13:00. It must use the last authorized 12:30 publication or return unresolved. Restricted corrections must not leak. These expectations can be checked without copying implementation logic.
+For the T125 `SYNTHETIC` tank fixture, opening stock is 10,000 bbl, receipt is 500 bbl/h and dispatch is 700 bbl/h for two hours. On one liquid at constant density and a common reference-volume basis, the independent `DERIVED` close is 9,600 bbl against a 12,000 bbl limit. Apply the same source movement twice; expected close remains 9,600 bbl. Restart after the source commit but before acknowledgement; expected physical receipt count remains one. A 12:45 planner query cannot use a noon-recorded correction released at 13:00. It must use the last authorized 12:30 publication or return unresolved. Restricted corrections must not leak. These expectations can be checked without copying implementation logic.
 
 ## 3. Release gate and open decisions
 
 An integrated candidate pins each upstream contract and maturity state, world branch/checkpoint, source watermarks, product and graph snapshots, model versions, evidence release, policy and test-suite digest. Qualification fails if a required upstream release is pending, a material discrepancy is unresolved, a critical negative test fails, or a hidden/evidence leak occurs. `QUALIFIED` requires signed owner/reviewer disposition and a reproducible evidence package. A passed component test cannot stand in for an end-to-end scenario. No approvals or qualifications are asserted here.
 
 Alternative verification methods include a hand-calculated reference for balances, model checking for state transitions, fault injection for recovery and held-out empirical cases for physical fidelity. Choose methods by the claim; one cannot substitute for another. Open decisions: quantified tolerances, independent benchmark owners, acceptable recovery point/time, and which optional services can be absent from the first slice. T25–26, T54, T73–74, T113, T120–126 in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) supply the discussion trail. The original numerical examples require their own fixture review before qualification.
+
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T1, T25–26, T54, T58, T73–74, T113 and T120–126 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+
+[INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.
