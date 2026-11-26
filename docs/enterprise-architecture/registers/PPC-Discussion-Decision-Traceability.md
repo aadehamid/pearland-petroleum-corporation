@@ -136,6 +136,10 @@ Read the ADR column as related baseline context. Where an exchange spans several
 | T140–T142 · 39647–40358 | Proposal | Reconcile all 39 ADRs, pin repository authorities, register 19 documents and sequence authoring and verification. | ARCH-000, KNOWLEDGE-001, PLAN-001 | 025, 038 |
 | T143–T145 · 40359–40519 | Publication | Author the draft master index, publish in PPC and move to WORLD-001. PR 3 was subsequently corrected and merged; the document remains draft. | ARCH-000, WORLD-001, PLAN-001 | 025 |
 
+## Physical and numerical engineering coverage
+
+[ENG-001](../02-industrial-engineering/PPC-ENG-001_Physical_and_Numerical_Engineering.md) maps T20–24 to the model and quantity contracts (§§1–4), T2–3 and T35 to LP case comparison (§5), T54 and T73–75 to verification (§6), and T122/T125 to the tank, compressor and branch references (§4). Its §7 crosswalk distinguishes source fixtures from new synthetic examples. Worked arithmetic is checked; calibration, holdout accuracy, production tolerances and runtime behavior remain open.
+
 ## Items still open
 
 - **GAP-002 remains open.** The exchange inventory covers T1–T145. Full OT-01–12 and EA-01–09D coverage still requires a checked destination section or an explicit disposition for each substantive item, including source examples and original attachments where needed. See the WORLD-001 decision crosswalk above and the [WORLD-002 section crosswalk](../01-enterprise-world/PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md#9-source-crosswalk-and-handoff).
