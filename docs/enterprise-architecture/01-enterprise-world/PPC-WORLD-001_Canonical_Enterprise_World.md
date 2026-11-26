@@ -97,7 +97,7 @@ This equation applies to the stated reference unit, interval and illustrative pa
 
 ## 7. Verification contract
 
-The identifiers below retain the original WORLD questions at T27, lines 4583–4592. These are acceptance criteria for the eventual implementation. Expected outcomes below are reviewable today.
+The identifiers below retain the original WORLD questions at T27, lines 4583–4592. Locate these as `(exchange 27, source ID)`; the T122 WORLD-01/02 identifiers name unrelated implementation work packages. These are acceptance criteria for the eventual implementation. Expected outcomes below are reviewable today.
 
 | Source ID | Fixture and expected evidence |
 |---|---|
@@ -124,6 +124,6 @@ Negative fixtures also include an alias with two candidate assets, a stale engin
 
 Versioned snapshots and generation manifests follow [PPC-013](../../PPC-013_Cloudflare_R2_Durability_and_Project_Storage_Standard.md). Raw observations, source extracts and technical revisions remain recoverable. Hidden canonical IDs and decision dossiers are restricted to simulation and evaluation. Public knowledge releases, EPM definitions and the pending generalized process release are external dependencies with distinct authorities.
 
-**Open for qualification.** Pin a real parameter source and valid range for each engineering assumption, validate units and tolerances, specify utility and yield curves, reconcile the first-slice order with PPC-014, and pin the eventual approved process mappings. Review whether each scenario needs dynamic fidelity beyond the reduced-order contract. Technology comparisons (including Delta/DuckLake) stay in their governed documents and ADRs. The next specification is WORLD-002. No source-system deployment or model qualification is implied by this draft.
+**Open for qualification.** Pin a real parameter source and valid range for each engineering assumption, validate units and tolerances, specify utility and yield curves, reconcile the first-slice order with PPC-014, and pin the eventual approved process mappings. Review whether each scenario needs dynamic fidelity beyond the reduced-order contract. Technology comparisons (including Delta/DuckLake) stay in their governed documents and ADRs. The companion [WORLD-002 specification](PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) defines the execution and replay rules. No source-system deployment or model qualification is implied by this draft.
 
 **Repository sources.** [Charter](../../PPC-001_Problem_Statement_and_Simulation_Charter.md) · [Synthetic data generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [Evidence and decision provenance](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md) · [Architecture decisions](../../PPC-REG-001_Architecture_Decision_Register.md) · [Master architecture index](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md).

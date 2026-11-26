@@ -192,7 +192,7 @@ The labels `OT-01…OT-12` and `EA-01…EA-09D` reference architectural **conver
 | Infrastructure, backups, security, qualification and work packages (EA) | PLATFORM-001, VERIFY-001, PLAN-001 | Restore drill, version compatibility, readiness gates |
 | Detailed first-principles rationale and historical options (OT/EA) | KNOWLEDGE-001 and ADR register | No unexplained loss of equations, worked examples or rejected alternatives |
 
-**Traceability gap:** an independent complete OT/EA conversation export or transcript-to-topic inventory has not been packaged in this drafting session. The published package must not claim *full conversational coverage* until each discussion segment is mapped to a document section or explicitly dispositioned. This is a release blocker, not an omission to hide.
+**GAP-002 remains open.** The exchange inventory covers T1–T145. Full OT-01–12 and EA-01–09D coverage still requires a checked destination section or an explicit disposition for each substantive item, including source examples and original attachments where needed. The [discussion register and source locators](../registers/PPC-Discussion-Decision-Traceability.md) record the evidence. Section 12 tracks this same open gap.
 
 ## 7. Existing ADR baseline and proposed reconciliation
 
@@ -369,7 +369,7 @@ The independent agent must read pinned source files and the complete normative/r
 | ID | Gap / issue | Why it matters | Disposition needed |
 |---|---|---|---|
 | GAP-001 | `DS_Business_Process` generalized release pending | Process IDs/semantics may change | Await other agent's approved release; compatibility plan |
-| GAP-002 | Full OT-01–12 and EA-01–09D conversation-source coverage unverified | Risk of lost detailed reasoning, math and examples | Transcript-to-section trace register before completeness claim |
+| GAP-002 | Open. Exchange inventory complete; substantive item-to-section coverage and source-asset checks remain open (§6). | Risk of lost detailed reasoning, math and examples | Verify destination sections or record explicit dispositions in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) before a completeness claim. |
 | GAP-003 | Existing PPC technology choices differ from later proposals | Conflicting ADR authority | Decision-by-decision review before changing stack |
 | GAP-004 | ICE identity/mapping YAML not yet written as of inspected handoff | No qualified enterprise OT normalization | Provisional boundary and upstream qualification |
 | GAP-005 | EDI complete drawing/extraction/recovery lifecycle not qualified | Only bounded structured engineering slice established | Scope reuse and test exact DEXPI profiles |
