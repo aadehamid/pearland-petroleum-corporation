@@ -59,6 +59,8 @@ The following source revisions were inspected through the connected GitHub repos
 
 ### 2.1 Source precedence and conflict handling
 
+The [README source-precedence order](../../../README.md#source-precedence) is controlling when sources conflict. The domain notes below identify the subject of a claim; they do not reorder the ten levels. ICE, EDI and `DS_Business_Process` enter that order by their actual approval and artifact status, not by repository name. Pending specialist releases cannot displace approved EPM semantics or PPC ADRs.
+
 1. **Source authority is domain-specific.** The PPC charter governs the fictional project; `PPC-REG-001` governs existing PPC ADR history; EPM release/decision artifacts govern performance semantics; the eventual approved `DS_Business_Process` release will govern generic downstream business-process concepts; ECE/ICE/EDI govern their reusable specialist contracts within their documented scope.
 2. For a claim about a repository's **current progress**, prefer its designated current status/handoff and the code/test evidence over a stale high-level README. Example: Engineering Drawing to Graph's README describes documentation-first status while its later runbook reports completed bounded structured pipelines; reconcile rather than erase the discrepancy.
 3. A newer architecture **proposal** never automatically supersedes an existing PPC ADR. Record conflict, alternatives, decision owner, evidence, and resolution first.
@@ -85,7 +87,20 @@ The following source revisions were inspected through the connected GitHub repos
 
 **Architecture direction:** `DS_Business_Process → EPM process/performance alignment → PPC instance application` is a **semantic dependency**, not a mandated synchronous runtime hop. ICE, EDI, and ECE remain independent specialist contract owners and may be mapped into PPC without calling EPM for every observation or engineering revision.
 
-### 3.1 Distinct identity domains
+### 3.1 Shared contract owners
+
+The linked section owns each proposed PPC rule. A consumer uses that rule at its own boundary and records its release and version. These drafts do not replace an approved upstream contract.
+
+| Shared rule | Proposed PPC owner | Consumers |
+|---|---|---|
+| Publication identity, source-record and recipient availability times, historical grants, supersession order and reader-as-of cutoff | [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) | Identity, source events, evidence, graph, data products, workspace, tools and verification |
+| Evidence IDs, revision locators, claims and dossier fields | [EVID-001 §2](../04-source-integration/PPC-EVID-001_Evidence_and_Decision_Context.md), under PPC-016 and future ECE release | Retrieval, agents, workspace and historical evaluation |
+| Proposal, authorization, decision and execution states | [AGENT-001 §1](../05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md), under PPC-012 | Decision dossier, consequential tools and verification |
+| Product values, KPI bindings and release manifest | [DATA-001 §2](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md), using approved EPM definitions | Graph, analytics, workspace and agents |
+| Verification stages and signed qualification | [VERIFY-001 §1](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) | Golden scenarios, model runs and release gates |
+| Scenario A observation schedule and the separate delayed OT observation | [WORLD-002 §6](../01-enterprise-world/PPC-WORLD-002_Simulation_Time_Replay_and_Branches.md) and [OT-001 §4](../02-industrial-engineering/PPC-OT-001_Industrial_Information_Architecture.md), respectively | SCENARIO-001, WORLD-001 and OT-04 |
+
+### 3.2 Distinct identity domains
 
 Do not collapse these identities: physical asset; functional position; installed equipment; engineering object; drawing symbol/appearance; tag assignment; observation/measurement; source-system record; business entity; KPI definition; KPI value; scenario branch; decision dossier; evidence artifact; ontology class IRI. Define mapping authority, validity interval, recorded/knowledge time, source lineage, and permissible cardinality at each boundary.
 
@@ -386,7 +401,7 @@ The independent agent must read pinned source files and the complete normative/r
 
 This document was prepared from read-only inspection of the pinned GitHub source baseline and architecture discussion. At initial drafting, the six source repository commits were retrieved; the ontology `ds-business-process/1.0` and `kpi-store/1.2` branch pointers both resolved to `ddf6b68b...`. PPC's existing 20 numbered architecture documents and 39-ADR register had been inspected in that review sequence. The new specifications in this branch are draft documentation, not a refreshed upstream status audit.
 
-For the 2026-11-26 documentation pass, all 19 registered spec IDs had unique, existing files and matching headings. The package completeness audit reported 19/19 registered documents and zero findings after the review fixes. The earlier pass checked links and tables on its then-current draft; its exact counts are not claimed for this revision. Arithmetic checks covered the stated tank, derate, replay, assay, blend and unit-conversion examples. The earlier noon/13:00 temporal fixture failed review; INFO-001 §3 now specifies complete chained publications. An in-memory SQL query over its documented rows returned A for (09:59, 13:00) and (10:30, 12:45), and B for (10:00, 13:00) and (10:30, 13:00). With P2 hidden it returned A; a second P2 occupant triggered the uniqueness check. These are specification-fixture checks, not application tests. No runtime implementation is qualified by this documentation pass. The exchange register covered T1–T145; the finer CSV had 3236 locators across 135 exchanges. These checks do not close GAP-002 or substitute for source-asset review, owner approval or independent architecture review.
+For the 2026-11-26 documentation pass, all 19 registered spec IDs had unique, existing files and matching headings. A prior structural inventory counted 19 registered documents; it did not establish semantic completeness. The seven classes in the independent review are the subject of this revision, and runtime qualification remains open. The earlier pass checked links and tables on its then-current draft; its exact counts are not claimed for this revision. Arithmetic checks covered the stated tank, derate, replay, assay, blend and unit-conversion examples. The earlier noon/13:00 temporal fixture failed review; INFO-001 §3 now specifies complete chained publications. An in-memory SQL query over its documented rows returned A for (09:59, 13:00) and (10:30, 12:45), and B for (10:00, 13:00) and (10:30, 13:00). With P2 hidden it returned A; a second P2 occupant triggered the uniqueness check. These are specification-fixture checks, not application tests. No runtime implementation is qualified by this documentation pass. The exchange register covered T1–T145; the finer CSV had 3236 locators across 135 exchanges. These checks do not close GAP-002 or substitute for source-asset review, owner approval or independent architecture review.
 
 No application tests, formal proofs, physical simulations or deployment checks are claimed. This pass changed documentation only on the existing branch; it did not push, merge or change branches.
 

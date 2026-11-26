@@ -1,6 +1,6 @@
 # PPC-WORLD-002 — Simulation, Time, Replay and Branches
 
-Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is the original PPC source-inspection reference, not this draft's content revision or owner approval. Later linked specifications are read at the current branch revision.
 
 **Draft 0.1 for owner review.** Companion to [PPC-WORLD-001](PPC-WORLD-001_Canonical_Enterprise_World.md). This specification answers two questions central to downstream backcasting. Can PPC reproduce a completed operating period from the information and events that produced it? Can a planner test a different decision from that period and identify exactly what changed?
 
@@ -157,3 +157,5 @@ Source line numbers refer to the [discussion register](../registers/PPC-Discussi
 ENG-001 owns qualified equations, internal-state requirements and tolerances. INT-001 owns source delivery, watermarks and recovery semantics. EVID-001 owns role-visible claims and dossiers. VERIFY-001 owns the independent execution record. Before qualifying a runtime, select a scheduler, confirm how each engine snapshots numerical state, specify externally atomic manifest publication, and test the fixture and failure cases. These choices stay open for review. In the master index authoring order, **ENG-001 — Physical and Numerical Engineering** follows the two world specifications.
 
 [World specification](PPC-WORLD-001_Canonical_Enterprise_World.md) · [Synthetic generation](../../PPC-005_Synthetic_Data_Generation_Strategy.md) · [R2 storage and recovery](../../PPC-013_Cloudflare_R2_Durability_and_Project_Storage_Standard.md) · [Evidence and decision provenance](../../PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md) · [Architecture decision register](../../PPC-REG-001_Architecture_Decision_Register.md).
+
+The recipient-specific evidence and as-of query rule is [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). This scenario fixes only its own observation and delivery times.

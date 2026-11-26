@@ -1,6 +1,6 @@
 # PPC-KNOWLEDGE-001 — Architecture Learning and Design Rationale
 
-Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is an inspection reference, not owner approval.
+Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../registers/PPC-SOURCE-REGISTER.md). This commit is the original PPC source-inspection reference, not this draft's content revision or owner approval. Later linked specifications are read at the current branch revision.
 
 | Control | Value |
 |---|---|
@@ -18,7 +18,7 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 **Meaning, projection and calculation.** EPM and future approved process packages define meaning. A graph projects typed relationships for traversal. Engineering and governed analytical tools compute quantities. If a graph path is described as a margin loss, the user cannot inspect the equation or assumptions. INFO-001, GRAPH-001, DATA-001 and ANALYTICS-001 keep those roles visible.
 
-**Historical knowledge is recipient-specific.** A source may record a correction at noon and release it to the planner at 13:00. At 12:45, the planner uses the last authorized 12:30 publication or returns unresolved. An inaccessible correction stays undisclosed. EVID-001 owns the query rule; a current database row cannot reconstruct that view without publication and access history.
+**Historical knowledge is recipient-specific.** A source may record a correction at noon and release it to the planner at 13:00. At 12:45, the planner uses the last authorized 12:30 publication or returns unresolved. An inaccessible correction stays undisclosed. [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the reader-as-of query rule; a current database row cannot reconstruct that view without publication and access history.
 
 **A branch preserves a decision comparison.** A counterfactual branch copies a declared checkpoint and changes one assumption. It must not overwrite the actual path, borrow sibling evidence or execute a real-world action. A difference between branch outputs is model evidence under its envelope, not automatically a causal claim about a real plant.
 
@@ -40,10 +40,10 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 ## 4. Worked check and unresolved coverage
 
-For separate `SYNTHETIC` integration retry fixture `INT-RETRY-01` on one liquid at constant density and a common reference-volume basis, 1,000 + 200 − 150 = 1,050 bbl (`DERIVED`). If a duplicate 200 bbl receipt produces 1,250 bbl, the defect is duplicate business effect even if each message was delivered according to broker policy. If a decision at 12:45 cites a correction released at 13:00, the defect is future evidence even if its record time was noon. These examples illustrate two distinct failure modes; [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) owns their executable oracles.
+For separate `SYNTHETIC` integration retry fixture `INT-RETRY-01` on one liquid at constant density and a common reference-volume basis, 1,000 + 200 − 150 = 1,050 bbl (`DERIVED`). If a duplicate 200 bbl receipt produces 1,250 bbl, the defect is duplicate business effect even if each message was delivered according to broker policy. For future-evidence checks, use [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). These examples illustrate two distinct failure modes. [DATA-001 §3](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) defines the `INT-RETRY-01` arithmetic and expected duplicate result. [VERIFY-001 §2](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) requires independent execution evidence; its T125 tank fixture is separate.
 
 GAP-002 remains open: T1–T145 have topic locators, but OT-01–12 and EA-01–09D have not received an item-by-item, attachment-checked disposition. Numerical source examples and supplied diagrams still need source checks. T22, T25, T63–65, T74–77, T123–126 and T136–142 support this companion. Do not mark the discussion exhaustive or a choice approved from this explanatory file.
 
-The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T22, T25, T28–30, T46–47, T63–65, T74–77, T123–126 and T136–142 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T22, T25, T28–30, T46–47, T63–65, T74, T76–77, T123–124, T126, T136–142 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
 
 [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.

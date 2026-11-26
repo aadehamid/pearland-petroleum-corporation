@@ -160,19 +160,19 @@ Read the ADR column as related baseline context. Where an exchange spans several
 
 ## Remaining draft destination crosswalk
 
-This table identifies source ranges consulted for the 12 newly authored drafts. It gives section-level topic routing, not exhaustive OT/EA disposition or evidence that a proposed mechanism is approved. The CSV supplies finer line locators. Original images, market attachments and interactive output still need source checks under GAP-002.
+This table reproduces the destinations recorded in the Exchange Register above. It is generated from those rows by `check_package.py`; editorial coverage in each draft can cite additional exchanges, but those citations do not change recorded routing. It does not establish exhaustive OT/EA disposition or approval. The CSV supplies finer line locators. Original images, market attachments and interactive output still need source checks under GAP-002.
 
 | Draft | Source exchanges and destination sections | Standing and limit |
 |---|---|---|
-| [GRAPH-001](../03-enterprise-information/PPC-GRAPH-001_Enterprise_Instance_Graph.md) | T62, T79, T103–106 and T110–112 → §§1–4 | Projection and browser proposals; no deployed graph proof |
-| [DATA-001](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) | T4–5, T50, T80–82, T85–87, T94–102, T107–109 and T120–121 → §§1–4 | Product, release and Delta proposals; ADR-017 remains |
-| [INT-001](../04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md) | T33–34, T55, T66–67, T94–97 and T120–121 → §§1–4 | Integration and recovery proposals; ADR-015/016 remain |
-| [EVID-001](../04-source-integration/PPC-EVID-001_Evidence_and_Decision_Context.md) | T3–5, T26–27, T31–33, T72, T84, T106–109 and T116–118 → §§1–4 | Evidence and corpus direction; source assets unqualified |
-| [ANALYTICS-001](../05-intelligence-experience/PPC-ANALYTICS-001_Performance_Intelligence_and_Optimization.md) | T1–3, T23–26, T35, T59–61, T100, T110–115 and T125 → §§1–3 | Model proposals; arithmetic examples need independent runtime qualification |
-| [UX-001](../05-intelligence-experience/PPC-UX-001_Enterprise_Intelligence_Workspace.md) | T2, T13–18, T36, T53, T71, T88 and T107–112 → §§1–3 | Owner requested an impact explorer; Relate remains a candidate |
-| [AGENT-001](../05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md) | T26, T31 and T116–118 → §§1–3 | Bounded tools and authorization; no agent evaluation |
+| [GRAPH-001](../03-enterprise-information/PPC-GRAPH-001_Enterprise_Instance_Graph.md) | T62, T79, T103–105, T110–112 → §§1–4 | Projection and browser proposals; no deployed graph proof |
+| [DATA-001](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) | T4–5, T50, T80–82, T85–87, T95–96, T98–102, T107–109, T120–121 → §§1–4 | Product, release and Delta proposals; ADR-017 remains |
+| [INT-001](../04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md) | T33–34, T55, T66–67, T94–97, T120–121 → §§1–4 | Integration and recovery proposals; ADR-015/016 remain |
+| [EVID-001](../04-source-integration/PPC-EVID-001_Evidence_and_Decision_Context.md) | T3–5, T26–27, T31–33, T72, T84, T106–109, T116–118 → §§1–4 | Evidence and corpus direction; source assets unqualified |
+| [ANALYTICS-001](../05-intelligence-experience/PPC-ANALYTICS-001_Performance_Intelligence_and_Optimization.md) | T1–3, T24, T26, T35, T59–61, T100, T110–115 → §§1–3 | Model proposals; arithmetic examples need independent runtime qualification |
+| [UX-001](../05-intelligence-experience/PPC-UX-001_Enterprise_Intelligence_Workspace.md) | T2, T13–18, T36, T53, T71, T88, T107–112 → §§1–3 | Owner requested an impact explorer; Relate remains a candidate |
+| [AGENT-001](../05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md) | T116–118 → §§1–3 | Bounded tools and authorization; no agent evaluation |
 | [PLATFORM-001](../06-platform-operations/PPC-PLATFORM-001_Infrastructure_Security_and_Operations.md) | T46–52, T59–61, T66–67, T75, T78–82, T85–87, T106, T116–121 → §§1–3 | Open/free preference and R2 exception; deployment options untested |
-| [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) | T1, T25–26, T54, T58, T73–74, T113 and T120–126 → §§1–3 | Proposed gates; no suite executed |
-| [SCENARIO-001](../07-scenarios-verification/PPC-SCENARIO-001_Golden_Enterprise_Scenarios.md) | T1, T19, T45, T58, T72–74, T83, T97, T122 and T125 → §§1–4 | Two proposed slices and preserved hurricane charter; market assets unqualified |
-| [PLAN-001](../08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) | T21, T34, T46–47, T63–65, T76–77, T93, T122–130 and T136–145 → §§1–3 | Suggested order; no implementation authorization |
-| [KNOWLEDGE-001](../09-architecture-knowledge/PPC-KNOWLEDGE-001_Architecture_Learning_and_Design_Rationale.md) | T22, T25, T28–30, T46–47, T63–65, T74–77, T123–126 and T136–142 → §§1–4 | Explanatory rationale; not an ADR |
+| [VERIFY-001](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) | T1, T25–26, T54, T58, T73–74, T113, T125–126 → §§1–3 | Proposed gates; no suite executed |
+| [SCENARIO-001](../07-scenarios-verification/PPC-SCENARIO-001_Golden_Enterprise_Scenarios.md) | T1, T19, T45, T58, T72, T83, T97, T122 → §§1–4 | Two proposed slices and preserved hurricane charter; market assets unqualified |
+| [PLAN-001](../08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) | T21, T34, T46–47, T63–65, T76–77, T93, T122–124, T126–130, T136–145 → §§1–3 | Suggested order; no implementation authorization |
+| [KNOWLEDGE-001](../09-architecture-knowledge/PPC-KNOWLEDGE-001_Architecture_Learning_and_Design_Rationale.md) | T22, T25, T28–30, T46–47, T63–65, T74, T76–77, T123–124, T126, T136–142 → §§1–4 | Explanatory rationale; not an ADR |

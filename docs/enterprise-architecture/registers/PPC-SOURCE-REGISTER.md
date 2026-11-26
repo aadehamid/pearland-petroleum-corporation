@@ -13,3 +13,7 @@ Draft navigation record, 2026-11-25. The commits below are the inspected baselin
 | Conversation export | T1–T145, line locators in [CSV](PPC-Discussion-Source-Locators.csv) | Discussion provenance and owner direction | GAP-002 item-level and original-asset check |
 
 The original transcript was consulted through targeted line excerpts. It is not a release artifact or an approval record. The [discussion register](PPC-Discussion-Decision-Traceability.md) distinguishes owner direction, assistant proposal and source check.
+
+## PPC inspection pins
+
+The PPC commit in the source table is the original source-inspection baseline for this package. It does not pin the contents of later draft specifications. Individual early drafts retain the commit at which they were first inspected: `08e7b33` (WORLD-001 and discussion register), `6559459` (ENG-001), `35cdd80` (OT-001), `991a9ef` (EDI-001) and `3cb75a8` (INFO-001). These are historical provenance markers, not mutually compatible package release IDs. Review the current branch tree for the complete draft package and pin a new release commit only after review and owner disposition.
