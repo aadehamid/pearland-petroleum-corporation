@@ -1,6 +1,6 @@
 # PPC-OT-001 — Industrial Information Architecture
 
-**Draft for review.** Baseline [PPC at 35cdd80](https://github.com/aadehamid/pearland-petroleum-corporation/tree/35cdd808b30b2c2f9d3332de0fd425c35c4aa4fe). Decision question: when a compressor restricts hydrocracker feed, which observations could the operator and planner see, what equipment did they describe, and how much confidence should each place in them?
+**Draft for review.** Baseline [PPC at 35cdd80](https://github.com/aadehamid/pearland-petroleum-corporation/tree/35cdd808b30b2c2f9d3332de0fd425c35c4aa4fe). Decision question: when a compressor restricts hydrocracker feed, which observations could the operator and planner see, what equipment did they describe, and how much confidence should each place in them? PPC fixture signals and values below are `SYNTHETIC`. Unit conversions and integrated totals are `DERIVED`. The upstream ICE row counts and cadence are source-reported test facts, not PPC observations.
 
 ## 1. Authority and scope
 

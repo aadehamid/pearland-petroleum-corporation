@@ -34,17 +34,17 @@ Use typed instance links for installation and observation. Apply SKOS mapping re
 
 ## 3. Worked reconstruction
 
-Illustrative UTC fixture on November 1, 2026. At 08:00 the baseline register shows pump A in slot S. A field swap occurs at 10:00; its reviewed record first becomes available to this planner at 12:00. Assume the planner can read all baseline rows, and recorded time equals first permitted availability in this fixture. Intervals are half-open; infinity means an open end.
+Illustrative `SYNTHETIC` UTC fixture on November 1, 2026. At 08:00 the baseline register shows pump A in slot S. A field swap occurs at 10:00. The source records a correction at 12:00 but releases it to this planner at 13:00. The last authorized publication P1, still identifying A, becomes available at 12:30. Recorded and available time are separate. Intervals are half-open; infinity means an open end.
 
-| Slot S occupant | Valid interval | Recorded interval | Branch |
-|---|---|---|---|
-| A | [08:00, ∞) | [08:00, 12:00) | baseline |
-| A | [08:00, 10:00) | [12:00, ∞) | baseline |
-| B | [10:00, ∞) | [12:00, ∞) | baseline |
+| Publication | Slot S occupant | Valid interval | Recorded at | Available to planner | Branch |
+|---|---|---|---|---|---|
+| P0 | A | [08:00, ∞) | 08:00 | 08:00 | baseline |
+| P1 | A | [08:00, ∞) | 12:30 | 12:30 | baseline |
+| P2 correction | B | [10:00, ∞) | 12:00 | 13:00 | baseline |
 
-Select the pinned release and branch snapshot, apply authorization, then require valid_start ≤ event_time < valid_end and recorded_start ≤ cutoff < recorded_end. Also require evidence availability by cutoff. Materialize authorized inheritance at the fork for a child snapshot; later parent corrections require explicit adoption. Branch-specific overrides replace the scoped inherited assertion and retain lineage.
+Select the pinned release and branch snapshot, apply authorization, then require valid_start ≤ event_time < valid_end, recorded_at ≤ cutoff and recipient availability ≤ cutoff. Among eligible publications, apply authorized supersession as known at that cutoff. P2 supersedes P1 only after P2 becomes available to the planner. Materialize authorized inheritance at the fork for a child snapshot; later parent corrections require explicit adoption. Branch-specific overrides replace the scoped inherited assertion and retain lineage.
 
-At event time 10:30, the 11:00 cutoff returns A. The 12:00 cutoff returns B. At event time 09:59, the 12:00 cutoff returns A. At exactly 10:00 with that same cutoff it returns B. The knowledge delay is two hours. Replaying the 11:00 dossier still returns A. A sibling's proposed pump C cannot enter these baseline results. Duplicate the B row with another accepted occupant and the uniqueness rule must reject the lookup. Withhold the correction evidence from a consumer and require the access-controlled result to disclose no restricted identity or existence; authorization is not permission to guess an occupant.
+At event time 10:30, the 12:45 cutoff returns A from P1, with its age and uncertainty. If P1 and P0 were unavailable or unauthorized, the result is `UNRESOLVED`. At the 13:00 cutoff, the planner may use P2 and return B if receipt and authorization are established. At event time 09:59 and the 13:00 cutoff, the result is A; at exactly 10:00 it is B. The correction's planner-availability delay after the physical swap is three hours. Replaying the 12:45 dossier still returns A. A sibling's proposed pump C cannot enter these baseline results. A second accepted occupant at the same effective time must fail uniqueness. Withhold P2 from a consumer and require the result to disclose no restricted identity or correction existence; authorization is not permission to guess an occupant.
 
 ## 4. Consumer compatibility and acceptance evidence
 

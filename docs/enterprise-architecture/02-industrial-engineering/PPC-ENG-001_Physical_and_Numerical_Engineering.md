@@ -1,6 +1,6 @@
 # PPC-ENG-001 — Physical and Numerical Engineering
 
-**Draft 0.1 for owner and independent review.** Baseline: [PPC main at 6559459](https://github.com/aadehamid/pearland-petroleum-corporation/tree/655945926b7546f8dcf0c3cb0008e676b5131d76). This contract defines how a proposed change in refinery feed becomes a feasible trajectory, with a quantity, basis, uncertainty and independently checkable result. Its fixtures use fictional values. Runtime, plant calibration and engineering qualification remain open.
+**Draft 0.1 for owner and independent review.** Baseline: [PPC main at 6559459](https://github.com/aadehamid/pearland-petroleum-corporation/tree/655945926b7546f8dcf0c3cb0008e676b5131d76). This contract defines how a proposed change in refinery feed becomes a feasible trajectory, with a quantity, basis, uncertainty and independently checkable result. Its fictional fixture inputs are `SYNTHETIC`, hypothetical operating changes are `SCENARIO_ASSUMPTION`, and hand-calculated outputs are `DERIVED`. Runtime, plant calibration and engineering qualification remain open.
 
 ## 1. Decision and scope
 

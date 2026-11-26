@@ -2,7 +2,7 @@
 
 **Draft 0.1 for owner review.** Companion to [PPC-WORLD-001](PPC-WORLD-001_Canonical_Enterprise_World.md). This specification answers two questions central to downstream backcasting. Can PPC reproduce a completed operating period from the information and events that produced it? Can a planner test a different decision from that period and identify exactly what changed?
 
-The conversation establishes a logical simulation clock, hybrid event and numerical execution, explicit decision-time visibility, and reproducible branches. The ordering convention, manifest fields, fixture timings and acceptance procedures below are proposed engineering details. The owner can review them independently of the simulation library, database or solver. A recorded historical outcome and a simulated alternative have different evidence and must retain their labels in reports.
+The conversation establishes a logical simulation clock, hybrid event and numerical execution, explicit decision-time visibility, and reproducible branches. The ordering convention, manifest fields, fixture timings and acceptance procedures below are proposed engineering details. The owner can review them independently of the simulation library, database or solver. Fixture event times and physical quantities are `SYNTHETIC`; hypothetical interventions are `SCENARIO_ASSUMPTION`; arithmetic totals are `DERIVED`. A recorded historical outcome and a simulated alternative have different evidence and must retain their labels in reports.
 
 ## 1. Execution boundary
 

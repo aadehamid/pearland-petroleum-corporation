@@ -55,7 +55,7 @@ The following source revisions were inspected through the connected GitHub repos
 | [Engineering Drawing to Graph / EDI](https://github.com/aadehamid/Engineering_Drawing_to_Graph) | `main` @ [`12a4a6a6`](https://github.com/aadehamid/Engineering_Drawing_to_Graph/commit/12a4a6a6f715c7db76a26d763cb1938d6cf0cc05) | Engineering object/revision contracts and bounded structured graph pipeline | Distinguish implemented structured slice from planned drawing-extraction/recovery qualification |
 | [Enterprise Context Engineering / ECE](https://github.com/aadehamid/enterprise-context-engineering) | `main` @ [`750b398b`](https://github.com/aadehamid/enterprise-context-engineering/commit/750b398b6a50aedd552a72056d09cf1ccf6a296a) | Evidence, provenance, temporal decision context and evaluation patterns | Reusable schema package has not been established as published |
 
-**Evidence classes:** `SOURCE_OBSERVED` = a repository artifact or explicit status statement was inspected; `DESIGN_PROPOSED` = described in our architecture discussions or this blueprint; `TEST_REPORTED` = project documentation states a test ran, but it was not independently rerun here; `QUALIFIED` = requires separately recorded environment, test, and approval evidence. No software tests or operational acceptance suites were executed while preparing this draft.
+**Evidence classes:** `SOURCE_OBSERVED` = a repository artifact or explicit status statement was inspected; `DESIGN_PROPOSED` = described in our architecture discussions or this blueprint; `TEST_REPORTED` = project documentation states a test ran, but it was not independently rerun here; `QUALIFIED` = requires separately recorded environment, test, and approval evidence. These are architecture-evidence classes, separate from the value classes `OBSERVED`, `DERIVED`, `ESTIMATED`, `SYNTHETIC` and `SCENARIO_ASSUMPTION` in the PPC README. The illustrative manifest's seed and scenario fields describe proposed synthetic fixtures, not observed operating values. No software tests or operational acceptance suites were executed while preparing this draft.
 
 ### 2.1 Source precedence and conflict handling
 
@@ -135,20 +135,20 @@ The file status below describes this repository revision. A draft is available t
 | OT-001 | Industrial Information Architecture | `02-industrial-engineering/` | How do source measurements, tags, historian and ICE mapping work? | PPC-006, 010; ICE | [Draft](../02-industrial-engineering/PPC-OT-001_Industrial_Information_Architecture.md) |
 | EDI-001 | Engineering Information Integration | `02-industrial-engineering/` | How do approved engineering revisions/configurations enter PPC? | PPC-010, 019; EDI | [Draft](../02-industrial-engineering/PPC-EDI-001_Engineering_Information_Integration.md) |
 | INFO-001 | Enterprise Ontology, Identity and Time | `03-enterprise-information/` | How do approved process/semantic concepts map to PPC identities? | PPC-003, 004, 017, 019 | [Draft](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) |
-| GRAPH-001 | Enterprise Instance Graph | `03-enterprise-information/` | How are instances projected, versioned, secured and queried? | PPC-010, 016 | Planned |
-| DATA-001 | Data Products, KPIs and Analytical Releases | `03-enterprise-information/` | How are facts, metrics, status, restatement and releases governed? | PPC-008, 013, 017 | Planned |
-| INT-001 | Source Lifecycles and Integration | `04-source-integration/` | What do source events, outbox/inbox, recovery and reconciliation mean? | PPC-006, 007 | Planned |
-| EVID-001 | Evidence and Decision Context | `04-source-integration/` | What evidence could an agent know, when, from which source? | PPC-016, 018; ECE | Planned |
-| ANALYTICS-001 | Performance Intelligence and Optimization | `05-intelligence-experience/` | Which validated numerical, causal, forecasting and optimization tools calculate impact? | PPC-011 | Planned |
-| UX-001 | Enterprise Intelligence Workspace | `05-intelligence-experience/` | What business workflows use graph and scenario tools, with what authorization? | PPC-012 | Planned |
-| AGENT-001 | Agent Tools and Consequential Actions | `05-intelligence-experience/` | What may an agent read, simulate, recommend or execute? | PPC-012, 016 | Planned |
-| PLATFORM-001 | Infrastructure, Security and Operations | `06-platform-operations/` | How are services deployed, recovered, monitored and secured? | PPC-002, 009, 013, 014 | Planned |
-| VERIFY-001 | Verification and Release Qualification | `07-scenarios-verification/` | What independently proves each behavioral and security contract? | PPC-005, 014, 016 | Planned |
-| SCENARIO-001 | Golden Enterprise Scenarios | `07-scenarios-verification/` | Which end-to-end fixtures demonstrate the enterprise? | PPC-001, 005, 014 | Planned |
-| PLAN-001 | Implementation Work Packages and Readiness | `08-implementation/` | What is the smallest safe, testable dependency order? | PPC-014 | Planned |
-| KNOWLEDGE-001 | Architecture Learning and Design Rationale | `09-architecture-knowledge/` | Why was each engineering choice made; what first-principles reasoning must be preserved? | OT/EA discussion series | Planned |
+| GRAPH-001 | Enterprise Instance Graph | `03-enterprise-information/` | How are instances projected, versioned, secured and queried? | PPC-010, 016 | [Draft](../03-enterprise-information/PPC-GRAPH-001_Enterprise_Instance_Graph.md) |
+| DATA-001 | Data Products, KPIs and Analytical Releases | `03-enterprise-information/` | How are facts, metrics, status, restatement and releases governed? | PPC-008, 013, 017 | [Draft](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) |
+| INT-001 | Source Lifecycles and Integration | `04-source-integration/` | What do source events, outbox/inbox, recovery and reconciliation mean? | PPC-006, 007 | [Draft](../04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md) |
+| EVID-001 | Evidence and Decision Context | `04-source-integration/` | What evidence could an agent know, when, from which source? | PPC-016, 018; ECE | [Draft](../04-source-integration/PPC-EVID-001_Evidence_and_Decision_Context.md) |
+| ANALYTICS-001 | Performance Intelligence and Optimization | `05-intelligence-experience/` | Which validated numerical, causal, forecasting and optimization tools calculate impact? | PPC-011 | [Draft](../05-intelligence-experience/PPC-ANALYTICS-001_Performance_Intelligence_and_Optimization.md) |
+| UX-001 | Enterprise Intelligence Workspace | `05-intelligence-experience/` | What business workflows use graph and scenario tools, with what authorization? | PPC-012 | [Draft](../05-intelligence-experience/PPC-UX-001_Enterprise_Intelligence_Workspace.md) |
+| AGENT-001 | Agent Tools and Consequential Actions | `05-intelligence-experience/` | What may an agent read, simulate, recommend or execute? | PPC-012, 016 | [Draft](../05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md) |
+| PLATFORM-001 | Infrastructure, Security and Operations | `06-platform-operations/` | How are services deployed, recovered, monitored and secured? | PPC-002, 009, 013, 014 | [Draft](../06-platform-operations/PPC-PLATFORM-001_Infrastructure_Security_and_Operations.md) |
+| VERIFY-001 | Verification and Release Qualification | `07-scenarios-verification/` | What independently proves each behavioral and security contract? | PPC-005, 014, 016 | [Draft](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) |
+| SCENARIO-001 | Golden Enterprise Scenarios | `07-scenarios-verification/` | Which end-to-end fixtures demonstrate the enterprise? | PPC-001, 005, 014 | [Draft](../07-scenarios-verification/PPC-SCENARIO-001_Golden_Enterprise_Scenarios.md) |
+| PLAN-001 | Implementation Work Packages and Readiness | `08-implementation/` | What is the smallest safe, testable dependency order? | PPC-014 | [Draft](../08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) |
+| KNOWLEDGE-001 | Architecture Learning and Design Rationale | `09-architecture-knowledge/` | Why was each engineering choice made; what first-principles reasoning must be preserved? | OT/EA discussion series | [Draft](../09-architecture-knowledge/PPC-KNOWLEDGE-001_Architecture_Learning_and_Design_Rationale.md) |
 
-Supplementary `registers/` should include `SOURCE-REGISTER`, `REQUIREMENTS-COVERAGE`, `ADR-RECONCILIATION`, `DEPENDENCY-AND-COMPATIBILITY`, `RISKS-AND-OPEN-QUESTIONS`, and `TERMINOLOGY`. `independent-review/` should store the later agent's instructions, findings, evidence and owner dispositions. Do not duplicate existing upstream normative artifacts within PPC; reference a pinned source instead.
+Supplementary draft registers now include [SOURCE-REGISTER](../registers/PPC-SOURCE-REGISTER.md), [REQUIREMENTS-COVERAGE](../registers/PPC-REQUIREMENTS-COVERAGE.md), [ADR-RECONCILIATION](../registers/PPC-ADR-RECONCILIATION.md), [DEPENDENCY-AND-COMPATIBILITY](../registers/PPC-DEPENDENCY-AND-COMPATIBILITY.md), [RISKS-AND-OPEN-QUESTIONS](../registers/PPC-RISKS-AND-OPEN-QUESTIONS.md), and [TERMINOLOGY](../registers/PPC-TERMINOLOGY.md). These route evidence and open questions; they do not grant approval. `independent-review/` remains a later evidence location. Do not duplicate upstream normative artifacts within PPC; reference pinned sources.
 
 ### 5.1 Authoring order and dependency rationale
 
@@ -192,7 +192,7 @@ The labels `OT-01…OT-12` and `EA-01…EA-09D` reference architectural **conver
 | Infrastructure, backups, security, qualification and work packages (EA) | PLATFORM-001, VERIFY-001, PLAN-001 | Restore drill, version compatibility, readiness gates |
 | Detailed first-principles rationale and historical options (OT/EA) | KNOWLEDGE-001 and ADR register | No unexplained loss of equations, worked examples or rejected alternatives |
 
-**GAP-002 remains open.** The exchange inventory covers T1–T145. Full OT-01–12 and EA-01–09D coverage still requires a checked destination section or an explicit disposition for each substantive item, including source examples and original attachments where needed. The [discussion register and source locators](../registers/PPC-Discussion-Decision-Traceability.md) record the evidence. Section 12 tracks this same open gap.
+**GAP-002 remains open.** The exchange inventory covers T1–T145. The new drafts have topic and section crosswalks in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md), but full OT-01–12 and EA-01–09D item-level and original-asset checks remain. Section 12 tracks this same gap.
 
 ## 7. Existing ADR baseline and proposed reconciliation
 
@@ -375,17 +375,19 @@ The independent agent must read pinned source files and the complete normative/r
 | GAP-005 | EDI complete drawing/extraction/recovery lifecycle not qualified | Only bounded structured engineering slice established | Scope reuse and test exact DEXPI profiles |
 | GAP-006 | ECE versioned reusable contracts not yet published in inspected tree | Downstream cannot bind final schema versions | Provisional adapters, upstream release gate |
 | GAP-007 | KPI Store 1.2 client installation and certain cross-store cases not qualified | Cannot assume PPC compatibility | Environment-specific qualification, Community/Enterprise assessment |
-| GAP-008 | PPC physical equations and world event kernel not yet specified/implemented | No authoritative quantified scenario impact | WORLD/ENG contracts and independent benchmarks |
-| GAP-009 | Multi-store business-consistent release mechanism absent | Inconsistent KPI/graph/model views | Data-release and watermark specification |
+| GAP-008 | PPC physical equations and world event kernel have draft contracts, not implementation or independent qualification | No authoritative quantified scenario impact | Independent benchmarks and runtime evidence |
+| GAP-009 | Multi-store business-consistent release has a draft contract, not an implementation | Inconsistent KPI/graph/model views | Build and test manifest and watermarks |
 | GAP-010 | Frontend Relate WASM compatibility/performance/authorization unproven | Graph exploration may leak or overpromise | Bounded prototype and negative tests |
 | GAP-011 | Current PPC integrated source-system deployment not established | Architecture diagrams not operational proof | Infra and end-to-end evidence before claims |
 | GAP-012 | Formal approval of new ADR candidates outstanding | Proposals risk being misrepresented as requirements | User-approved decision register entries |
 
 ## 13. Verification of this draft
 
-This document was prepared from read-only inspection of current GitHub content and previously discussed proposed architecture. At drafting time, the six source repository commits were retrieved; the ontology `ds-business-process/1.0` and `kpi-store/1.2` branch pointers both resolved to `ddf6b68b...`. PPC's existing 20 numbered architecture documents and 39-ADR register had been inspected in the current review sequence. The draft must still pass **mechanical file checks**, full transcript traceability, owner review and independent architecture review before it becomes authoritative.
+This document was prepared from read-only inspection of the pinned GitHub source baseline and architecture discussion. At initial drafting, the six source repository commits were retrieved; the ontology `ds-business-process/1.0` and `kpi-store/1.2` branch pointers both resolved to `ddf6b68b...`. PPC's existing 20 numbered architecture documents and 39-ADR register had been inspected in that review sequence. The new specifications in this branch are draft documentation, not a refreshed upstream status audit.
 
-No application tests, formal proofs, physical simulations, deployment checks or code modifications are claimed. No PPC branch, pull request, commit or merge was created in this step.
+For the 2026-11-26 documentation pass, all 19 registered spec IDs had unique, existing files and matching headings. Read-only checks found no broken local link or anchor among 148 local links and 6 anchors, and no malformed row among 67 Markdown tables in the 26 Markdown files under `docs/enterprise-architecture/`. Independent arithmetic and ordering checks covered the published tank, derate, replay, assay, blend, unit-conversion and noon/13:00 examples. The exchange register covered T1–T145; the finer CSV had 3236 locators across 135 exchanges. These checks do not close GAP-002 or substitute for source-asset review, owner approval or independent architecture review.
+
+No application tests, formal proofs, physical simulations or deployment checks are claimed. This pass changed documentation only on the existing branch; it did not push, merge or change branches.
 
 ## 14. Source reading list (pinned)
 
