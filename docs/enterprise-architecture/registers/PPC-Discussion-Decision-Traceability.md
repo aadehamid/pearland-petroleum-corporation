@@ -149,3 +149,7 @@ Read the ADR column as related baseline context. Where an exchange spans several
 ## Industrial information coverage
 
 [OT-001](../02-industrial-engineering/PPC-OT-001_Industrial_Information_Architecture.md) §6 maps T53–58 and edge-model exploration to specific sections. The T54 validation direction and T55 license constraint retain their source standing. §4 distinguishes the merged derate ledger from new observation fixtures. The pinned ICE L0 record supports replay, while mapping YAML and Sparkplug publication remain upstream gaps. OT-01 through OT-06 name the evidence still required. GAP-002 and GAP-004 remain open.
+
+## Engineering information integration coverage
+
+[EDI-001](../02-industrial-engineering/PPC-EDI-001_Engineering_Information_Integration.md) §§1–2 and §5 cover T37–38 (lines 6504–6917), which explored P&ID topology and the evidence and licensing needed to reuse public drawings. For T39–42 (lines 6918–7265), §§1–3 describe how the engineering specialist reviews and publishes a revision and how PPC adopts it. T43–44 maps to §§1 and 4 on coherent company history and reusable test fixtures. T84 maps to §§2 and 5 on extraction evidence and accuracy. §4 reconciles the pinned upstream structured results with the new PPC adoption example. GAP-005 and PPC runtime qualification remain open.
