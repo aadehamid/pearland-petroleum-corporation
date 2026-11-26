@@ -4,7 +4,7 @@ Draft for independent review. Baseline [PPC main at 3cb75a8](https://github.com/
 
 ## 1. Meaning, release authority and ownership
 
-[ADR-033, 035, 038 and 039](../../PPC-REG-001_Architecture_Decision_Register.md) and [PPC-017](../../PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md) govern the existing EPM dependency, process conformance, artifact maturity and KPI alignment. The owner's later direction assigns development of the generalized downstream process vocabulary to a separate upstream effort. Preserve the existing ADRs. Record a proposed clarification of ADR-035 for owner disposition before representing the revised division of authority as ratified.
+[ADR-033, 035, 038 and 039](../../PPC-REG-001_Architecture_Decision_Register.md) and [PPC-017](../../PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md) govern the existing EPM dependency, process conformance, artifact maturity and KPI alignment. Under [ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md) and [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md), PPC standardizes on Git Turtle plus `rdflib`/`pyshacl` validation feeding Neo4j Community (matching EPM and ICE, demoting standing Jena/Fuseki to an optional offline verification tool), consumes the generalized downstream process ontology derived from `kpi-store/1.2` on branch `ds-business-process/1.0` once approved in its separate upstream track, and excludes `enterprise-people-graph` from v1. Preserve `PPC-REG-001` intact while enforcing `ADR-0042` and `ADR-0044`.
 
 | Question | Authority | PPC consumption rule |
 |---|---|---|

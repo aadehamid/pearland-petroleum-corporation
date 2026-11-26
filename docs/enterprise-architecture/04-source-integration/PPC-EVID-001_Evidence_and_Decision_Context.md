@@ -11,7 +11,7 @@ Inspected PPC baseline: [`01027a84be5d453cbb4e2ea091e4884729918b15`](../register
 
 ## 1. Evidence boundary
 
-ECE owns reusable evidence and decision-context patterns. PPC owns fictional artifacts, claims, roles and decisions. A corpus generator may see canonical truth to create records; an ordinary retrieval or evaluation agent cannot. A document's existence, statement and accessibility are separate facts. A later correction may alter current interpretation but cannot become evidence that a planner had earlier. Vector similarity ranks candidates; it cannot authorize a document or establish its truth.
+ECE owns reusable evidence and decision-context patterns (`main` @ `750b398`, consumed via a versioned provisional adapter under [ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md) until ECE publishes its schema package). PPC owns fictional artifacts, claims, roles, decisions, and the role-scoped evidence fixtures exported in `WorldExportBundle` ([ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md)). A corpus generator may see canonical truth to create records; an ordinary retrieval or evaluation agent cannot. A document's existence, statement and accessibility are separate facts. A later correction may alter current interpretation but cannot become evidence that a planner had earlier. Vector similarity ranks candidates; it cannot authorize a document or establish its truth.
 
 ## 2. Typed assertions and decision state
 
@@ -31,6 +31,6 @@ A conflicting accessible maintenance note does not silently override P1. The ans
 
 Test exact locator resolution, citation support, contradictory and missing evidence, publication delay, later corrections, current versus historical permission, restricted-result side channels, branch leakage and hidden-truth isolation. Record expected/observed claim sets, cutoff, actor, manifest, authorization policy and evaluation scorer version. PPC-016's target percentages remain goals, not measured outcomes here. ECE package maturity and access-history representation remain open. T3–5, T31–33, T72, T84, T106–109 and T116–118 in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) motivate the design; external screenshots and market attachments remain unqualified source material.
 
-The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T3–5, T26–27, T31–33, T72, T84, T106–109, T116–118 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T3–5, T26–27, T31–33, T72, T84, T106–109, T116–118 to this draft. `GAP-002` Markdown audit is closed in [PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002).
 
 [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.
