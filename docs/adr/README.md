@@ -1,6 +1,6 @@
 # PPC Architecture Decision Records (ADR-0040 onward)
 
-Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-REG-001](../PPC-REG-001_Architecture_Decision_Register.md). Decisions recorded from the 2026-11-26 architecture reconciliation live here in sequential order, citing saved owner answers in [answers/2026-11-26-first-principles-grill.md](answers/2026-11-26-first-principles-grill.md) and owner-delegated stand-in rulings in [answers/2026-11-26-claude-fable-2-owner-standin.md](answers/2026-11-26-claude-fable-2-owner-standin.md).
+Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-REG-001](../PPC-REG-001_Architecture_Decision_Register.md). Decisions recorded from the 2026-11-26 architecture reconciliation live here in sequential order, citing saved owner answers in [answers/2026-11-26-first-principles-grill.md](answers/2026-11-26-first-principles-grill.md) and owner-delegated stand-in rulings in [answers/2026-11-26-claude-fable-2-owner-standin.md](answers/2026-11-26-claude-fable-2-owner-standin.md). Later decisions follow in the same table, each citing its own owner words. A number can be missing from the table while the change that adds it is still open.
 
 | ADR | Title | Status | Date | Amends / clarifies |
 |---|---|---|---|---|
@@ -21,3 +21,4 @@ Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-RE
 | [ADR-0054](0054-refinery-a-flowsheet-closure-option-a-and-design-basis.md) | Refinery A v1 flowsheet closure (Option A) and 180,000 bbl/day nominal design basis | Decided (owner stand-in) | 2026-11-26 | Amends ADR-0040 |
 | [ADR-0055](0055-slice1-hosting-observability-postgres-workflow-and-databricks-sync.md) | Slice 1 12 GB lightweight OTel topology, PostgreSQL workflow state (no D1), and Databricks Free Edition synced copy | Decided (owner stand-in) | 2026-11-26 | Amends ADR-0045, ADR-0048, ADR-0051 |
 | [ADR-0056](0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) | `IDENTITY_STEWARD` role, numeric action-authority thresholds (`PROHIBITED`), and Refinery A v1 parameter ranges | Decided (owner stand-in) | 2026-11-26 | Amends ADR-0043, ADR-0048, ADR-0050 |
+| [ADR-0058](0058-shared-relate-project-memory-for-all-agents.md) | Shared Relate project memory for all coding agents | Proposed | 2026-11-27 | None |

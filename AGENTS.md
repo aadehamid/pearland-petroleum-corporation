@@ -6,6 +6,7 @@ Guidance for AI coding agents working in the Pearland Petroleum Corporation (PPC
 
 - **Writing.** Before writing anything a person will read, load the `clear-writing` skill and follow it — every reply, status update, email, doc, README, commit and PR description, post, and any text the user asks to edit. It applies to subagents too.
 - **Working on a repository.** Before changing anything, load the `way-of-working` skill and follow it — how decisions get recorded, the pull request every change goes through, the checks before each push, the independent review before a PR opens, watching an open PR until it merges, and the retro that improves the standard.
+- **Project memory.** Every agent shares one Relate memory through `scripts/memory.sh`. At session start run `scripts/memory.sh brief`; before you finish, save decisions, corrections and findings. Read `.agents/skills/project-memory/SKILL.md` before your first save (`ADR-0058`).
 
 Run `scripts/check.sh` before every push. CI runs the same script. Use `REVIEW_STANDARDS.md` for review. Before wiring the tracked pre-push hook, check the conditions in `way-of-working/references/guardrails.md`; when they hold, run `git config core.hooksPath scripts/hooks`.
 
@@ -13,7 +14,7 @@ Run `scripts/check.sh` before every push. CI runs the same script. Use `REVIEW_S
 
 1. `README.md` and `GLOSSARY.md` (canonical domain vocabulary)
 2. `docs/PPC-000_Master_Index_and_Architecture_Guide.md`
-3. `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` and `docs/adr/README.md` (`ADR-0040`–`0056`, preserving `docs/PPC-REG-001_Architecture_Decision_Register.md` verbatim)
+3. `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` and `docs/adr/README.md` (`ADR-0040` onward, preserving `docs/PPC-REG-001_Architecture_Decision_Register.md` verbatim)
 4. `docs/PPC-015_Three_Repository_Operating_Model.md`
 5. `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md` before working on evidence, decision provenance, agents or evaluations.
 6. `docs/PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md` before consuming EPM artifacts, defining KPIs or validating process behavior.
