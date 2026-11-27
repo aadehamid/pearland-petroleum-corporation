@@ -2,6 +2,13 @@
 
 Guidance for AI coding agents working in the Pearland Petroleum Corporation (PPC) repository.
 
+## Standing rules
+
+- **Writing.** Before writing anything a person will read, load the `clear-writing` skill and follow it — every reply, status update, email, doc, README, commit and PR description, post, and any text the user asks to edit. It applies to subagents too.
+- **Working on a repository.** Before changing anything, load the `way-of-working` skill and follow it — how decisions get recorded, the pull request every change goes through, the checks before each push, the independent review before a PR opens, watching an open PR until it merges, and the retro that improves the standard.
+
+Run `scripts/check.sh` before every push. CI runs the same script. Use `REVIEW_STANDARDS.md` for review. Before wiring the tracked pre-push hook, check the conditions in `way-of-working/references/guardrails.md`; when they hold, run `git config core.hooksPath scripts/hooks`.
+
 ## Start here
 
 1. `README.md` and `GLOSSARY.md` (canonical domain vocabulary)
