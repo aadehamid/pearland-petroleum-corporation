@@ -5,7 +5,7 @@ description: Shared PPC project memory in a Relate graph, used by every agent th
 
 # Project memory
 
-Every agent on this repository (Claude Code, Codex, Cursor, Gemini, Kimi, Pi and the rest) shares one memory: a Relate graph that `scripts/memory.sh` reads and writes. Run `scripts/memory.sh` with no arguments for its commands. The store lives in the repository's common git directory, so every worktree sees the same memory and Git never tracks it.
+Every agent on this repository (Claude Code, Codex, Cursor, Gemini, Kimi, Pi and the rest) shares one memory: a Relate graph that `scripts/memory.sh` reads and writes. Run `scripts/memory.sh` with no arguments for its commands. The store is the git-ignored `.relate-memory/` folder at the root of the main checkout, so every worktree sees the same memory and Git never tracks it. Dropbox syncs it to the owner's other machines.
 
 Memory supplements the record. Decisions are on the record only in `docs/adr/` with the owner's words; a memory points at that record and never replaces it.
 
@@ -53,6 +53,10 @@ JSON
 - Each fact is one self-contained sentence that names its source document when one exists.
 
 The command validates the episode before it writes anything, writes it in one transaction, and prints `memory: saved episode …`. An episode id names one episode and a fact id belongs to one episode: reusing either for different content is rejected, so a new save gets new ids. `scripts/memory.sh check` fails unless every slot holds exactly one current fact.
+
+## Dropbox and other machines
+
+Agents on every machine that syncs this folder read the same memory. Relate's writer lock holds only on one machine, so save from one machine at a time. When saves from two machines collide, Dropbox leaves conflicted copies in the store, and `scripts/memory.sh` exits 4 instead of saving. Stop there and tell the owner; a person chooses which copy wins.
 
 ## What memory must hold
 

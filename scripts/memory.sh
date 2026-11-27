@@ -13,9 +13,13 @@
 #   scripts/memory.sh init              create the store and its schema
 #   scripts/memory.sh path              print the store path
 #
-# The store is a Relate directory store inside the repository's common git
-# directory, so every worktree and every agent shares one memory and Git never
-# tracks it. PPC_MEMORY_DB overrides the path. Output is JSON lines.
+# The store is a Relate directory store in the git-ignored .relate-memory/
+# folder at the root of the main checkout, so every worktree and every agent
+# shares one memory and Git never tracks it. A sandboxed agent that cannot
+# write inside .git can still save there when the main checkout is in its
+# workspace. A repository whose git directory is not named .git keeps the
+# store at <git dir>/relate-memory. PPC_MEMORY_DB overrides the path.
+# Output is JSON lines.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +34,32 @@ store() {
   fi
   local common
   common="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)"
-  printf '%s/relate-memory\n' "$common"
+  if [ "$(basename "$common")" = ".git" ]; then
+    printf '%s/.relate-memory\n' "$(dirname "$common")"
+  else
+    printf '%s/relate-memory\n' "$common"
+  fi
+}
+
+# Dropbox syncs the store between machines, but Relate's writer lock holds
+# only on one machine. Two machines saving at once make Dropbox write
+# "conflicted copy" files. Stop on them: a person must decide which copy wins.
+dropbox_conflicts() {
+  local db
+  db="$(store)"
+  [ -d "$db" ] || return 0
+  # -H follows a store path that is itself a symlink.
+  find -H "$db" -name '*conflicted copy*' -print
+}
+
+refuse_on_conflicts() {
+  local found
+  found="$(dropbox_conflicts)"
+  [ -z "$found" ] && return 0
+  echo "memory: Dropbox conflicted copies in the store; another machine saved at the same time." >&2
+  echo "memory: ask the owner to resolve them before anyone saves again:" >&2
+  sed -n '1,20p' <<< "$found" >&2
+  exit 4
 }
 
 need_relate() {
@@ -79,6 +108,7 @@ read_query() {
 # on success, so show them only when it fails.
 init() {
   need_relate
+  refuse_on_conflicts
   local out
   if ! out="$(write "$cypher_dir/schema.cypher" 2>&1)"; then
     printf '%s\n' "$out" >&2
@@ -205,6 +235,7 @@ remember() {
   tmp="$(mktemp "${TMPDIR:-/tmp}/ppc-memory.XXXXXX")"
   if [ "$src" = "-" ]; then cat > "$tmp"; else cat -- "$src" > "$tmp"; fi
   validate "$tmp"
+  refuse_on_conflicts
   check_ids "$tmp"
   init > /dev/null
   write "$cypher_dir/remember.cypher" --fetch-params "m=$tmp"
@@ -260,6 +291,7 @@ case "$cmd" in
        ORDER BY f.recordedAt DESC LIMIT $n' ;;
   check)
     need_relate
+    refuse_on_conflicts
     out="$(read_query \
       'MATCH (f:Fact)
        WITH f, COUNT { (f)-[:FROM]->(:Episode) } AS sources
@@ -276,6 +308,6 @@ case "$cmd" in
     fi
     echo "memory: every slot holds exactly one current fact, each from one episode" ;;
   *)
-    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
     [ -z "$cmd" ] || [ "$cmd" = "help" ] || [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || exit 2 ;;
 esac
