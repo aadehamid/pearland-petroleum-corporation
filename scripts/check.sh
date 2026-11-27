@@ -28,6 +28,11 @@ echo "== check guard and pre-push hook =="
 (cd scripts && python3 -m unittest test_tree_state test_pre_push_hook)
 
 echo
+echo "== project memory =="
+command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; memory tests skip"
+(cd scripts && python3 -m unittest test_memory)
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"

@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && echo 'Project memory (scripts/memory.sh, project-memory skill). Most recent current facts:' && (scripts/memory.sh brief 15 2>&1 || true) && echo 'Recall before work on a topic; save decisions, corrections and findings before you finish.'"
+          }
+        ]
+      }
+    ]
+  }
+}
