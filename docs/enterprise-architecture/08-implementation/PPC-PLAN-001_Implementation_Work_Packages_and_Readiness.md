@@ -80,7 +80,7 @@ Implementation work packages write exclusively to these repository paths (`lakeh
 
 - **Objective & boundaries:** Materialize all executable JSON Schemas under `schemas/` (`B11`), pin upstream repository commits into provisional adapters (`ADR-0042`), freeze runtime clock/PRNG/cadence parameters (`C11`), write a non-destructive manifest-only inventory of legacy R2 objects (`C8`, never moving live ICE L0 prefixes), verify `delta-rs` (`aws_conditional_put="etag"`) single-writer locking and Databricks Free Edition synced-copy ingest via Dagster (`ADR-0055`), and stand up local Docker Compose parity matching the 12 GB `exe.dev` layout. No refinery simulator logic yet.
 - **Predecessors & blocking decisions:** Explicit Phase 0 authorization from Hamid Adesokan. All design-time `WP-0` owner gates are already closed (`ADR-0054`–`0056`).
-- **Accountable role & upstream owners:** PPC Platform/Architecture Lead; upstream owners of EPM (`511a9e8d`), ICE (`30c20c3`), EDI (`12a4a6a`), ECE (`750b398`), and `ds-business-process/1.0` (pending).
+- **Accountable role & upstream owners:** PPC Platform/Architecture Lead; upstream owners of EPM (`511a9e8d`), ICE (`1467e92`), EDI (`12a4a6a`), ECE (`750b398`), and `ds-business-process/1.0` (pending).
 - **Governing IDs:** `ARCH-000 §8`, `PPC-013`, `PPC-017`, `PLATFORM-001`, `PPC-REVIEW-003 §2–3`; `ADR-0041`, `0042`, `0045`, `0051`, `0053`, `0054`, `0055`, `0056`.
 - **Inputs, outputs & affected components:** Inputs: reconciled docs, R2 credentials (secret store), upstream repo hashes. Outputs:
   1. Executable contract schemas under `schemas/` (`B11`): `release_manifest.schema.json`, `world_export_bundle.schema.json`, `source_event.schema.json`, `outbox_entry.schema.json`, `inbox_receipt.schema.json`, `model_run.schema.json`, `tool_request.schema.json`, `tool_response.schema.json`, `action_proposal.schema.json`, `action_authorization.schema.json`, `action_receipt.schema.json`, `scenario_case.schema.json`, `provisional_adapter_manifest.schema.json`, and `policy_thresholds.yaml` (encoding `ADR-0056` `G3-b`).
@@ -89,7 +89,7 @@ Implementation work packages write exclusively to these repository paths (`lakeh
   4. `semantic/` scaffold, AML core models, and `infra/` local Docker Compose parity matching the 12 GB `exe.dev` topology (`ADR-0055`, no D1, lightweight OTel Collector).
 - **Ordered implementation tasks:**
   1. Author and validate all 13 JSON Schemas plus `policy_thresholds.yaml` under `schemas/`.
-  2. Create versioned provisional adapter manifests pinning EPM (`511a9e8d`), ICE (`30c20c3`), EDI (`12a4a6a`), and ECE (`750b398`) commits and freeze PRNG, site time zone, business-day start, and release cadence.
+  2. Create versioned provisional adapter manifests pinning EPM (`511a9e8d`), ICE (`1467e92`), EDI (`12a4a6a`), and ECE (`750b398`) commits and freeze PRNG, site time zone, business-day start, and release cadence.
   3. Inventory existing R2 prefixes into a non-destructive `LEGACY_PRE_WORLD_MODEL` manifest (without moving or deleting live ICE L0 prefixes) and provision separate restricted credentials for `evaluation/hidden/`.
   4. Verify `delta-rs` (`deltalake`) writes to R2 with `aws_conditional_put="etag"`, Dagster concurrency pool = 1 per table, DuckDB read-only queries, a negative dual-writer conflict test, and the Dagster-driven Databricks Free Edition synced-copy ingest probe (`ADR-0055` `G2-a`; if no mechanism works, stop and raise an ADR).
   5. Stand up local Docker Compose parity stack matching the 12 GB `exe.dev` layout (`ADR-0055`).
