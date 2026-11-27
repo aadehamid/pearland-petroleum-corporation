@@ -5,11 +5,11 @@
 | Artifact ID | `PPC-ARCH-000` (registered in §5; reconciled architecture review baseline) |
 | Version | `0.2.0-reconciled` |
 | Status | **Reconciled architecture baseline for owner Phase 0 authorization**; documents only, no code or runtime qualification asserted |
-| Prepared | 2026-11-26 (reconciled from `ef4eb08` via [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md)–[ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md) and [PPC-REVIEW-001](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md)–[004](../independent-review/PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md)) |
+| Prepared | 2026-11-26 (reconciled via [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md)–[ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) and [PPC-REVIEW-001](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md)–[004](../independent-review/PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md)) |
 | Target repository | `aadehamid/pearland-petroleum-corporation` |
 | Proposed target path | `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` |
-| Source PPC revision | `ef4eb08fd09298a8fe64cff4bac52242f6d6b5f6` (`main`, reconciled on branch `docs/first-principles-refinery-grill`) |
-| Canonical glossary & ADRs | [GLOSSARY.md](../../../GLOSSARY.md) and [docs/adr/README.md](../../adr/README.md) (`ADR-0040`–`0053`, preserving `PPC-REG-001` `ADR-001`–`039` verbatim) |
+| Source PPC revision | `a192662` (`main`, reconciled from `ef4eb08fd09298a8fe64cff4bac52242f6d6b5f6`) |
+| Canonical glossary & ADRs | [GLOSSARY.md](../../../GLOSSARY.md) and [docs/adr/README.md](../../adr/README.md) (`ADR-0040`–`0056`, preserving `PPC-REG-001` `ADR-001`–`039` verbatim) |
 | Primary purpose | Preserve the existing PPC architecture and maintain one coherent, first-principles dynamic refinery and enabling-systems specification before Phase 0 authorization |
 | Change authority | PPC project owner; separate authorization required before any Phase 0 implementation |
 | Scope exclusion | Does not implement systems, approve external ontologies, alter upstream repositories, or certify runtime behavior |
@@ -225,11 +225,11 @@ Source: [PPC-REG-001](../../PPC-REG-001_Architecture_Decision_Register.md) prese
 | ADR-016 | Debezium CDC | Amended for Slice 1: transactional source outboxes on IT; Debezium deferred | [ADR-0046](../../adr/0046-ot-it-integration-split-sparkplug-nats-outbox.md) |
 | ADR-017 | DuckDB/DuckLake | Amended: Delta Lake on Cloudflare R2 replaces DuckLake; DuckDB queries locally (confirming T86) | [ADR-0045](../../adr/0045-delta-lake-on-r2-and-databricks-portability.md) |
 | ADR-018 | Databricks parallel lab | Clarified: eventual target enterprise platform reading the same R2 Delta tables, staged post-Slice-1 | [ADR-0045](../../adr/0045-delta-lake-on-r2-and-databricks-portability.md), [ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md) |
-| PPC-011/012 | OR-Tools; LangGraph/Langfuse | Pyomo + HiGHS/IPOPT replaces OR-Tools; LangGraph + Pydantic tools + OTel/self-hosted Langfuse | [ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md) |
+| PPC-011/012 | OR-Tools; LangGraph/Langfuse/D1 | Pyomo + HiGHS/IPOPT replaces OR-Tools; LangGraph + Pydantic tools + PostgreSQL workflow state (no D1 in v1) + lightweight OTel Collector to R2 `telemetry/otel/` in Slice 1, staging ClickHouse-backed Langfuse v3 to `WP-7` | [ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md), [ADR-0055](../../adr/0055-slice1-hosting-observability-postgres-workflow-and-databricks-sync.md), [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) |
 
 ### 7.2 Resolution of `CAN-*` candidate topics
 
-Nine of the 13 `CAN-*` candidate topics (`CAN-WORLD-AUTHORITY`, `CAN-ENGINEERING-QUALIFICATION`, `CAN-ICE-EDI-REUSE`, `CAN-DS-BUSINESS-PROCESS`, `CAN-EVENT-RECOVERY`, `CAN-RELEASE-CONSISTENCY`, `CAN-RELATE-UX`, `CAN-GOLDEN-SCENARIOS`, `CAN-VERIFICATION-GATES`) are closed by `ADR-0040`–`0053`. The remaining four (`CAN-SCENARIO-ISOLATION`, `CAN-TEMPORAL-IDENTITY`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`) have reconciled normative specifications awaiting only WP-0 operational sign-off on identity-conflict steward assignment and numeric action-approval thresholds ([PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#3-complete-adr-transcript-item-and-wp-0-owner-disposition-register)).
+All 13 `CAN-*` candidate topics are now closed by `ADR-0040`–`0056`: nine by `ADR-0040`–`0053` and the remaining four (`CAN-SCENARIO-ISOLATION`, `CAN-TEMPORAL-IDENTITY`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`) by `ADR-0054`–`0056` ([PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#3-complete-adr-transcript-item-and-wp-0-owner-disposition-register)). Only live `WP-3B` LLM endpoint selection and explicit Phase 0 authorization remain with Hamid Adesokan.
 
 ## 8. Versioned dependency and scenario manifest policy
 

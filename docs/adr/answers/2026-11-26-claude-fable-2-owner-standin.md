@@ -90,3 +90,10 @@ Simulating inside a scenario branch is a read-class tool call and needs no appro
 
 - **LLM endpoint for WP-3B:** A hosted API is paid usage, and the 12 GB VM cannot run a local model. Stand-in recommends a configured endpoint with recorded responses for golden tests; Hamid decides the live provider before `WP-3B` starts.
 - **Phase 0 authorization:** Remains explicitly with Hamid Adesokan.
+
+---
+
+## Verbatim Stand-In Addendum (Claude Fable 2, Round 2, 2026-11-26 at commit `34f7790`)
+
+- **N1 (HCU UCO and product scaling clarification, clarifying `G3-c`):** "Stand-in clarification: define UCO = (1 − ξ) × (feed + chemical H2) and products = `s_p` × ξ × (feed + chemical H2). This reproduces every printed number. Record it as a dated addendum under Section 1."
+- **N3 (Catalytic Reformer severity curve clarification, clarifying `G1-4`):** "Stand-in clarification: piecewise linear through (95: 88.0, 2.0), (98: 86.0, 2.2), (101: 83.0, 2.6). LPG and dry gas take the remainder at 7.8 to 4.0. Same addendum."

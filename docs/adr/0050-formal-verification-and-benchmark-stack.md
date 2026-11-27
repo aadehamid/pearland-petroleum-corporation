@@ -24,3 +24,7 @@ The owner accepted Round 3 Q15 via "Yes to all." (`docs/adr/answers/2026-11-26-f
 ## Consequences
 
 - `PPC-VERIFY-001` and the proof-obligation register assign each material property to Quint, Z3/Hypothesis, analytical oracle, or empirical engineering benchmark, and label every unexecuted check `planned`.
+
+## Post-review amendment note (2026-11-26)
+
+- **Extended by [ADR-0056](0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) (owner-delegated stand-in Claude Fable 2):** Splits `PO-12` into `PO-12a` (Refinery A plausibility signed by Hamid Adesokan at `WP-1` exit) and `PO-12b` (measurable Planning LP calibration error at `WP-3A` exit) and pins numerical tolerances (`<= 1e-9` mass/element residual, ODE `rtol` `1e-10`).

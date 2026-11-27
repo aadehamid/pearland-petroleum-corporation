@@ -46,11 +46,11 @@ To satisfy `ADR-0051` and `ADR-0055` (`RPO` = zero silent loss of committed worl
 
 ## 3. Complete ADR, transcript-item, and WP-0 owner disposition register
 
-All 39 baseline ADRs (`PPC-REG-001`) remain preserved verbatim. Owner decisions `ADR-0040` through `ADR-0053` live in [docs/adr/README.md](../../adr/README.md).
+All 39 baseline ADRs (`PPC-REG-001`) remain preserved verbatim. Decisions `ADR-0040` through `ADR-0056` live in [docs/adr/README.md](../../adr/README.md).
 
 | Decision / topic | Baseline / source | Standing | Disposition & consequence |
 |---|---|---|---|
-| `ADR-001`–`002`, `005`–`006`, `008`, `010`–`013`, `019`–`021`, `024`–`034`, `036`–`039` | `PPC-REG-001` | Approved | **Retain** (extended by `ADR-0040`–`0053`). |
+| `ADR-001`–`002`, `005`–`006`, `008`, `010`–`013`, `019`–`021`, `024`–`034`, `036`–`039` | `PPC-REG-001` | Approved | **Retain** (extended by `ADR-0040`–`0056`). |
 | `ADR-003`, `ADR-004` | One R2 bucket; object store not OLTP | Approved | **Retain & clarify** ([ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md), [ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md)). Note on `T81` MinIO: Cloudflare R2 is preferred over self-hosted MinIO on `exe.dev` to preserve VM disk/RAM and free-tier durability; MinIO remains a local offline dev option only. |
 | `ADR-007` | OpenMetadata catalog | Amended | **Defer to WP-7** ([ADR-0047](../../adr/0047-slice1-active-core-vs-staged-apps.md)); lightweight GX + OpenLineage manifests run in Slice 1. |
 | `ADR-009` | Standing Jena/Fuseki | Amended | **Replace runtime path** ([ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)): Git Turtle + `pyshacl` → Neo4j Community (matching EPM & ICE); Fuseki optional offline. |

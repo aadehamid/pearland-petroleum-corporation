@@ -69,7 +69,7 @@ Under [ADR-0046](../../adr/0046-ot-it-integration-split-sparkplug-nats-outbox.md
 
 ## 6. Decisions and evidence still needed
 
-GAP-004 remains open. Which ICE mapping release will PPC consume, and who accepts unresolved or time-overlapping assignments? Which source owns a measurement when OPC UA and historian routes overlap? Which signals always retain raw samples, and what are their deadband, retention, quality and clock-skew policies? What outage duration must the edge buffer survive, and what loss marker reaches planners when it fills? The owner and OT reviewer should record the policy, affected signals, acceptance fixture and evidence before any qualification claim. Original diagrams and screenshots referenced in the discussion remain subject to the attachment limitations in the register.
+GAP-004 remains open for upstream ICE mapping YAML release (`WP-7`). Under [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) (`G3-a`), **`IDENTITY_STEWARD`** (held by the PPC owner until delegated in writing) accepts, rejects, or supersedes unresolved or time-overlapping tag assignments, and open conflicts return `UNRESOLVED` without auto-resolution. Remaining `WP-2` OT configuration policies (primary producer per overlapping OPC UA/historian series, raw-sample retention, deadband, clock-skew policy, and edge-buffer outage duration/loss markers) are frozen in `WP-2` acceptance fixtures before qualification. Original diagrams and screenshots referenced in the discussion remain subject to the attachment limitations in the register.
 
 | Original discussion | Section and disposition |
 |---|---|

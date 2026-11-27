@@ -27,3 +27,7 @@ The owner decided Round 2 Q7 and Q8 (`docs/adr/answers/2026-11-26-first-principl
 
 - `PPC-ENG-001` must specify primary engineering equations, units, reference conditions, and valid envelopes for all six unit groups and verify that they support every target business use case.
 - `PPC-WORLD-002` must specify the 1-minute canonical step, exact intra-step bound-crossing splits, optional 1-second OT telemetry projection, and UTC-to-local business-day calendar mapping.
+
+## Post-review amendment note (2026-11-26)
+
+- **Extended by [ADR-0056](0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) (owner-delegated stand-in Claude Fable 2):** Locks exact Refinery A v1 synthetic parameter ranges, FCC lump-to-stream/sulfur splits, HCU selectivity/UCO scaling, corrected Maples/Fahim RT-70 octane constants, and numerical tolerances without altering the owner decision above.
