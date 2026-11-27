@@ -11,11 +11,12 @@
 // between check and write. A guard that matches divides by zero, which fails
 // the statement and rolls back the transaction.
 OPTIONAL MATCH (old:Episode {id: $m.episode.id})
-WITH old WHERE old IS NOT NULL AND old.fingerprint <> $m.fingerprint
+WITH old WHERE old IS NOT NULL AND (old.fingerprint IS NULL OR old.fingerprint <> $m.fingerprint)
 RETURN 1 / 0 AS episode_id_already_used_for_different_content;
 
 UNWIND $m.facts AS f
-MATCH (:Fact {id: f.id})-[:FROM]->(other:Episode) WHERE other.id <> $m.episode.id
+MATCH (x:Fact {id: f.id})
+WHERE NOT EXISTS { (x)-[:FROM]->(:Episode {id: $m.episode.id}) }
 RETURN 1 / 0 AS fact_id_belongs_to_another_episode;
 
 MERGE (ep:Episode {id: $m.episode.id})
@@ -46,7 +47,10 @@ UNWIND $m.facts AS f
 MATCH (new:Fact {id: f.id}) WHERE new.closedAt IS NULL
 MATCH (old:Fact {slot: new.slot})
 WHERE old <> new AND old.closedAt IS NULL
-SET old.validTo = new.validFrom, old.closedAt = new.recordedAt
+// A correction can say it became true before the old fact did. Then the old
+// fact held for no time at all, so its range ends where it starts.
+SET old.validTo = CASE WHEN new.validFrom < old.validFrom THEN old.validFrom ELSE new.validFrom END,
+    old.closedAt = new.recordedAt
 REMOVE old:CurrentFact
 MERGE (new)-[:SUPERSEDES]->(old)
 RETURN new.slot AS slot, new.text AS current, old.text AS replaced;

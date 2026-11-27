@@ -42,3 +42,4 @@ mlruns/
 
 # Shared agent memory (scripts/memory.sh, ADR-0058). Git ignores it; Dropbox syncs it.
 .relate-memory/
+.relate-memory.*
