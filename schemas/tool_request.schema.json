@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/tool_request.schema.json",
+  "title": "PPC ToolRequest",
+  "description": "Role- and cutoff-scoped agent tool request where actor and role are derived strictly from authenticated server session (PPC-AGENT-001 §1, INFO-001 §3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "subject_scope",
+    "effective_at",
+    "actor_id",
+    "delegated_role",
+    "channel",
+    "purpose",
+    "tool_name",
+    "contract_version",
+    "branch_id",
+    "pinned_release_ids",
+    "knowledge_cutoff",
+    "input_digest",
+    "requested_action",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "request_id": { "type": "string", "minLength": 1 },
+    "subject_scope": { "type": "string", "minLength": 1 },
+    "effective_at": { "type": "string", "format": "date-time" },
+    "actor_id": { "type": "string", "minLength": 1 },
+    "delegated_role": {
+      "type": "string",
+      "enum": [
+        "Shift Supervisor",
+        "Refinery Operations Manager",
+        "Commercial Manager",
+        "VP Supply and Operations",
+        "IDENTITY_STEWARD",
+        "Planner",
+        "Auditor"
+      ]
+    },
+    "channel": { "type": "string", "minLength": 1 },
+    "purpose": { "type": "string", "minLength": 1 },
+    "tool_name": { "type": "string", "minLength": 1 },
+    "contract_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "pinned_release_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "knowledge_cutoff": { "type": "string", "format": "date-time" },
+    "input_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "requested_action": { "type": "string", "minLength": 1 },
+    "expires_at": { "type": "string", "format": "date-time" }
+  }
+}

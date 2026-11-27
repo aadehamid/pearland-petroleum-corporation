@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/action_authorization.schema.json",
+  "title": "PPC ActionAuthorization",
+  "description": "Human role authorization decision bound strictly to proposal_id, proposal_payload_digest, branch_id, expiry, and server-verified approver identity (PPC-AGENT-001 §1, ADR-0055 G2-c, ADR-0056 G3-b, PO-10).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "authorization_id",
+    "authorized_at",
+    "proposal_id",
+    "proposal_payload_digest",
+    "branch_id",
+    "authorization_expiry",
+    "approver_actor_id",
+    "approver_role",
+    "approver_is_human",
+    "scope",
+    "policy_version",
+    "policy_check_id",
+    "decision",
+    "audit_evidence"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "authorization_id": { "type": "string", "minLength": 1 },
+    "authorized_at": { "type": "string", "format": "date-time" },
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "proposal_payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "authorization_expiry": { "type": "string", "format": "date-time" },
+    "approver_actor_id": { "type": "string", "minLength": 1 },
+    "approver_role": {
+      "type": "string",
+      "enum": [
+        "Shift Supervisor",
+        "Refinery Operations Manager",
+        "Commercial Manager",
+        "VP Supply and Operations"
+      ]
+    },
+    "approver_is_human": { "const": true },
+    "scope": { "type": "string", "minLength": 1 },
+    "policy_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "policy_check_id": { "type": "string", "minLength": 1 },
+    "decision": { "type": "string", "enum": ["APPROVED", "DENIED"] },
+    "denial_reason": { "type": ["string", "null"] },
+    "audit_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signature_kind", "signature_digest", "session_id"],
+      "properties": {
+        "signature_kind": { "type": "string", "enum": ["HMAC_SESSION_SIG", "ED25519", "PG_TXN_AUDIT"] },
+        "signature_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "session_id": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

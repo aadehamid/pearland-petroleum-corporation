@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/outbox_entry.schema.json",
+  "title": "PPC OutboxEntry",
+  "description": "Transactional outbox record committed atomically in the source database transaction alongside its business mutation (PPC-INT-001 §2, ADR-0046, PO-03).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "outbox_id",
+    "source_system",
+    "source_transaction_id",
+    "event_id",
+    "delivery_key",
+    "branch_id",
+    "source_sequence",
+    "payload_digest",
+    "publish_status",
+    "created_at",
+    "published_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "outbox_id": { "type": "string", "minLength": 1 },
+    "source_system": {
+      "type": "string",
+      "enum": ["ot_historian", "refinery_lims", "commercial_ctrm", "logistics_mysql", "edi_engineering"]
+    },
+    "source_transaction_id": { "type": "string", "minLength": 1 },
+    "event_id": { "type": "string", "minLength": 1 },
+    "delivery_key": { "type": "string", "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "source_sequence": { "type": "integer", "minimum": 0 },
+    "payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "publish_status": {
+      "type": "string",
+      "enum": ["PENDING", "PUBLISHED", "FAILED"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "published_at": { "type": ["string", "null"], "format": "date-time" },
+    "attempt_count": { "type": "integer", "minimum": 0 }
+  }
+}

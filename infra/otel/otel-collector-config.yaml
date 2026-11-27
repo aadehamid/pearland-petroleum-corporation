@@ -1,0 +1,49 @@
+# Lightweight OpenTelemetry Collector Configuration (ADR-0055 G2-b)
+# Receives OTLP traces/metrics/logs and writes OTLP JSON files for hourly shipping
+# to Cloudflare R2 (pearland-petroleum-corp/telemetry/otel/), queried by DuckDB for
+# trace-leak tests. ClickHouse-backed Langfuse v3 is staged to WP-7.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 192
+    spike_limit_mib: 48
+  batch:
+    send_batch_size: 256
+    timeout: 5s
+
+exporters:
+  file:
+    path: /var/lib/ppc/otel/otlp_telemetry.jsonl
+    rotation:
+      max_megabytes: 50
+      max_days: 7
+      max_backups: 24
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [file]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [file]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [file]

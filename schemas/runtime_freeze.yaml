@@ -1,0 +1,84 @@
+# PPC WP-0 Runtime Configuration Freeze (C11, WORLD-002 §2, ADR-0043, ADR-0056)
+# Provenance: SYNTHETIC laboratory runtime policy frozen prior to WP-1 coding.
+
+freeze_version: "1.0.0"
+frozen_date: "2026-11-27"
+provenance_class: "SYNTHETIC"
+governing_adrs:
+  - "ADR-0043"
+  - "ADR-0045"
+  - "ADR-0054"
+  - "ADR-0055"
+  - "ADR-0056"
+  - "ADR-0057"
+
+prng:
+  library: "numpy"
+  library_version_pin: "2.2.6"
+  bit_generator: "PCG64"
+  stream_derivation: "sha256_semantic_key_to_seed_sequence"
+  semantic_key_tuple:
+    - "world_version"
+    - "disturbance_family"
+    - "asset_id"
+    - "event_occurrence"
+  paired_branch_exogenous_sharing: true
+  branch_innovation_stream_isolated: true
+  default_root_seed: 20261127
+
+clock_and_calendar:
+  canonical_time_base: "UTC"
+  timestamp_precision: "microsecond"
+  interval_convention: "half_open_start_inclusive_end_exclusive"
+  site_timezone: "America/Chicago"
+  tzdata_source: "IANA"
+  business_day_start_hour_local: 6
+  shift_schedule_local:
+    day_shift:
+      start_hour: 6
+      end_hour: 18
+    night_shift:
+      start_hour: 18
+      end_hour: 6
+  dst_handling:
+    spring_forward_hours: 23
+    fall_back_hours: 25
+    rate_integration_basis: "exact_utc_elapsed_seconds"
+  hybrid_clock:
+    canonical_process_step_seconds: 60
+    exact_intra_step_crossing_split: true
+    end_of_step_clipping_allowed: false
+    fast_ot_telemetry_projection_seconds: 1
+    slow_ot_process_cadence_seconds: 180
+
+analytical_release_cadence:
+  operational_release:
+    frequency: "hourly"
+    cut_minute_utc: 0
+    watermark_settling_seconds: 300
+    trigger_on_late_correction_restatement: true
+  daily_production_accounting_release:
+    frequency: "daily"
+    cut_time_local: "06:00"
+    site_timezone: "America/Chicago"
+    watermark_settling_seconds: 1800
+  monthly_reconciliation_release:
+    frequency: "monthly"
+    cut_day_of_month: 1
+    cut_time_local: "06:00"
+    site_timezone: "America/Chicago"
+  delta_write_policy:
+    writer_engine: "delta-rs"
+    aws_conditional_put: "etag"
+    dagster_concurrency_pool_per_table: 1
+    duckdb_access_mode: "read_only"
+
+numerical_tolerances:
+  mass_element_residual_rel_max: 1.0e-9
+  tank_step_refinement_rel_max: 1.0e-9
+  nonlinear_unit_step_refinement_rel_max: 1.0e-4
+  ode_rtol: 1.0e-10
+  crossing_time_abs_seconds_max: 1.0e-6
+  highs_feasibility_tolerance: 1.0e-7
+  ipopt_tolerance: 1.0e-8
+  zero_flipped_discrete_outcomes: true

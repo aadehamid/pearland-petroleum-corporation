@@ -1,0 +1,171 @@
+# PPC Core Logical Data Model (AML, PPC-004, WP-0)
+# Authoritative conceptual/logical model-as-code for core WP-0/Slice 1 entities.
+# Does not redefine EPM semantic meaning; carries EPM concept references where available.
+
+refinery_site {concept_id: "SITE", domain: "refining", owner: "ppc_world", classification: "canonical_asset", provenance_class: "SYNTHETIC"}
+  site_id varchar pk | "Opaque site identifier (SITE-REF-A in v1)"
+  site_name varchar
+  site_timezone varchar | "Frozen America/Chicago"
+  business_day_start_hour int | "Frozen 6 (06:00 local)"
+  nominal_crude_charge_bpd numeric | "180000 bbl/day per ADR-0054"
+
+storage_tank {concept_id: "STORAGE_TANK", domain: "refining", owner: "ppc_world", classification: "control_volume", provenance_class: "SYNTHETIC"}
+  tank_id varchar pk | "TK-101, TK-101H, TK-102..104, TK-201..202, TK-301..304, TK-401..402"
+  site_id varchar fk refinery_site.site_id
+  service_class varchar
+  working_min_bbl numeric
+  working_max_bbl numeric
+  segregated_hold boolean
+
+source_event {concept_id: "SOURCE_EVENT", domain: "integration", owner: "source_system", classification: "immutable_envelope", provenance_class: "SYNTHETIC"}
+  event_id varchar pk
+  publication_id varchar
+  subject_scope varchar
+  scoped_ordinal int
+  supersedes_publication_id varchar nullable
+  source_system varchar
+  source_incarnation varchar
+  native_entity_key varchar
+  source_revision int
+  event_type varchar
+  effective_at timestamp
+  recorded_at timestamp
+  published_at timestamp
+  branch_id varchar
+  partition_key varchar
+  source_sequence bigint
+  provenance_class varchar
+  access_label varchar
+  payload_ref varchar
+  payload_digest char(64)
+  delivery_key varchar unique
+
+outbox_entry {concept_id: "OUTBOX_ENTRY", domain: "integration", owner: "source_system", classification: "transactional_outbox", provenance_class: "SYNTHETIC"}
+  outbox_id varchar pk
+  source_system varchar
+  source_transaction_id varchar
+  event_id varchar fk source_event.event_id
+  delivery_key varchar unique
+  branch_id varchar
+  source_sequence bigint
+  payload_digest char(64)
+  publish_status varchar | "PENDING | PUBLISHED | FAILED"
+  created_at timestamp
+  published_at timestamp nullable
+
+inbox_receipt {concept_id: "INBOX_RECEIPT", domain: "integration", owner: "postgres_silver_staging", classification: "idempotency_receipt", provenance_class: "SYNTHETIC"}
+  receipt_id varchar pk
+  delivery_key varchar unique
+  source_system varchar
+  source_sequence bigint
+  source_revision int
+  payload_digest char(64)
+  processing_status varchar | "RECEIVED | VALIDATED | APPLIED | PUBLISHED | QUARANTINED | RETRYING | REJECTED"
+  applied_result varchar
+  branch_id varchar
+  acknowledged_at timestamp
+  delta_txn_app_id varchar nullable
+  delta_txn_version bigint nullable
+
+release_manifest {concept_id: "RELEASE_MANIFEST", domain: "analytics", owner: "production_accounting", classification: "immutable_release_cut", provenance_class: "DERIVED"}
+  release_id varchar pk
+  publication_id varchar
+  subject_scope varchar
+  scoped_ordinal int
+  supersedes_release_id varchar nullable
+  branch_id varchar
+  world_version varchar
+  epm_release_id varchar
+  status varchar | "PREPARING | VALIDATED | PUBLISHED | RETRACTED | REJECTED"
+  source_recorded_at timestamp
+  published_at timestamp nullable
+  authorization_label varchar
+  model_version varchar
+
+kpi_value_record {concept_id: "KPI_VALUE", domain: "performance", owner: "kpi_store", classification: "governed_measure", provenance_class: "DERIVED"}
+  value_id varchar pk
+  release_id varchar fk release_manifest.release_id
+  measure_id varchar
+  kpi_id varchar nullable
+  measure_class varchar | "KPI | OPERATIONAL_METRIC | MARKET_INDICATOR"
+  epm_definition_version varchar
+  branch_id varchar
+  period_start_utc timestamp
+  period_end_utc timestamp
+  numeric_value numeric nullable
+  unknown_reason varchar nullable
+  unit varchar
+  unit_basis varchar
+  provenance_class varchar
+  threshold_status varchar
+  quality_status varchar
+  calculation_digest char(64)
+
+model_run {concept_id: "MODEL_RUN", domain: "intelligence", owner: "analytics_service", classification: "governed_computation", provenance_class: "ESTIMATED"}
+  run_id varchar pk
+  method_class varchar | "PLANNING_LP | NONLINEAR_NLP | BACKCASTING | FORECASTING | CAUSAL_ESTIMATION | PROBABILISTIC | PROCESS_DIAGNOSIS"
+  branch_id varchar
+  world_version varchar
+  product_release_id varchar fk release_manifest.release_id
+  effective_at timestamp
+  knowledge_cutoff timestamp
+  lifecycle_status varchar | "DRAFT | VALIDATED | RELEASED | SUPERSEDED | FAILED | OUT_OF_ENVELOPE | INFEASIBLE"
+  feasibility_status varchar
+  input_digest char(64)
+  output_digest char(64) nullable
+
+action_proposal {concept_id: "ACTION_PROPOSAL", domain: "automation", owner: "postgres_workflow", classification: "governance_workflow", provenance_class: "SCENARIO_ASSUMPTION"}
+  proposal_id varchar pk
+  decision_id varchar
+  payload_digest char(64)
+  status varchar
+  authority_class varchar | "AUTO_EXECUTE | REQUIRE_APPROVAL | ESCALATE | PROHIBITED"
+  proposing_actor_id varchar
+  action_type varchar
+  target_id varchar
+  quantity numeric
+  unit varchar
+  branch_id varchar
+  policy_version varchar
+  approver_role varchar nullable
+  evidence_release_id varchar fk release_manifest.release_id
+  expires_at timestamp
+  idempotency_key varchar unique
+
+action_authorization {concept_id: "ACTION_AUTHORIZATION", domain: "automation", owner: "postgres_workflow", classification: "human_approval", provenance_class: "SYNTHETIC"}
+  authorization_id varchar pk
+  proposal_id varchar fk action_proposal.proposal_id
+  proposal_payload_digest char(64)
+  branch_id varchar
+  approver_actor_id varchar | "Enforced approver_actor_id != proposing_actor_id in Postgres ACID txn"
+  approver_role varchar
+  decision varchar | "APPROVED | DENIED"
+  authorized_at timestamp
+  authorization_expiry timestamp
+
+action_receipt {concept_id: "ACTION_RECEIPT", domain: "automation", owner: "postgres_workflow", classification: "execution_receipt", provenance_class: "SYNTHETIC"}
+  receipt_id varchar pk
+  proposal_id varchar fk action_proposal.proposal_id
+  authorization_basis_kind varchar | "HUMAN_AUTHORIZATION | AUTO_EXECUTE_POLICY_GRANT"
+  authorization_basis_id varchar
+  idempotency_key varchar unique
+  execution_status varchar | "EXECUTED | AUTO_EXECUTED | BLOCKED | FAILED"
+  business_effect_id varchar nullable
+  blocked_reason varchar nullable
+  branch_id varchar
+  executed_at timestamp
+
+users {concept_id: "USER_ACCOUNT", domain: "security", owner: "postgres_workflow", classification: "rbac_identity", provenance_class: "SYNTHETIC"}
+  actor_id varchar pk
+  username varchar unique
+  password_hash_argon2id varchar
+  is_human boolean
+  active boolean
+
+role_assignments {concept_id: "ROLE_ASSIGNMENT", domain: "security", owner: "postgres_workflow", classification: "rbac_grant", provenance_class: "SYNTHETIC"}
+  assignment_id varchar pk
+  actor_id varchar fk users.actor_id
+  role_name varchar | "Shift Supervisor | Refinery Operations Manager | Commercial Manager | VP Supply and Operations | IDENTITY_STEWARD | Planner | Auditor"
+  valid_from timestamp
+  valid_to timestamp nullable
+  recorded_at timestamp

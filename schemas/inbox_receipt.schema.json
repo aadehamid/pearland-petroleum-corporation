@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/inbox_receipt.schema.json",
+  "title": "PPC InboxReceipt",
+  "description": "Consumer idempotency receipt committed in one PostgreSQL ACID transaction with Silver staging rows before transport acknowledgement (PPC-INT-001 §2, PPC-REVIEW-003 §4, PO-03).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "delivery_key",
+    "source_system",
+    "source_sequence",
+    "source_revision",
+    "payload_digest",
+    "processing_status",
+    "applied_result",
+    "branch_id",
+    "acknowledged_at"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "delivery_key": { "type": "string", "minLength": 1 },
+    "source_system": {
+      "type": "string",
+      "enum": ["ot_historian", "refinery_lims", "commercial_ctrm", "logistics_mysql", "edi_engineering"]
+    },
+    "source_sequence": { "type": "integer", "minimum": 0 },
+    "source_revision": { "type": "integer", "minimum": 1 },
+    "payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "processing_status": {
+      "type": "string",
+      "enum": ["RECEIVED", "VALIDATED", "APPLIED", "PUBLISHED", "QUARANTINED", "RETRYING", "REJECTED"]
+    },
+    "applied_result": { "type": "string", "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "acknowledged_at": { "type": "string", "format": "date-time" },
+    "quarantine_reason": { "type": ["string", "null"] },
+    "delta_txn_app_id": { "type": ["string", "null"] },
+    "delta_txn_version": { "type": ["integer", "null"], "minimum": 0 }
+  }
+}

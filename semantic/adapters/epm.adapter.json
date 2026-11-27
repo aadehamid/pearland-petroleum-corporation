@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "adapter_id": "ppc-adapter-epm",
+  "adapter_version": "0.1.0",
+  "upstream_short_name": "EPM",
+  "upstream_repo_slug": "aadehamid/enterprise-performance-model",
+  "former_repo_slug": null,
+  "upstream_repo_url": "https://github.com/aadehamid/enterprise-performance-model",
+  "pinned_commit": "511a9e8db4008ef43a0dda0f92cef17664e4c995",
+  "pinned_commit_date": "2026-11-19T19:48:19Z",
+  "aligned_main_commit": "87d21ce69e38eedaf8f6cf324361ef8f11f67be9",
+  "maturity_status": "PROVISIONAL_COMMIT_PIN",
+  "approved_upstream_release": null,
+  "pending_upstream_dependencies": [
+    "ds-business-process/1.0 generalized downstream process ontology release (separate upstream track from kpi-store/1.2)"
+  ],
+  "qualification_cap": "QUALIFIED_PROVISIONAL",
+  "consumed_artifacts": [
+    {
+      "name": "EPM Master Foundation Index",
+      "upstream_path": "EPM_Foundation_v2_Markdown_HTML/EPM-FOUND-000.md",
+      "contract_role": "Enterprise performance semantic authority and domain map",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "Downstream Business Process Map and Data Product Portfolio",
+      "upstream_path": "business_architecture/business_process/data_product_portfolio.json",
+      "contract_role": "Data product portfolio and measure-class alignment",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "KPI Ontology Class Hierarchy",
+      "upstream_path": "ontology/kpi_ontology_class_hierarchy.md",
+      "contract_role": "Tall KPI fact and measure-class semantic model (Git Turtle + pyshacl -> Neo4j)",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "Generalized DS_Business_Process Ontology",
+      "upstream_path": "ontology/PROPOSED-release-packaging.md",
+      "contract_role": "Pending generalized downstream process IRIs (not yet released)",
+      "status": "PENDING_UPSTREAM_RELEASE"
+    }
+  ],
+  "ppc_owner_boundary": "PPC instantiates synthetic Refinery A operations, executes governed calculations, and evaluates process conformance; EPM retains semantic authority over KPI and performance meaning (PPC-017, ADR-0042, ADR-0044).",
+  "provenance_class": "OBSERVED"
+}

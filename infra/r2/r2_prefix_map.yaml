@@ -1,0 +1,61 @@
+# PPC Cloudflare R2 Two-Bucket Prefix Map (ADR-0051, ADR-0053, ADR-0055, ADR-0057)
+# Provenance: OBSERVED infrastructure topology (account endpoint and bucket names verified 2026-11-27).
+# Secrets are never stored in this file; credentials live outside Git in separate bucket-scoped env files.
+
+schema_version: "1.0.0"
+updated_date: "2026-11-27"
+provenance_class: "OBSERVED"
+governing_adrs:
+  - "ADR-003"
+  - "ADR-004"
+  - "ADR-0045"
+  - "ADR-0051"
+  - "ADR-0053"
+  - "ADR-0055"
+  - "ADR-0057"
+
+connection:
+  provider: "cloudflare_r2"
+  region: "auto"
+  signature_version: "s3v4"
+  endpoint_url: "https://011701390f6fee966f04b48182e37f9e.r2.cloudflarestorage.com"
+
+buckets:
+  operational:
+    bucket_name: "pearland-petroleum-corp"
+    credential_env_ref: "~/.config/ppc/r2-standard.env"
+    isolation_boundary: "operational_and_observable_only"
+    must_deny_access_to_buckets:
+      - "pearland-petroleum-hidden"
+    prefixes:
+      raw_external: "raw/external/{eia,noaa,epa,phmsa}/"
+      raw_source_extracts: "raw/source_extracts/{postgres,mysql,sqlite}/"
+      raw_events: "raw/events/{nats,ot}/"
+      delta_tables: "delta/{silver,gold,kpi_store}/"
+      cache: "cache/{normalized,conformed,features,documents,evidence,decision-dossiers,graph,quality}/"
+      manifests: "manifests/{ingestion,generation,scenarios,releases,backups}/"
+      models: "models/{forecasting,causal,anomaly,optimization,mlflow}/"
+      fixtures: "fixtures/{golden,test}/"
+      telemetry_otel: "telemetry/otel/"
+      world_export_observable: "exports/world_bundle/observable/"
+      backups: "backups/{postgres,mysql,sqlite,neo4j}/"
+      probe: "_probe/"
+
+  hidden_truth:
+    bucket_name: "pearland-petroleum-hidden"
+    credential_env_ref: "~/.config/ppc/r2-hidden.env"
+    isolation_boundary: "restricted_canonical_world_and_blind_evaluation_only"
+    must_deny_access_to_buckets:
+      - "pearland-petroleum-corp"
+    forbidden_consumers:
+      - "integration_pipelines"
+      - "operational_retrieval_agents"
+      - "dash_workspace"
+      - "relate_wasm_explorer"
+    prefixes:
+      canonical_world_snapshots: "evaluation/hidden/world_version=.../"
+      world_export_hidden_truth: "evaluation/hidden/world_bundle/"
+      evaluation_scoring_keys: "evaluation/hidden/scoring_keys/"
+      probe: "evaluation/hidden/_probe/"
+
+legacy_inventory_manifest: "infra/r2/legacy_pre_world_model_inventory.json"

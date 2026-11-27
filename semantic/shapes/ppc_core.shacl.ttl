@@ -1,0 +1,48 @@
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ppc:  <https://ppc.local/ontology/core#> .
+
+# PPC Core SHACL Shapes (WP-0, ADR-0044)
+# Validates baseline site identifiers and allowed PPC provenance classes.
+
+ppc:SiteShape
+    a sh:NodeShape ;
+    sh:targetClass ppc:Site ;
+    sh:property [
+        sh:path ppc:siteId ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:minLength 1 ;
+        sh:message "Every ppc:Site must carry exactly one non-empty ppc:siteId." ;
+    ] ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:minCount 1 ;
+        sh:message "Every ppc:Site must carry an rdfs:label." ;
+    ] ;
+    sh:property [
+        sh:path ppc:provenanceClass ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "OBSERVED" "DERIVED" "ESTIMATED" "SYNTHETIC" "SCENARIO_ASSUMPTION" ) ;
+        sh:message "Every ppc:Site must declare a valid PPC provenanceClass." ;
+    ] .
+
+ppc:ProcessUnitShape
+    a sh:NodeShape ;
+    sh:targetClass ppc:ProcessUnit ;
+    sh:property [
+        sh:path ppc:locatedAtSite ;
+        sh:class ppc:Site ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:message "Every ppc:ProcessUnit must link to exactly one ppc:Site." ;
+    ] ;
+    sh:property [
+        sh:path ppc:provenanceClass ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( "OBSERVED" "DERIVED" "ESTIMATED" "SYNTHETIC" "SCENARIO_ASSUMPTION" ) ;
+    ] .

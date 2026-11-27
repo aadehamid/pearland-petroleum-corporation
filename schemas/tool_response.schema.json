@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/tool_response.schema.json",
+  "title": "PPC ToolResponse",
+  "description": "Typed agent tool response enforcing provenance, epistemic status, nondisclosing UNRESOLVED access results, and audit linkage (PPC-AGENT-001 §1, INFO-001 §3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "result_id",
+    "request_id",
+    "status",
+    "branch_id",
+    "knowledge_cutoff",
+    "provenance_class",
+    "epistemic_status",
+    "output_classification",
+    "source_or_model_refs",
+    "uncertainty",
+    "redaction_status",
+    "audit_id"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "result_id": { "type": "string", "minLength": 1 },
+    "request_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["OK", "UNRESOLVED", "DENIED", "INFEASIBLE", "ERROR"]
+    },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "knowledge_cutoff": { "type": "string", "format": "date-time" },
+    "provenance_class": {
+      "type": ["string", "null"],
+      "enum": ["OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION", null]
+    },
+    "epistemic_status": {
+      "type": ["string", "null"],
+      "enum": ["EVIDENCE", "INFERENCE", "CONTRADICTION", "UNKNOWN", null]
+    },
+    "output_classification": {
+      "type": "string",
+      "enum": ["PUBLIC", "OPERATIONS", "COMMERCIAL", "RESTRICTED", "NONDISCLOSING"]
+    },
+    "source_or_model_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "uncertainty": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["NONE", "INTERVAL", "QUANTILES", "QUALITATIVE"] },
+        "summary": { "type": ["string", "null"] }
+      }
+    },
+    "redaction_status": {
+      "type": "string",
+      "enum": ["NONE", "REDACTED", "NONDISCLOSING_UNRESOLVED"]
+    },
+    "audit_id": { "type": "string", "minLength": 1 },
+    "payload": { "type": ["object", "null"] }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "UNRESOLVED" } } },
+      "then": {
+        "properties": {
+          "source_or_model_refs": { "maxItems": 0 },
+          "payload": { "type": "null" },
+          "redaction_status": { "const": "NONDISCLOSING_UNRESOLVED" }
+        }
+      }
+    }
+  ]
+}

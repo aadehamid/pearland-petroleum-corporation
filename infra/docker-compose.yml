@@ -1,0 +1,148 @@
+# PPC Slice 1 Local Docker Compose Parity Stack (WP-0, ADR-0051, ADR-0055)
+# Mirrors the 12 GB single exe.dev VM layout (and supports 8 GB stores + 4 GB apps
+# two-VM fallback via Docker Compose profiles: `stores` and `apps`).
+#
+# Key ADR-0055 constraints enforced here:
+# - Single PostgreSQL instance (TimescaleDB + pgvector) holds CTRM, historian,
+#   pgvector evidence, Dagster metadata, Silver staging + InboxReceipt, and all
+#   workflow/approval/RBAC/LangGraph checkpoint state (no Cloudflare D1 in v1).
+# - Lightweight OpenTelemetry Collector writes OTLP JSON for hourly R2 shipping
+#   under telemetry/otel/ (ClickHouse-backed Langfuse v3 is staged to WP-7).
+# - No local Ollama container runs in this 12 GB Slice 1 topology.
+
+name: ppc-slice1
+
+services:
+  postgres:
+    image: timescale/timescaledb-ha:pg17
+    profiles: ["stores", "all"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PPC_POSTGRES_USER:-ppc_dev}
+      POSTGRES_PASSWORD: ${PPC_POSTGRES_PASSWORD:-ppc_dev_change_me}
+      POSTGRES_DB: ${PPC_POSTGRES_DB:-ppc}
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_timeout=60
+      - -c
+      - max_connections=150
+      - -c
+      - shared_buffers=512MB
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ppc_postgres_data:/home/postgres/pgdata/data
+      - ./postgres/init-databases.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    mem_limit: 2560m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PPC_POSTGRES_USER:-ppc_dev} -d ${PPC_POSTGRES_DB:-ppc}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql:
+    image: mysql:8.4
+    profiles: ["stores", "all"]
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${PPC_MYSQL_ROOT_PASSWORD:-ppc_mysql_root_change_me}
+      MYSQL_USER: ${PPC_MYSQL_USER:-ppc_logistics}
+      MYSQL_PASSWORD: ${PPC_MYSQL_PASSWORD:-ppc_logistics_change_me}
+      MYSQL_DATABASE: ${PPC_MYSQL_DATABASE:-logistics}
+    command:
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --innodb-buffer-pool-size=384M
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ppc_mysql_data:/var/lib/mysql
+    mem_limit: 1152m
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p${PPC_MYSQL_ROOT_PASSWORD:-ppc_mysql_root_change_me} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  neo4j:
+    image: neo4j:5.26-community
+    profiles: ["stores", "all"]
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: ${PPC_NEO4J_AUTH:-neo4j/ppc_neo4j_change_me}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1024m
+      NEO4J_server_memory_pagecache_size: 1024m
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - ppc_neo4j_data:/data
+    mem_limit: 3072m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+
+  nats:
+    image: nats:2.10-alpine
+    profiles: ["stores", "all"]
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - ppc_nats_data:/data
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    profiles: ["apps", "all"]
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ppc_mosquitto_data:/mosquitto/data
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -t '$$SYS/broker/uptime' -C 1 -W 3 >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.114.0
+    profiles: ["apps", "all"]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+      - "127.0.0.1:13133:13133"
+    volumes:
+      - ./otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+      - ppc_otel_spool:/var/lib/ppc/otel
+    mem_limit: 256m
+    # Distroless collector image carries no shell/wget; health_check extension serves :13133.
+
+volumes:
+  ppc_postgres_data:
+  ppc_mysql_data:
+  ppc_neo4j_data:
+  ppc_nats_data:
+  ppc_mosquitto_data:
+  ppc_otel_spool:
+  ppc_sqlite_edge:

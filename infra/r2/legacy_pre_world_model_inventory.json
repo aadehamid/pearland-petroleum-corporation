@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "ppc-wp0-legacy-r2-inventory-2026-11-27",
+  "quarantine_label": "LEGACY_PRE_WORLD_MODEL",
+  "provenance_class": "OBSERVED",
+  "governing_adrs": [
+    "ADR-0053",
+    "ADR-0057"
+  ],
+  "inventoried_at_utc": "2026-11-27T16:19:38Z",
+  "retired_at_utc": "2026-11-27T16:20:22Z",
+  "retirement_authority": "Owner (Hamid Adesokan, 2026-11-27, recorded in ADR-0057)",
+  "r2_endpoint": "https://011701390f6fee966f04b48182e37f9e.r2.cloudflarestorage.com",
+  "active_ppc_buckets_after_retirement": [
+    "pearland-petroleum-corp",
+    "pearland-petroleum-hidden"
+  ],
+  "buckets": [
+    {
+      "bucket_name": "lagos-chem-l0",
+      "created_at_utc": "2026-08-18T15:11:47Z",
+      "status": "RETIRED_AFTER_INVENTORY",
+      "quarantine_label": "LEGACY_PRE_WORLD_MODEL",
+      "object_count": 18,
+      "total_bytes": 2744948808,
+      "objects": [
+        {
+          "key": "CACHE_NOTES.md",
+          "size_bytes": 22444,
+          "etag": "8cb4628e694908b449867aa3850e484f",
+          "last_modified_utc": "2026-08-18T16:20:58Z"
+        },
+        {
+          "key": "DOWNLOAD_NOTES.md",
+          "size_bytes": 5118,
+          "etag": "d91ce4a94eed0a195ee204dfb422db2a",
+          "last_modified_utc": "2026-08-18T15:24:27Z"
+        },
+        {
+          "key": "_hermes-connectivity-tests/COS-R2-001-P2-20260821T075745536185Z-ff0e65458b0f4f2bb654e605a3e32f21.parquet",
+          "size_bytes": 1806,
+          "etag": "656611d52e6e7468bf9de65e63ffa0f7",
+          "last_modified_utc": "2026-08-21T07:57:46Z"
+        },
+        {
+          "key": "cache/extras/source_dataset=machine_stream/data.parquet",
+          "size_bytes": 15881041,
+          "etag": "59b5139f7e329b08718061e510daefc7-2",
+          "last_modified_utc": "2026-08-18T20:45:28Z"
+        },
+        {
+          "key": "cache/manifest.json",
+          "size_bytes": 9467,
+          "etag": "3742fb925dd951344c91a33ba8a3fe01",
+          "last_modified_utc": "2026-08-18T16:20:58Z"
+        },
+        {
+          "key": "cache/native/source_dataset=iiot/data.parquet",
+          "size_bytes": 13285181,
+          "etag": "0da98d69a8f8b67cb114ab342e391719",
+          "last_modified_utc": "2026-08-18T16:20:58Z"
+        },
+        {
+          "key": "cache/native/source_dataset=machine_stream/data.parquet",
+          "size_bytes": 25622186,
+          "etag": "954493db2c772677ffa2ab58a443477a-4",
+          "last_modified_utc": "2026-08-18T20:09:39Z"
+        },
+        {
+          "key": "cache/native/source_dataset=tep_faultfree_testing/data.parquet",
+          "size_bytes": 39868514,
+          "etag": "8f887b8b30b0a73ba61180b9dad22d35",
+          "last_modified_utc": "2026-08-18T16:20:12Z"
+        },
+        {
+          "key": "cache/native/source_dataset=tep_faultfree_training/data.parquet",
+          "size_bytes": 20941351,
+          "etag": "56aa3fbfe5527ffab7365b42303bb29b",
+          "last_modified_utc": "2026-08-18T16:20:06Z"
+        },
+        {
+          "key": "cache/native/source_dataset=tep_faulty_testing/data.parquet",
+          "size_bytes": 758943582,
+          "etag": "b7405fc1f54d65bcc744d23cf15c38af-12",
+          "last_modified_utc": "2026-08-18T16:20:01Z"
+        },
+        {
+          "key": "cache/native/source_dataset=tep_faulty_training/data.parquet",
+          "size_bytes": 450485967,
+          "etag": "54d6356f3a09fbe047d3780a160a5b2c-7",
+          "last_modified_utc": "2026-08-18T16:20:56Z"
+        },
+        {
+          "key": "notes/machine_stream.md",
+          "size_bytes": 1054,
+          "etag": "1bcc8f65548f843ffec58eb465168265",
+          "last_modified_utc": "2026-08-18T20:09:40Z"
+        },
+        {
+          "key": "notes/machine_stream_extras.md",
+          "size_bytes": 1021,
+          "etag": "6015df7f7d85c5dd73fe8de5d789f151",
+          "last_modified_utc": "2026-08-18T20:45:29Z"
+        },
+        {
+          "key": "raw/iiot/factory_sensor_simulator_2040.zip",
+          "size_bytes": 16929165,
+          "etag": "0e62d6f438a9e4c2b799c5cb491fb60a",
+          "last_modified_utc": "2026-08-18T15:24:27Z"
+        },
+        {
+          "key": "raw/tep/TEP_FaultFree_Testing.RData",
+          "size_bytes": 47327663,
+          "etag": "38ad9810fc871026157086ae2c2f0ee9",
+          "last_modified_utc": "2026-08-18T15:22:59Z"
+        },
+        {
+          "key": "raw/tep/TEP_FaultFree_Training.RData",
+          "size_bytes": 24678017,
+          "etag": "ec126484534331f85001d8c4ebce6d17",
+          "last_modified_utc": "2026-08-18T15:22:55Z"
+        },
+        {
+          "key": "raw/tep/TEP_Faulty_Testing.RData",
+          "size_bytes": 836882037,
+          "etag": "a5ddf537a586a0879d1c0359f706ec32-13",
+          "last_modified_utc": "2026-08-18T15:24:22Z"
+        },
+        {
+          "key": "raw/tep/TEP_Faulty_Training.RData",
+          "size_bytes": 494063194,
+          "etag": "593dc3968b959c357c85873d9dfa7b93-8",
+          "last_modified_utc": "2026-08-18T15:23:51Z"
+        }
+      ]
+    }
+  ],
+  "inventory_sha256": "106a6032071a3d69b0370511897f999f00fca248db5270a98a5f77e1e70e72eb"
+}
