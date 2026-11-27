@@ -1,5 +1,7 @@
 # PPC-009 --- Metadata, Governance, Quality, and Observability
 
+> **Reconciliation Notice (2026-11-26):** This baseline document is preserved for historical continuity. Owner decisions `ADR-0047` (staging OpenMetadata and Grafana to `WP-7` after Slice 1 while retaining Great Expectations, OpenLineage manifests, and OTel tracing in Slice 1) and `ADR-0051` (`exe.dev` sizing and per-store backups) supersede immediate Slice 1 deployment of OpenMetadata and Grafana here. See `docs/enterprise-architecture/06-platform-operations/PPC-PLATFORM-001_Infrastructure_Security_and_Operations.md` and `docs/enterprise-architecture/independent-review/PPC-REVIEW-003_System_and_Decision_Register.md` for current authority.
+
 **Purpose:** Define trust, ownership, lineage, quality and incident
 context.
 

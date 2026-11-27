@@ -2,16 +2,17 @@
 
 | Document control | Value |
 |---|---|
-| Artifact ID | `PPC-ARCH-000` (registered in §5; draft for review) |
-| Version | `0.1.0-draft` |
-| Status | **Draft for owner review and independent challenge**; not an approved architecture baseline |
-| Prepared | 2026-11-25 |
+| Artifact ID | `PPC-ARCH-000` (registered in §5; reconciled architecture review baseline) |
+| Version | `0.2.0-reconciled` |
+| Status | **Reconciled architecture baseline for owner Phase 0 authorization**; documents only, no code or runtime qualification asserted |
+| Prepared | 2026-11-26 (reconciled from `ef4eb08` via [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md)–[ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md) and [PPC-REVIEW-001](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md)–[004](../independent-review/PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md)) |
 | Target repository | `aadehamid/pearland-petroleum-corporation` |
 | Proposed target path | `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` |
-| Source PPC revision | `01027a84be5d453cbb4e2ea091e4884729918b15` (`main`, inspected) |
-| Primary purpose | Preserve the existing PPC architecture and establish a controlled, traceable index for a proposed, more detailed enterprise-world architecture before implementation |
-| Change authority | PPC project owner; approval required before treating candidate choices as binding |
-| Scope exclusion | Does not implement systems, approve external ontologies, alter upstream repositories, resolve contested architecture choices, or certify runtime behavior |
+| Source PPC revision | `ef4eb08fd09298a8fe64cff4bac52242f6d6b5f6` (`main`, reconciled on branch `docs/first-principles-refinery-grill`) |
+| Canonical glossary & ADRs | [GLOSSARY.md](../../../GLOSSARY.md) and [docs/adr/README.md](../../adr/README.md) (`ADR-0040`–`0053`, preserving `PPC-REG-001` `ADR-001`–`039` verbatim) |
+| Primary purpose | Preserve the existing PPC architecture and maintain one coherent, first-principles dynamic refinery and enabling-systems specification before Phase 0 authorization |
+| Change authority | PPC project owner; separate authorization required before any Phase 0 implementation |
+| Scope exclusion | Does not implement systems, approve external ontologies, alter upstream repositories, or certify runtime behavior |
 
 > **Reading rule:** This document is an integration and navigation artifact, not a replacement for the existing `docs/PPC-000`–`PPC-019` documents or `PPC-REG-001`. Existing approved decisions remain authoritative until changed through controlled ADRs. Proposed additions below are *candidates* unless specifically identified otherwise.
 
@@ -163,7 +164,7 @@ The file status below describes this repository revision. A draft is available t
 | PLAN-001 | Implementation Work Packages and Readiness | `08-implementation/` | What is the smallest safe, testable dependency order? | PPC-014 | [Draft](../08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) |
 | KNOWLEDGE-001 | Architecture Learning and Design Rationale | `09-architecture-knowledge/` | Why was each engineering choice made; what first-principles reasoning must be preserved? | OT/EA discussion series | [Draft](../09-architecture-knowledge/PPC-KNOWLEDGE-001_Architecture_Learning_and_Design_Rationale.md) |
 
-Supplementary draft registers now include [SOURCE-REGISTER](../registers/PPC-SOURCE-REGISTER.md), [REQUIREMENTS-COVERAGE](../registers/PPC-REQUIREMENTS-COVERAGE.md), [ADR-RECONCILIATION](../registers/PPC-ADR-RECONCILIATION.md), [DEPENDENCY-AND-COMPATIBILITY](../registers/PPC-DEPENDENCY-AND-COMPATIBILITY.md), [RISKS-AND-OPEN-QUESTIONS](../registers/PPC-RISKS-AND-OPEN-QUESTIONS.md), and [TERMINOLOGY](../registers/PPC-TERMINOLOGY.md). These route evidence and open questions; they do not grant approval. `independent-review/` remains a later evidence location. Do not duplicate upstream normative artifacts within PPC; reference pinned sources.
+Supplementary draft registers now include [SOURCE-REGISTER](../registers/PPC-SOURCE-REGISTER.md), [REQUIREMENTS-COVERAGE](../registers/PPC-REQUIREMENTS-COVERAGE.md), [ADR-RECONCILIATION](../registers/PPC-ADR-RECONCILIATION.md), [DEPENDENCY-AND-COMPATIBILITY](../registers/PPC-DEPENDENCY-AND-COMPATIBILITY.md), [RISKS-AND-OPEN-QUESTIONS](../registers/PPC-RISKS-AND-OPEN-QUESTIONS.md), and [TERMINOLOGY](../registers/PPC-TERMINOLOGY.md) (pointing to canonical [GLOSSARY.md](../../../GLOSSARY.md)). The reconciled independent review artifacts now live in `independent-review/`: [PPC-REVIEW-001](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md) (document coverage matrix and T1–T145 transcript audit), [PPC-REVIEW-002](../independent-review/PPC-REVIEW-002_Governing_Refinery_Equations_and_Balances.md) (primary-sourced refinery equations `EQ-01`–`EQ-09` and shift trace), [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md) (system-and-decision register and paper boundary walkthroughs), and [PPC-REVIEW-004](../independent-review/PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) (proof-obligation register `PO-01`–`PO-12` and counterexamples). Do not duplicate upstream normative artifacts within PPC; reference pinned sources.
 
 ### 5.1 Authoring order and dependency rationale
 
@@ -207,38 +208,28 @@ The labels `OT-01…OT-12` and `EA-01…EA-09D` reference architectural **conver
 | Infrastructure, backups, security, qualification and work packages (EA) | PLATFORM-001, VERIFY-001, PLAN-001 | Restore drill, version compatibility, readiness gates |
 | Detailed first-principles rationale and historical options (OT/EA) | KNOWLEDGE-001 and ADR register | No unexplained loss of equations, worked examples or rejected alternatives |
 
-**GAP-002 remains open.** The exchange inventory covers T1–T145. The new drafts have topic and section crosswalks in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md), but full OT-01–12 and EA-01–09D item-level and original-asset checks remain. Section 12 tracks this same gap.
+**`GAP-002` reconciled for Markdown transcript text.** All 145 owner prompts and decision tables in `ChatGPT-Downstream Backcasting Research-20261125-2232.md` were audited in [PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002), and all 12 previously downgraded owner decisions are now recorded in [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md)–[ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md) and propagated across all 19 specifications. Only five unexported external attachments/screenshots remain unavailable and excluded from normative claims.
 
-## 7. Existing ADR baseline and proposed reconciliation
+## 7. Existing ADR baseline and reconciled decisions
 
-Source: [PPC-REG-001 at inspected revision](https://github.com/aadehamid/pearland-petroleum-corporation/blob/01027a84be5d453cbb4e2ea091e4884729918b15/docs/PPC-REG-001_Architecture_Decision_Register.md). This is **not** the source of an authorization to replace any ADR. It records ADR-001 to ADR-039.
+Source: [PPC-REG-001](../../PPC-REG-001_Architecture_Decision_Register.md) preserves `ADR-001` through `ADR-039` verbatim. Owner-approved amendments and new decisions from the 2026-11-26 architecture reconciliation live in [docs/adr/README.md](../../adr/README.md) (`ADR-0040` through `ADR-0053`), backed by verbatim owner answers in [2026-11-26-first-principles-grill.md](../../adr/answers/2026-11-26-first-principles-grill.md) and reconciled in [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md).
 
-| Proposed disposition | Count | ADR IDs | Treatment |
-|---|---:|---|---|
-| **Retain** | 26 | 001, 002, 003, 004, 008, 010, 012, 013, 019, 020, 021, 022, 023, 024, 025, 027, 028, 029, 030, 031, 032, 034, 036, 037, 038, 039 | Keep existing rationale and authority; add acceptance criteria where needed |
-| **Extend** | 6 | 005, 006, 011, 026, 033, 035 | Preserve existing choice; clarify modeling roles, validation and versioned dependencies |
-| **Reassess** | 7 | 007, 009, 014, 015, 016, 017, 018 | Compare approved original with proposed alternative, with evidence and user decision |
-| **Total** | **39** | Each ADR appears exactly once | No ADR marked superseded by this document |
+### 7.1 Dispositions of the seven previously open ADR reassessments and PPC-011/012 choices
 
-### 7.1 Seven changes that require explicit architecture decisions
-
-| Existing ADR | Earlier selection | Candidate/current question | Evidence needed |
+| Existing ADR | Earlier selection | Reconciled owner decision (2026-11-26) | Governing ADR |
 |---|---|---|---|
-| ADR-007 | OpenMetadata catalog/governance plane | Required from first slice or later? | Minimum metadata needs, operability, and real users |
-| ADR-009 | Jena/Fuseki for formal semantics | Which semantic consumers require a standing RDF server? | Upstream release flows, SPARQL needs, community deployment compatibility |
-| ADR-014 | Dash decision application | Is a different frontend necessary for Relate WASM and integrated scenario UX? | User workflow prototypes, data/API permissions, deployment footprint |
-| ADR-015 | Dagster orchestrates; Kafka transports | NATS JetStream initially versus Kafka while keeping orchestration separate | Delivery semantics, replay, CDC, operations, failure tests |
-| ADR-016 | Debezium CDC | Python-native or source-native capture versus the incumbent | Capture completeness, recovery, ordering and measured operations |
-| ADR-017 | DuckDB/DuckLake analytical history | Delta on R2 versus DuckLake (or scoped coexistence) | Concurrent-write qualification, Databricks interoperability, restore and migration |
-| ADR-018 | Databricks as parallel enterprise-like implementation | Exact role, tiers, scope and timing | Actual entitlement/feature qualification, cost and portability |
+| ADR-007 | OpenMetadata catalog | Deferred to WP-7; lightweight GX and OpenLineage manifests run in Slice 1 | [ADR-0047](../../adr/0047-slice1-active-core-vs-staged-apps.md) |
+| ADR-009 | Standing Jena/Fuseki | Amended: Git Turtle plus `rdflib`/`pyshacl` feeding Neo4j Community; Fuseki optional offline | [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md) |
+| ADR-014 | Dash decision app | Amended to two-stage UX: FastAPI/Dash in Slice 1; Relate WASM business explorer in Slice 1.5 | [ADR-0047](../../adr/0047-slice1-active-core-vs-staged-apps.md), [ADR-0052](../../adr/0052-two-stage-ux-dash-and-relate-wasm.md) |
+| ADR-015 | Dagster and Kafka | Amended for Slice 1: Dagster + NATS JetStream on IT, Sparkplug B on OT; Kafka deferred | [ADR-0046](../../adr/0046-ot-it-integration-split-sparkplug-nats-outbox.md) |
+| ADR-016 | Debezium CDC | Amended for Slice 1: transactional source outboxes on IT; Debezium deferred | [ADR-0046](../../adr/0046-ot-it-integration-split-sparkplug-nats-outbox.md) |
+| ADR-017 | DuckDB/DuckLake | Amended: Delta Lake on Cloudflare R2 replaces DuckLake; DuckDB queries locally (confirming T86) | [ADR-0045](../../adr/0045-delta-lake-on-r2-and-databricks-portability.md) |
+| ADR-018 | Databricks parallel lab | Clarified: eventual target enterprise platform reading the same R2 Delta tables, staged post-Slice-1 | [ADR-0045](../../adr/0045-delta-lake-on-r2-and-databricks-portability.md), [ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md) |
+| PPC-011/012 | OR-Tools; LangGraph/Langfuse | Pyomo + HiGHS/IPOPT replaces OR-Tools; LangGraph + Pydantic tools + OTel/self-hosted Langfuse | [ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md) |
 
-PPC-011 documents **OR-Tools** as an existing optimization choice, while PPC-012 documents **LangGraph** and **Langfuse** as existing agent/observability choices. **Pyomo/HiGHS**, **Pydantic AI**, and **OpenTelemetry/Logfire** are candidate alternatives raised for future assessment; they are **not recorded choices or alternatives in PPC-011/012**. Any proposed replacement should receive **new or amended ADRs** before it changes the existing baseline; these alternatives are not independently numbered choices in `PPC-REG-001`.
+### 7.2 Resolution of `CAN-*` candidate topics
 
-### 7.2 New ADR candidate topics (not assigned/approved)
-
-`CAN-WORLD-AUTHORITY`, `CAN-SCENARIO-ISOLATION`, `CAN-ENGINEERING-QUALIFICATION`, `CAN-ICE-EDI-REUSE`, `CAN-DS-BUSINESS-PROCESS`, `CAN-TEMPORAL-IDENTITY`, `CAN-EVENT-RECOVERY`, `CAN-RELEASE-CONSISTENCY`, `CAN-RELATE-UX`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`, `CAN-GOLDEN-SCENARIOS`, `CAN-VERIFICATION-GATES`.
-
-Each candidate needs owner, problem, alternatives, rationale, affected original ADRs, impacts on upstream authorities, tests, disposition and decision timestamp. Do not assign approved ADR numbers or imply consensus from sequence-advancing conversation phrases.
+Nine of the 13 `CAN-*` candidate topics (`CAN-WORLD-AUTHORITY`, `CAN-ENGINEERING-QUALIFICATION`, `CAN-ICE-EDI-REUSE`, `CAN-DS-BUSINESS-PROCESS`, `CAN-EVENT-RECOVERY`, `CAN-RELEASE-CONSISTENCY`, `CAN-RELATE-UX`, `CAN-GOLDEN-SCENARIOS`, `CAN-VERIFICATION-GATES`) are closed by `ADR-0040`–`0053`. The remaining four (`CAN-SCENARIO-ISOLATION`, `CAN-TEMPORAL-IDENTITY`, `CAN-QUANTIFIED-IMPACT`, `CAN-AGENT-AUTHORITY`) have reconciled normative specifications awaiting only WP-0 operational sign-off on identity-conflict steward assignment and numeric action-approval thresholds ([PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#3-complete-adr-transcript-item-and-wp-0-owner-disposition-register)).
 
 ## 8. Versioned dependency and scenario manifest policy
 
@@ -249,7 +240,7 @@ The existing PPC-017 requires EPM manifests and semantic tests. A complete PPC r
 - Engineering source revision identifies a source configuration; EDI publication identifies an accepted engineering projection; PPC adoption is a separate event.
 - World state version and scenario branch identify simulated physical reality and scenario-specific changes.
 - Transaction/event IDs identify source records and message delivery, not the underlying physical event by default.
-- Delta/DuckLake table snapshot identifies a technical read state; a business-consistent data-product release pins aligned inputs and declared watermarks.
+- Delta Lake table snapshot on Cloudflare R2 (`ADR-0045`) identifies a technical read state; a business-consistent data-product release pins aligned inputs and declared watermarks.
 - Graph snapshot identifies one derived instance projection and its source/effective/recorded-time boundaries.
 - Model version identifies numerical/ML formulation and parameters; a result also requires seed/input snapshot/solver profile.
 - Evidence/decision release identifies eligibility, visibility and a historical knowledge cutoff.
@@ -382,26 +373,26 @@ The independent agent must read pinned source files and the complete normative/r
 
 ## 12. Open issues and evidence gaps (must not silently close)
 
-| ID | Gap / issue | Why it matters | Disposition needed |
+| ID | Gap / issue | Current standing (2026-11-26) | Disposition needed |
 |---|---|---|---|
-| GAP-001 | `DS_Business_Process` generalized release pending | Process IDs/semantics may change | Await other agent's approved release; compatibility plan |
-| GAP-002 | Open. Exchange inventory complete; substantive item-to-section coverage and source-asset checks remain open (§6). | Risk of lost detailed reasoning, math and examples | Verify destination sections or record explicit dispositions in the [discussion register](../registers/PPC-Discussion-Decision-Traceability.md) before a completeness claim. |
-| GAP-003 | Existing PPC technology choices differ from later proposals | Conflicting ADR authority | Decision-by-decision review before changing stack |
-| GAP-004 | ICE identity/mapping YAML not yet written as of inspected handoff | No qualified enterprise OT normalization | Provisional boundary and upstream qualification |
-| GAP-005 | EDI complete drawing/extraction/recovery lifecycle not qualified | Only bounded structured engineering slice established | Scope reuse and test exact DEXPI profiles |
-| GAP-006 | ECE versioned reusable contracts not yet published in inspected tree | Downstream cannot bind final schema versions | Provisional adapters, upstream release gate |
-| GAP-007 | KPI Store 1.2 client installation and certain cross-store cases not qualified | Cannot assume PPC compatibility | Environment-specific qualification, Community/Enterprise assessment |
-| GAP-008 | PPC physical equations and world event kernel have draft contracts, not implementation or independent qualification | No authoritative quantified scenario impact | Independent benchmarks and runtime evidence |
-| GAP-009 | Multi-store business-consistent release has a draft contract, not an implementation | Inconsistent KPI/graph/model views | Build and test manifest and watermarks |
-| GAP-010 | Frontend Relate WASM compatibility/performance/authorization unproven | Graph exploration may leak or overpromise | Bounded prototype and negative tests |
-| GAP-011 | Current PPC integrated source-system deployment not established | Architecture diagrams not operational proof | Infra and end-to-end evidence before claims |
-| GAP-012 | Formal approval of new ADR candidates outstanding | Proposals risk being misrepresented as requirements | User-approved decision register entries |
+| GAP-001 | `DS_Business_Process` generalized release pending (derived from `kpi-store/1.2`) | **Open upstream**; decoupled via provisional adapter ([ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md), [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)) | Bind approved release in WP-7 once separate upstream track lands |
+| GAP-002 | T1–T145 transcript decision audit vs `ef4eb08` docs | **Closed for Markdown transcript** ([PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002)); 5 unexported external images/attachments remain unavailable | No normative claims depend on unavailable external assets |
+| GAP-003 | Existing PPC technology choices differed from later proposals | **Decided** in [ADR-0044](../../adr/0044-turtle-pyshacl-neo4j-serving-path.md)–[ADR-0048](../../adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md), [ADR-0051](../../adr/0051-exe-dev-r2-databricks-hosting-and-recovery.md), [ADR-0052](../../adr/0052-two-stage-ux-dash-and-relate-wasm.md) and [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md) | Reconciled across `docs/enterprise-architecture/` and flagged by dated reconciliation notices on baseline `PPC-002`, `006`, `007`, `010`–`014` (`PPC-REG-001` preserved verbatim) |
+| GAP-004 | ICE identity/mapping YAML unwritten as of `scada_harmonization` PR #68 (`30c20c3`) | **Open upstream**; decoupled via provisional adapter (`ADR-0042`) and `WorldExportBundle` (`ADR-0053`) | Adopt upstream ICE mapping release when published |
+| GAP-005 | EDI flat-drawing extraction/recovery lifecycle unqualified | **Open upstream**; Slice 1/2 use structured DEXPI route via provisional adapter (`ADR-0042`) | Qualify flat-drawing route in later EDI milestone |
+| GAP-006 | ECE reusable schema package not yet published (`750b398`) | **Open upstream**; decoupled via provisional adapter (`ADR-0042`) | Reconcile local `EVID-001` schemas when ECE publishes |
+| GAP-007 | KPI Store 1.2 environment compatibility unqualified | **Open runtime**; addressed in WP-3 and WP-8 (DuckDB/Databricks parity) | Execute `SEM-10` and `EA03C-11` checks in WP-3/WP-8 |
+| GAP-008 | Physical equations specified (`EQ-01`–`EQ-09`); runtime engine and calibration unexecuted | **Design reconciled** (`ADR-0040`, `0043`, `0050`, `PPC-REVIEW-002`, `004`); runtime **planned** | Process-engineer parameter sign-off in WP-0; execute `PO-01`–`PO-12` in WP-1/WP-3A |
+| GAP-009 | Multi-store atomic `ReleaseManifest` and single-writer Delta-on-R2 commit unexecuted | **Design reconciled** (`ADR-0045`); runtime **planned** | Verify single-writer Delta-on-R2 commit in WP-0/WP-3 and live chaos/restore in `WP-4B` |
+| GAP-010 | Relate WASM browser security and Cypher compatibility unproven | **Decided** as Slice 1.5 explorer (`ADR-0052`); runtime **planned** | Pass WP-5B security and Cypher parity gate before promotion |
+| GAP-011 | `exe.dev` + R2 integrated deployment and restore drill unexecuted | **Topology & RPO/RTO decided** (`ADR-0051`); runtime **planned** | Complete `WP-4A` provisioning/stub drill and pass `WP-4B` live restore drill (`RTO <= 1 hour`) before `WP-5` |
+| GAP-012 | Formal owner approval of new ADR candidates and WP-0 gates | **14 ADRs decided** (`ADR-0040`–`0053`); WP-0 owner gate items remain | Close WP-0 owner items in [PPC-REVIEW-003 §3](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md#open-owner-decisions-required-in-wp-0-before-phase-0-code) (`ADR-0040` SMR/Reformer/FCC HDS flowsheet closure, T86 Free Edition & `exe.dev`/Langfuse/D1 sizing, steward/thresholds, parameter ranges) before Phase 0 code |
 
 ## 13. Verification of this draft
 
 This document was prepared from read-only inspection of the pinned GitHub source baseline and architecture discussion. At initial drafting, the six source repository commits were retrieved; the ontology `ds-business-process/1.0` and `kpi-store/1.2` branch pointers both resolved to `ddf6b68b...`. PPC's existing 20 numbered architecture documents and 39-ADR register had been inspected in that review sequence. The new specifications in this branch are draft documentation, not a refreshed upstream status audit.
 
-For this documentation revision, `python3 docs/enterprise-architecture/check_package.py` checks the routing statements in all 19 registered specs, 12 draft crosswalk rows, unique T1–T145 Exchange Register coverage, CSV destination agreement for the locator rows present, and local Markdown paths and heading anchors. Its fixture checks read the P0/P1/P2 and retraction tables in INFO-001 §3 and DATA-001 §2. They exercise the named cutoffs, P0 fallback, missing receipt, missing and denied grant, wrong channel and purpose, duplicate occupant and retraction before and after delivery. This is a check of documented synthetic rows and the checker's own selection logic. It is not an independent application implementation or runtime qualification. The checker does not verify semantic completeness, upstream assets, source attachment content, EPM/ICE/EDI/ECE compatibility or the requested physical and model tests. GAP-002, owner approval and independent architecture review remain open.
+For this documentation revision, `python3 docs/enterprise-architecture/check_package.py` checks the routing statements in all 19 registered specs, 12 draft crosswalk rows, unique T1–T145 Exchange Register coverage, CSV destination agreement for the locator rows present, and local Markdown paths and heading anchors. Its fixture checks read the P0/P1/P2 and retraction tables in INFO-001 §3 and DATA-001 §2. They exercise the named cutoffs, P0 fallback, missing receipt, missing and denied grant, wrong channel and purpose, duplicate occupant and retraction before and after delivery. This is a check of documented synthetic rows and the checker's own selection logic. It is not an independent application implementation or runtime qualification. The checker does not verify semantic completeness, upstream assets, source attachment content, EPM/ICE/EDI/ECE compatibility or the requested physical and model tests. `GAP-002` Markdown transcript reconciliation is complete in [PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002); independent external-model review and separate owner Phase 0 authorization remain the gate before any implementation.
 
 This branch changes specifications and the executable package checker. No push, merge or branch change is part of this revision.
 

@@ -1,5 +1,7 @@
 # PPC-007 --- Data Integration, Event, and Orchestration Architecture
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 integration guide. Amended for Slice 1 by [ADR-0046](adr/0046-ot-it-integration-split-sparkplug-nats-outbox.md) (transactional outbox + NATS JetStream + Dagster on IT; OPC UA + Sparkplug B on OT; Kafka and Debezium deferred). See [PPC-INT-001](enterprise-architecture/04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md).
+
 **Purpose:** Define how PPC systems exchange data and events.
 
 PPC uses an **ASD-STE100-inspired** technical writing style. PPC does

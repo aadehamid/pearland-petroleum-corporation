@@ -1,5 +1,7 @@
 # PPC-010 --- Ontology, Knowledge Graph, and Policy Architecture
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 ontology/graph guide. Amended by [ADR-0044](adr/0044-turtle-pyshacl-neo4j-serving-path.md) (Git Turtle + `pyshacl` → Neo4j Community runtime path; standing Jena/Fuseki demoted to optional offline SPARQL verification). See [PPC-INFO-001](enterprise-architecture/03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) and [PPC-GRAPH-001](enterprise-architecture/03-enterprise-information/PPC-GRAPH-001_Enterprise_Instance_Graph.md).
+
 **Purpose:** Separate formal enterprise meaning from operational
 relationship efficiency.
 

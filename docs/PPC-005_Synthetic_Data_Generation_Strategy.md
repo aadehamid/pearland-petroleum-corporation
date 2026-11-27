@@ -1,5 +1,7 @@
 # PPC-005 --- Synthetic Data Generation Strategy
 
+> **Reconciliation Notice (2026-11-26):** This baseline document is preserved for historical continuity. Owner decisions `ADR-0040`, `ADR-0043`, `ADR-0045`, and `ADR-0053` in `docs/adr/README.md` govern the current mechanistic Refinery A v1 world kernel, replace DuckLake with Delta Lake on Cloudflare R2, quarantine pre-world-model synthetic data (`LEGACY_PRE_WORLD_MODEL`), and define the split `WorldExportBundle` (`observable/` vs `hidden_truth/`). See `docs/enterprise-architecture/01-enterprise-world/PPC-WORLD-001_Canonical_Enterprise_World.md` and `docs/enterprise-architecture/independent-review/PPC-REVIEW-002_Governing_Refinery_Equations_and_Balances.md` for current authority.
+
 **Supersedes:** PPC-SIM-002\
 **Purpose:** Generate a realistic fictional PPC enterprise that remains
 logically connected to public observations.

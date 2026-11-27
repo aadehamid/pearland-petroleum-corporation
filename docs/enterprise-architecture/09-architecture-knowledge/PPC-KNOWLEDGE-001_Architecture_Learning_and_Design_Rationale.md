@@ -24,26 +24,28 @@ This file explains why the proposed contracts separate authorities. It is not an
 
 **A release is a consistent cut.** Independent latest tables can represent different source watermarks. A publication manifest must pin the set and disclose incomplete components. A broker's delivery guarantee cannot alone establish one business effect. INT-001 and DATA-001 give those claims separate tests.
 
-## 3. Alternatives and evidence ledger
+## 3. Alternatives and reconciled decision ledger
 
-| Question | Recorded baseline | Proposal and missing evidence |
+The full system-and-decision register, trade-offs, consequences, and cross-boundary walkthroughs live in [PPC-REVIEW-003](../independent-review/PPC-REVIEW-003_System_and_Decision_Register.md). Owner decisions from the 2026-11-26 architecture reconciliation are recorded in [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md) through [ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md):
+
+| Question | Recorded baseline | Reconciled disposition (`ADR-0040`–`0053`) |
 |---|---|---|
-| Catalog | OpenMetadata, ADR-007 | First-slice scope remains open |
-| Formal and applied graph | Jena/Fuseki and Neo4j Community, ADR-009/010 | Standing semantic server scope and Relate browser require measured needs and access tests |
-| Source capture | Debezium CDC, ADR-016 | Python-native or source-native capture is a candidate requiring measured comparison and owner disposition |
-| Event transport | Kafka with Dagster orchestration, ADR-015 | NATS JetStream comparison requires retry/replay and operations evidence |
-| Databricks | Parallel implementation, ADR-018 | Exact role, tier, entitlement and timing remain open |
-| Analytical history | DuckLake, ADR-017 | Delta on R2 or coexistence requires writer, recovery and Databricks parity tests |
-| Workspace | Dash, ADR-014 | Relate WASM or another frontend needs workflow and permission prototype |
-| Optimization and agents | OR-Tools; LangGraph/Langfuse in PPC-011/012 | Pyomo/HiGHS, Pydantic AI and OpenTelemetry/Logfire need comparative evidence |
-| Process authority | EPM dependency in ADR-033/035/038/039 | Generalized upstream process release is pending; owner must reconcile ADR-035 |
+| Catalog | OpenMetadata, ADR-007 | Staged to WP-7; lightweight GX/OpenLineage manifests in Slice 1 (`ADR-0047`) |
+| Formal and applied graph | Jena/Fuseki and Neo4j Community, ADR-009/010 | Git Turtle + `pyshacl` → Neo4j Community on `exe.dev`; Fuseki optional offline (`ADR-0044`, `0051`) |
+| Source capture & IT transport | Debezium CDC + Kafka + Dagster, ADR-015/016 | Transactional outbox + NATS JetStream + Dagster on IT; OPC UA + Sparkplug B on OT; Kafka/Debezium deferred (`ADR-0046`) |
+| Analytical storage & Databricks | DuckLake + Databricks Free, ADR-017/018 | Delta Lake on Cloudflare R2 + DuckDB local compute; Databricks target portability staged post-Slice-1 (`ADR-0045`, `0051`, T86) |
+| Workspace & Relate WASM | Dash, ADR-014 | FastAPI + Dash in Slice 1; Relate WASM business Context Explorer in Slice 1.5 (`ADR-0047`, `0052`, T111) |
+| Optimization and agents | OR-Tools; LangGraph/Langfuse in PPC-011/012 | Pyomo + HiGHS/IPOPT; LangGraph + Pydantic-typed tools + OTel/self-hosted Langfuse (`ADR-0048`) |
+| Formal verification | Open in T26/T74 | Quint + Python/Z3/Hypothesis + independent engineering benchmarks (`ADR-0050`, `PPC-REVIEW-004`) |
+| Process authority | EPM dependency in ADR-033/035/038/039 | Generalized `DS_Business_Process` derived from `kpi-store/1.2` in separate upstream track; provisional adapters pinned (`ADR-0042`, `0044`) |
+| Legacy data & sister repos | Unowned in `ef4eb08` | Quarantine as `LEGACY_PRE_WORLD_MODEL`; publish `WorldExportBundle` for ICE/EDI/EPM/ECE (`ADR-0053`) |
 
 ## 4. Worked check and unresolved coverage
 
 For separate `SYNTHETIC` integration retry fixture `INT-RETRY-01` on one liquid at constant density and a common reference-volume basis, 1,000 + 200 − 150 = 1,050 bbl (`DERIVED`). If a duplicate 200 bbl receipt produces 1,250 bbl, the defect is duplicate business effect even if each message was delivered according to broker policy. For future-evidence checks, use [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md). These examples illustrate two distinct failure modes. [DATA-001 §3](../03-enterprise-information/PPC-DATA-001_Data_Products_KPIs_and_Analytical_Releases.md) defines the `INT-RETRY-01` arithmetic and expected duplicate result. [VERIFY-001 §2](../07-scenarios-verification/PPC-VERIFY-001_Verification_and_Release_Qualification.md) requires independent execution evidence; its T125 tank fixture is separate.
 
-GAP-002 remains open: T1–T145 have topic locators, but OT-01–12 and EA-01–09D have not received an item-by-item, attachment-checked disposition. Numerical source examples and supplied diagrams still need source checks. T22, T25, T63–65, T74–77, T123–126 and T136–142 support this companion. Do not mark the discussion exhaustive or a choice approved from this explanatory file.
+`GAP-002` Markdown transcript reconciliation is complete in [PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002) and [ADR-0040](../../adr/0040-staged-mechanistic-refinery-model-and-closed-flowsheet.md)–[ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md). Five unexported external attachments and screenshots remain unavailable and excluded from normative claims. T22, T25, T63–65, T74–77, T123–126 and T136–142 support this companion.
 
-The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T22, T25, T28–30, T46–47, T63–65, T74, T76–77, T123–124, T126, T136–142 to this draft. This is topic-level routing; GAP-002 item and original-asset checks remain open.
+The [exchange register](../registers/PPC-Discussion-Decision-Traceability.md) routes T22, T25, T28–30, T46–47, T63–65, T74, T76–77, T123–124, T126, T136–142 to this draft. `GAP-002` Markdown audit is closed in [PPC-REVIEW-001 §5](../independent-review/PPC-REVIEW-001_Document_Coverage_and_Transcript_Audit.md#5-audit-of-raw-chatgpt-transcript-t1t145-versus-ef4eb08-ppc-documents-closing-gap-002).
 
 [INFO-001 §3](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) owns the complete P0/P1/P2 publication rows, source-record times, recipient availability and reader-as-of rule used by this draft.

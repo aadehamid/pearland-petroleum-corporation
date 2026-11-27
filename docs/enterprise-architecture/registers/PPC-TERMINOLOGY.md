@@ -1,6 +1,6 @@
 # PPC architecture terminology
 
-Draft local reading aid, 2026-11-25. Upstream released terms retain upstream authority; this file does not redefine them. See [INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) and [PPC-017](../../PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md).
+Draft local reading aid, 2026-11-25. The canonical PPC domain glossary is [GLOSSARY.md](../../../GLOSSARY.md). Upstream released terms retain upstream authority; this file does not redefine them. See [INFO-001](../03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md) and [PPC-017](../../PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md).
 
 | Term | Use in this package |
 |---|---|

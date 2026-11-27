@@ -1,16 +1,17 @@
 # PPC dependency and compatibility register
 
-Draft gate list, 2026-11-25. [ARCH-000 §8](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md#8-versioned-dependency-and-scenario-manifest-policy) defines the proposed top-level manifest. The inspected commit pins are in the [source register](PPC-SOURCE-REGISTER.md), not approved PPC bindings. This table records compatibility work.
+Reconciled gate list, 2026-11-26. [ARCH-000 §8](../00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md#8-versioned-dependency-and-scenario-manifest-policy) defines the top-level release manifest. Under [ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md), PPC decouples its schedule from pending upstream releases using versioned provisional adapters pinned to verified commits (never labeling pending drafts as approved). Under [ADR-0053](../../adr/0053-legacy-data-quarantine-and-world-export-bundle.md), PPC publishes `WorldExportBundle` so sister repositories consume one coherent Refinery A world.
 
-| Dependency | Required use | Maturity at inspected baseline | Compatibility proof still needed |
+| Dependency | Verified local commit (2026-11-26) | Maturity & PPC adapter rule | Compatibility proof still needed (WP-0–WP-8) |
 |---|---|---|---|
-| EPM modules | KPI, process and semantic meaning | Module-specific status needed | IRI, SHACL, formula and grain parity |
-| DS_Business_Process | Generic process concepts after approval | Pending; branch pointer matched KPI 1.2 | Released digest and migration |
-| ICE | L0 observation and future mapping | L0 inspected; mapping pending | Tag, unit, quality and identity fixture |
-| EDI | Engineering publication and adoption | Bounded structured slice inspected | Revision, topology and recovery fixture |
-| ECE | Evidence and evaluation pattern | Published reusable schema not established | Historical access and claim contract |
-| Public ontologies | PPC-019 candidates for mapped reuse | Candidate terms; no approved local binding | License, release, dependency closure and mapping review |
-| EIA/NOAA/EPA/PHMSA feeds | Public observations with source and vintage | Feed-specific verification pending | Timestamp, quality, license and fictional exposure separation |
-| PPC world/source/data | Fictional execution | Draft specifications | Replay, reconciliation and consistent release |
+| `enterprise-performance-model` (EPM) | `main` @ `511a9e8d` | Git Turtle + `pyshacl` + Neo4j runtime; DuckDB & Databricks demos exist; provisional adapter pinned | IRI, SHACL, tall KPI formula, and DuckDB/Databricks parity (`WP-3`, `WP-8`) |
+| `DS_Business_Process` (`downstream_oil_and_gas_ontology_release`) | Local `share/epm-1.0` @ `2b3f02e`; `ds-business-process/1.0` separate upstream track | **Pending upstream release** (derived from `kpi-store/1.2`, `ADR-0044`); bindings stay explicitly pending | Released digest, migration, and conformance tests (`WP-7`) |
+| `scada_harmonization` (ICE) | `main` @ `30c20c3` (PR #68); `cursor/handoff-close-68` @ `65ffe10` | Phase 1 L0 Parquet + 1 s stream + Plane 3 split merged; mapping YAML unwritten; provisional adapter pinned | Tag, unit, quality, Sparkplug B, and identity fixture (`WP-2`, `WP-8`) |
+| `Engineering_Drawing_to_Graph` (EDI) | `main` @ `12a4a6a` (PR #56) | Bounded structured DEXPI slice documented; flat extraction pending; provisional adapter pinned | Revision, directed topology, and recovery fixture (`WP-2`, `WP-8`) |
+| `enterprise-context-engineering` (ECE) | `main` @ `750b398` (PR #12) | Architecture docs present; reusable schema package pending; provisional adapter pinned | Reader-as-of `INFO-001 §3` and claim-provenance contract parity (`WP-3`, `WP-8`) |
+| `enterprise-people-graph` | `teaching/ontology-101` @ `eb2fdb7` | **Excluded from PPC v1** ([ADR-0042](../../adr/0042-provisional-adapters-for-upstream-repositories.md)) | None for v1 |
+| Public ontologies (`PPC-019`) | Discovery links only | Candidate references; no unapproved imports | License, release, dependency closure, and mapping review |
+| EIA / NOAA / EPA / PHMSA feeds | External APIs | Public observations with source and vintage | Vintage pinning, quality, license, and fictional exposure separation (`WP-1`) |
+| PPC world / source / Delta / Neo4j | `ef4eb08` reconciled on `docs/first-principles-refinery-grill` | Reconciled specs; runtime **planned** | Quint/Z3/analytical oracles, restore drill, and golden slices (`WP-1`–`WP-7`) |
 
-Fail a qualified release if a required package has no approved identity or the tested combination differs from the activation manifest. The first slice may defer optional services only with an explicit scope decision; it may not label a pending dependency approved.
+Fail a qualified release if a required package has no pinned identity or the tested combination differs from the activation manifest.

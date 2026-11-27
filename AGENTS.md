@@ -4,13 +4,14 @@ Guidance for AI coding agents working in the Pearland Petroleum Corporation (PPC
 
 ## Start here
 
-1. `README.md`
+1. `README.md` and `GLOSSARY.md` (canonical domain vocabulary)
 2. `docs/PPC-000_Master_Index_and_Architecture_Guide.md`
-3. `docs/PPC-015_Three_Repository_Operating_Model.md`
-4. `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md` before working on evidence, decision provenance, agents or evaluations.
-5. `docs/PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md` before consuming EPM artifacts, defining KPIs or validating process behavior.
-6. `docs/PPC-018_Enterprise_Evidence_Corpus_and_Unstructured_Data_Generation_Strategy.md` before generating documents, messages or other unstructured data.
-7. `docs/PPC-014_Implementation_Roadmap_and_Build_Runbook.md` before changing implementation code.
+3. `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` and `docs/adr/README.md` (`ADR-0040`–`0053`, preserving `docs/PPC-REG-001_Architecture_Decision_Register.md` verbatim)
+4. `docs/PPC-015_Three_Repository_Operating_Model.md`
+5. `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md` before working on evidence, decision provenance, agents or evaluations.
+6. `docs/PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md` before consuming EPM artifacts, defining KPIs or validating process behavior.
+7. `docs/PPC-018_Enterprise_Evidence_Corpus_and_Unstructured_Data_Generation_Strategy.md` before generating documents, messages or other unstructured data.
+8. `docs/enterprise-architecture/08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md` (authoritative reconciled plan; supersedes linear Phase 0–12 tool order in historical `docs/PPC-014_Implementation_Roadmap_and_Build_Runbook.md`) before changing implementation code.
 
 ## Rules
 

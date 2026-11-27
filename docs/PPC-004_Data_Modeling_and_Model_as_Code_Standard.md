@@ -1,5 +1,7 @@
 # PPC-004 --- Data Modeling and Model-as-Code Standard
 
+> **Reconciliation Notice (2026-11-26):** This baseline document is preserved for historical continuity. Owner decisions `ADR-0040` through `ADR-0053` in `docs/adr/README.md` govern the current analytical Delta Lake format (`ADR-0045`), provisional cross-repository adapters (`ADR-0042`), and ontology serving path (`ADR-0044`). See `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` for current authority.
+
 **Purpose:** Define conceptual, logical and physical modeling and the
 AML/Azimutt approach.
 

@@ -1,5 +1,7 @@
 # PPC-002 --- Enterprise Architecture and Technology Stack
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 technology map. Active technology selections are amended by [ADR-0041](adr/0041-function-first-lean-core-enabling-stack.md) and [ADR-0044](adr/0044-turtle-pyshacl-neo4j-serving-path.md)–[ADR-0052](adr/0052-two-stage-ux-dash-and-relate-wasm.md) (Delta Lake on R2 via `delta-rs`, Git Turtle + `pyshacl` → Neo4j, outbox + NATS JetStream on IT, Sparkplug B on OT, Pyomo + HiGHS/IPOPT, FastAPI/Dash Slice 1 + Relate WASM Slice 1.5, staged Twenty/ERPNext/OpenMetadata/Superset/Grafana). See [PPC-REVIEW-003](enterprise-architecture/independent-review/PPC-REVIEW-003_System_and_Decision_Register.md).
+
 **Purpose:** Define the complete stack, responsibilities, ownership
 boundaries, and major interactions.
 

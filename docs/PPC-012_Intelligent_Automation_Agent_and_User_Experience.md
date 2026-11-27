@@ -1,5 +1,7 @@
 # PPC-012 --- Intelligent Automation, Agent, and User Experience Architecture
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 automation/UX guide. Amended by [ADR-0044](adr/0044-turtle-pyshacl-neo4j-serving-path.md), [ADR-0047](adr/0047-slice1-active-core-vs-staged-apps.md), [ADR-0048](adr/0048-pyomo-optimization-and-langgraph-pydantic-agents.md), and [ADR-0052](adr/0052-two-stage-ux-dash-and-relate-wasm.md) (Pyomo/HiGHS, Pydantic-typed tools, OTel/Langfuse, FastAPI/Dash Slice 1 + Relate WASM Slice 1.5). See [PPC-UX-001](enterprise-architecture/05-intelligence-experience/PPC-UX-001_Enterprise_Intelligence_Workspace.md) and [PPC-AGENT-001](enterprise-architecture/05-intelligence-experience/PPC-AGENT-001_Agent_Tools_and_Consequential_Actions.md).
+
 **Purpose:** Define controlled decision workflows, agents, GraphRAG and
 human experiences.
 

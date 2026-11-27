@@ -1,5 +1,7 @@
 # PPC-006 --- Distributed Source Systems and Data Architecture
 
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 source guide. Slice 1 active stores, OT/ICE and LIMS authorities, and Delta Lake on R2 (`ADR-0045`–`0047`, `0051`) are reconciled in [PPC-OT-001](enterprise-architecture/02-industrial-engineering/PPC-OT-001_Industrial_Information_Architecture.md), [PPC-INT-001](enterprise-architecture/04-source-integration/PPC-INT-001_Source_Lifecycles_and_Integration.md), and [PPC-REVIEW-003](enterprise-architecture/independent-review/PPC-REVIEW-003_System_and_Decision_Register.md).
+
 **Purpose:** Define where PPC data lives, why, and which system is
 authoritative.
 

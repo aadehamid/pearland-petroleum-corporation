@@ -1,5 +1,7 @@
 # PPC-003 --- Business, Semantic, and Domain Model
 
+> **Reconciliation Notice (2026-11-26):** This baseline document is preserved for historical continuity. Owner decisions `ADR-0040` through `ADR-0053` in `docs/adr/README.md` supersede baseline tool references here (including replacing DuckLake with Delta Lake on Cloudflare R2 under `ADR-0045` and moving semantic validation to Git Turtle + `pyshacl` -> Neo4j Community under `ADR-0044`). See root `GLOSSARY.md` and `docs/enterprise-architecture/03-enterprise-information/PPC-INFO-001_Enterprise_Ontology_Identity_and_Time.md` for current authority.
+
 **Purpose:** Define authoritative human-readable business meaning.
 
 ## Documentation standard
