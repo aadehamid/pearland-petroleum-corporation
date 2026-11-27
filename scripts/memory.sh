@@ -13,9 +13,11 @@
 #   scripts/memory.sh init              create the store and its schema
 #   scripts/memory.sh path              print the store path
 #
-# The store is a Relate directory store inside the repository's common git
-# directory, so every worktree and every agent shares one memory and Git never
-# tracks it. PPC_MEMORY_DB overrides the path. Output is JSON lines.
+# The store is a Relate directory store in the git-ignored .relate-memory/
+# folder at the root of the main checkout, so every worktree and every agent
+# shares one memory, Git never tracks it, and sandboxed agents that cannot
+# write inside .git can still save. PPC_MEMORY_DB overrides the path.
+# Output is JSON lines.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +32,31 @@ store() {
   fi
   local common
   common="$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)"
-  printf '%s/relate-memory\n' "$common"
+  if [ "$(basename "$common")" = ".git" ]; then
+    printf '%s/.relate-memory\n' "$(dirname "$common")"
+  else
+    printf '%s/relate-memory\n' "$common"
+  fi
+}
+
+# Dropbox syncs the store between machines, but Relate's writer lock holds
+# only on one machine. Two machines saving at once make Dropbox write
+# "conflicted copy" files. Stop on them: a person must decide which copy wins.
+dropbox_conflicts() {
+  local db
+  db="$(store)"
+  [ -d "$db" ] || return 0
+  find "$db" -name '*conflicted copy*' -print | head -20
+}
+
+refuse_on_conflicts() {
+  local found
+  found="$(dropbox_conflicts)"
+  [ -z "$found" ] && return 0
+  echo "memory: Dropbox conflicted copies in the store; another machine saved at the same time." >&2
+  echo "memory: ask the owner to resolve them before anyone saves again:" >&2
+  printf '%s\n' "$found" >&2
+  exit 4
 }
 
 need_relate() {
@@ -205,6 +231,7 @@ remember() {
   tmp="$(mktemp "${TMPDIR:-/tmp}/ppc-memory.XXXXXX")"
   if [ "$src" = "-" ]; then cat > "$tmp"; else cat -- "$src" > "$tmp"; fi
   validate "$tmp"
+  refuse_on_conflicts
   check_ids "$tmp"
   init > /dev/null
   write "$cypher_dir/remember.cypher" --fetch-params "m=$tmp"
@@ -260,6 +287,7 @@ case "$cmd" in
        ORDER BY f.recordedAt DESC LIMIT $n' ;;
   check)
     need_relate
+    refuse_on_conflicts
     out="$(read_query \
       'MATCH (f:Fact)
        WITH f, COUNT { (f)-[:FROM]->(:Episode) } AS sources
