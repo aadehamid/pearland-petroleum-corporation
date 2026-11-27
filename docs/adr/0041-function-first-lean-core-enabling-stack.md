@@ -8,7 +8,7 @@ source_answers: docs/adr/answers/2026-11-26-first-principles-grill.md#round-1-20
 
 ## Context
 
-`PPC-REG-001` (ADR-001 through ADR-039) commits PPC to more than twenty products, and `PPC-ARCH-000` §7 flags seven existing ADRs (007, 009, 014, 015, 016, 017, 018) for reassessment alongside new OT and agent candidates. At the same time, PPC serves as the shared executable world model consumed by the listed sister repositories (`enterprise-performance-model`, `scada_harmonization`, `Engineering_Drawing_to_Graph`, and `enterprise-context-engineering`), whose goals and contracts must remain coherent with PPC's technology choices.
+`PPC-REG-001` (ADR-001 through ADR-039) commits PPC to more than twenty products, and `PPC-ARCH-000` §7 flags seven existing ADRs (007, 009, 014, 015, 016, 017, 018) for reassessment alongside new OT and agent candidates. At the same time, PPC serves as the shared executable world model consumed by the listed sister repositories (`enterprise-performance-model`, `industrial-context-engineering` [formerly `scada_harmonization`], `engineering-drawing-intelligence` [formerly `Engineering_Drawing_to_Graph`], and `enterprise-context-engineering`), whose goals and contracts must remain coherent with PPC's technology choices.
 
 ## Decision
 
