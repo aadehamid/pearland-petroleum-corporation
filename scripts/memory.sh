@@ -84,12 +84,15 @@ init() {
     printf '%s\n' "$out" >&2
     return 1
   fi
-  echo "memory: store ready at $(store)"
+  local db
+  db="$(store)"
+  echo "memory: store ready at $db"
 }
 
 validate() {
   python3 - "$1" <<'PY'
-import json, re, sys
+import hashlib, json, re, sys
+from datetime import datetime
 path = sys.argv[1]
 try:
     with open(path, encoding="utf-8") as fh:
@@ -97,7 +100,7 @@ try:
 except (OSError, ValueError) as exc:
     sys.exit(f"memory: {path} is not readable JSON: {exc}")
 KINDS = {"decision", "preference", "correction", "finding", "handoff", "tool_call"}
-TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})")
+TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})", re.ASCII)
 errors = []
 
 def text(obj, key, where):
@@ -111,7 +114,13 @@ def time(obj, key, where, required=True):
     if not required and obj.get(key) is None:
         return
     value = text(obj, key, where)
-    if value is not None and not TIME.fullmatch(value):
+    if value is None:
+        return
+    try:
+        valid = bool(TIME.fullmatch(value)) and datetime.fromisoformat(value).tzinfo is not None
+    except ValueError:
+        valid = False
+    if not valid:
         errors.append(f"{where}.{key}: not a UTC or offset datetime such as 2026-11-27T10:00:00Z")
 
 if not isinstance(m, dict):
@@ -123,7 +132,7 @@ else:
     for key in ("id", "session", "agent", "text"):
         text(ep, key, "episode")
     time(ep, "at", "episode")
-    if ep.get("kind") not in KINDS:
+    if not (isinstance(ep.get("kind"), str) and ep["kind"] in KINDS):
         errors.append(f"episode.kind: one of {', '.join(sorted(KINDS))}")
 mentions = m.setdefault("mentions", [])
 if not isinstance(mentions, list):
@@ -160,22 +169,31 @@ for i, f in enumerate(facts):
     slots.add(slot)
 if errors:
     sys.exit("memory: invalid episode:\n  " + "\n  ".join(errors))
+m.pop("fingerprint", None)
+canonical = json.dumps(m, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+m["fingerprint"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 with open(path, "w", encoding="utf-8") as fh:
     json.dump(m, fh)
 PY
 }
 
-# A fact id belongs to one episode. Reject an episode that reuses a fact id
-# another episode already wrote.
-check_fact_ids() {
-  [ -d "$(store)" ] || return 0
-  local clash
+# An episode id names one episode, and a fact id belongs to one episode.
+# This read gives a clear message; remember.cypher repeats both checks under
+# the writer lock, where no other writer can race them.
+check_ids() {
+  local db clash
+  db="$(store)"
+  [ -d "$db" ] || return 0
   clash="$(read_query --fetch-params "m=$1" \
-    'UNWIND $m.facts AS f
+    'OPTIONAL MATCH (old:Episode {id: $m.episode.id})
+     WITH old WHERE old IS NOT NULL AND old.fingerprint <> $m.fingerprint
+     RETURN "episode id already used for different content" AS problem, old.id AS id
+     UNION ALL
+     UNWIND $m.facts AS f
      MATCH (x:Fact {id: f.id})-[:FROM]->(other:Episode) WHERE other.id <> $m.episode.id
-     RETURN x.id AS fact, other.id AS episode')"
+     RETURN "fact id belongs to episode " + other.id AS problem, x.id AS id')"
   if [ -n "$clash" ]; then
-    echo "memory: invalid episode: fact ids already belong to another episode:" >&2
+    echo "memory: invalid episode: ids already in use:" >&2
     printf '%s\n' "$clash" >&2
     exit 1
   fi
@@ -187,7 +205,7 @@ remember() {
   tmp="$(mktemp "${TMPDIR:-/tmp}/ppc-memory.XXXXXX")"
   if [ "$src" = "-" ]; then cat > "$tmp"; else cat -- "$src" > "$tmp"; fi
   validate "$tmp"
-  check_fact_ids "$tmp"
+  check_ids "$tmp"
   init > /dev/null
   write "$cypher_dir/remember.cypher" --fetch-params "m=$tmp"
   python3 -c 'import json, sys; m = json.load(open(sys.argv[1])); print("memory: saved episode %s with %d fact(s)" % (m["episode"]["id"], len(m["facts"])))' "$tmp"
@@ -201,8 +219,9 @@ case "$cmd" in
   remember) remember "$@" ;;
   recall)
     need_relate
-    [ $# -gt 0 ] || { echo "usage: scripts/memory.sh recall WORDS..." >&2; exit 2; }
-    read_query --param "q=$(json_string "$*")" \
+    [ -n "${*:-}" ] || { echo "usage: scripts/memory.sh recall WORDS..." >&2; exit 2; }
+    q="$(json_string "$*")"
+    read_query --param "q=$q" \
       'MATCH (f:CurrentFact) SEARCH f IN (FULLTEXT INDEX current_fact_text FOR $q LIMIT 10) SCORE AS score
        MATCH (f)-[:FROM]->(ep:Episode)
        RETURN f.slot AS slot, f.text AS memory, round(score, 3) AS score,
@@ -210,14 +229,18 @@ case "$cmd" in
        ORDER BY score DESC' ;;
   about)
     need_relate
-    read_query --param "key=$(json_string "${1:?usage: scripts/memory.sh about KEY}")" \
+    [ -n "${1:-}" ] || { echo "usage: scripts/memory.sh about KEY" >&2; exit 2; }
+    key="$(json_string "$1")"
+    read_query --param "key=$key" \
       'MATCH (e:Entity {key: $key})<-[:ABOUT]-(f:CurrentFact)-[:FROM]->(ep:Episode)
        RETURN f.slot AS slot, f.text AS memory, ep.agent AS agent, ep.id AS episode,
               toString(ep.at) AS learned, ep.text AS evidence
        ORDER BY slot LIMIT 100' ;;
   history)
     need_relate
-    read_query --param "slot=$(json_string "${1:?usage: scripts/memory.sh history SLOT}")" \
+    [ -n "${1:-}" ] || { echo "usage: scripts/memory.sh history SLOT" >&2; exit 2; }
+    slot="$(json_string "$1")"
+    read_query --param "slot=$slot" \
       'MATCH (f:Fact {slot: $slot})-[:FROM]->(ep:Episode)
        RETURN f.text AS memory, toString(f.validFrom) AS validFrom, toString(f.validTo) AS validTo,
               toString(f.recordedAt) AS recorded, toString(f.closedAt) AS closed,
@@ -239,17 +262,19 @@ case "$cmd" in
     need_relate
     out="$(read_query \
       'MATCH (f:Fact)
+       WITH f, COUNT { (f)-[:FROM]->(:Episode) } AS sources
        WITH f.slot AS slot,
             sum(CASE WHEN f.closedAt IS NULL THEN 1 ELSE 0 END) AS current,
-            sum(CASE WHEN (f.closedAt IS NULL) <> (f:CurrentFact) THEN 1 ELSE 0 END) AS mislabelled
-       WHERE current <> 1 OR mislabelled > 0
-       RETURN slot, current, mislabelled')"
+            sum(CASE WHEN (f.closedAt IS NULL) <> (f:CurrentFact) THEN 1 ELSE 0 END) AS mislabelled,
+            sum(CASE WHEN sources <> 1 THEN 1 ELSE 0 END) AS badSources
+       WHERE current <> 1 OR mislabelled > 0 OR badSources > 0
+       RETURN slot, current, mislabelled, badSources')"
     if [ -n "$out" ]; then
-      echo "memory: slots without exactly one current fact, or with a mislabelled fact:" >&2
+      echo "memory: slots without exactly one current fact, or with a fact that is mislabelled or not from exactly one episode:" >&2
       printf '%s\n' "$out" >&2
       exit 1
     fi
-    echo "memory: every slot holds exactly one current fact" ;;
+    echo "memory: every slot holds exactly one current fact, each from one episode" ;;
   *)
     sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
     [ -z "$cmd" ] || [ "$cmd" = "help" ] || [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || exit 2 ;;

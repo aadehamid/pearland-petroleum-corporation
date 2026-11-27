@@ -1,6 +1,6 @@
 # PPC Architecture Decision Records (ADR-0040 onward)
 
-Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-REG-001](../PPC-REG-001_Architecture_Decision_Register.md). Decisions recorded from the 2026-11-26 architecture reconciliation live here in sequential order, citing saved owner answers in [answers/2026-11-26-first-principles-grill.md](answers/2026-11-26-first-principles-grill.md) and owner-delegated stand-in rulings in [answers/2026-11-26-claude-fable-2-owner-standin.md](answers/2026-11-26-claude-fable-2-owner-standin.md).
+Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-REG-001](../PPC-REG-001_Architecture_Decision_Register.md). Decisions recorded from the 2026-11-26 architecture reconciliation live here in sequential order, citing saved owner answers in [answers/2026-11-26-first-principles-grill.md](answers/2026-11-26-first-principles-grill.md) and owner-delegated stand-in rulings in [answers/2026-11-26-claude-fable-2-owner-standin.md](answers/2026-11-26-claude-fable-2-owner-standin.md). Later decisions follow in the same table, each citing its own owner words. A number can be missing from the table while the change that adds it is still open.
 
 | ADR | Title | Status | Date | Amends / clarifies |
 |---|---|---|---|---|

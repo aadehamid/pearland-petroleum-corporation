@@ -136,9 +136,16 @@ class MemoryScript(unittest.TestCase):
             "episode.at: not a UTC": episode("e1", "yesterday", "pi", [good]),
             "facts[0].validFrom: not a UTC": episode("e1", "2026-11-27T10:00:00Z", "pi",
                                                      [fact("f1", "A fact.", validFrom="2026-11-27")]),
+            "facts[0].validFrom: not a UTC ": episode("e1", "2026-11-27T10:00:00Z", "pi",
+                                                      [fact("f1", "A fact.", validFrom="2026-13-45T10:00:00Z")]),
+            "episode.at: not a UTC ": episode("e1", "2026-11-27T10:00:00+99:99", "pi", [good]),
+            "episode.at: not a UTC  ": episode("e1", "\u0662\u0660\u0662\u0666-11-27T10:00:00Z", "pi", [good]),
             "episode.kind: one of": dict(episode("e1", "2026-11-27T10:00:00Z", "pi", [good]),
                                          episode={"id": "e1", "session": "s", "agent": "pi",
                                                   "kind": "musing", "at": "2026-11-27T10:00:00Z", "text": "t"}),
+            "episode.kind: one of ": dict(episode("e1", "2026-11-27T10:00:00Z", "pi", [good]),
+                                          episode={"id": "e1", "session": "s", "agent": "pi",
+                                                   "kind": ["decision"], "at": "2026-11-27T10:00:00Z", "text": "t"}),
             "mentions: not a list": episode("e1", "2026-11-27T10:00:00Z", "pi", [good], mentions=None),
             "mentions[0].key: missing string": episode("e1", "2026-11-27T10:00:00Z", "pi", [good],
                                                        mentions=[{"key": " ", "name": "x"}]),
@@ -151,28 +158,55 @@ class MemoryScript(unittest.TestCase):
         }
         for message, payload in cases.items():
             with self.subTest(message):
-                self.assertIn(message, self.rejected(payload))
+                stderr = self.rejected(payload)
+                self.assertIn(message.strip(), stderr)
+                self.assertNotIn("Traceback", stderr)
                 self.assertFalse(os.path.exists(self.db))
         self.assertEqual([f for f in os.listdir(self.tmp.name) if f.startswith("ppc-memory.")], [])
 
     def test_fact_id_reused_by_another_episode_is_rejected(self):
         self.remember(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "Original.")]))
         stderr = self.rejected(episode("e2", "2026-11-28T10:00:00Z", "pi", [fact("f1", "Reused id.")]))
-        self.assertIn("already belong to another episode", stderr)
+        self.assertIn("fact id belongs to episode e1", stderr)
         self.assertEqual([r["memory"] for r in self.rows("brief")], ["Original."])
 
-    def test_failed_write_leaves_nothing_behind(self):
+    def test_guards_inside_the_transaction_roll_back_the_episode(self):
+        # Run remember.cypher straight through relate, past the script's own
+        # checks, as a writer that raced another would.
         self.remember(episode("e0", "2026-11-27T09:00:00Z", "pi", [fact("f0", "Kept.", slot="keep/me")]))
-        # A datetime the validator accepts and Relate rejects makes statement 2 fail
-        # after statement 1 wrote the episode; the transaction must undo both.
-        payload = episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "Bad.", validFrom="2026-13-45T10:00:00Z")])
-        self.rejected(payload)
+        payload = episode("e1", "2026-11-27T10:00:00Z", "pi",
+                          [fact("f1", "New fact.", slot="new/slot"), fact("f0", "Stolen id.", slot="other/slot")])
+        payload["fingerprint"] = "x"
+        path = os.path.join(self.tmp.name, "race.json")
+        with open(path, "w") as fh:
+            json.dump(payload, fh)
+        with open(os.path.join(HERE, "memory", "remember.cypher")) as script:
+            p = subprocess.run(["relate", "query", "--database", self.db, "--mode", "jsonl",
+                                "--fetch-params", "m=" + path], stdin=script,
+                               capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("by zero", p.stdout + p.stderr)
         self.assertEqual([r["slot"] for r in self.rows("slots")], ["keep/me"])
-        self.assertEqual(self.rows("history", SLOT), [])
         count = subprocess.run(["relate", "query", "--database", self.db, "--read-only", "--mode", "jsonl",
                                 "MATCH (e:Episode {id: 'e1'}) RETURN count(e) AS n"],
                                capture_output=True, text=True, timeout=30)
         self.assertEqual(json.loads(count.stdout.splitlines()[0]), {"n": 0}, count.stderr)
+        self.assert_check_passes()
+
+    def test_episode_id_reused_for_different_content_is_rejected(self):
+        self.remember(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "Original.")]))
+        stderr = self.rejected(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f2", "Sneaked in.")]))
+        self.assertIn("episode id already used for different content", stderr)
+        self.assertEqual([r["memory"] for r in self.rows("brief")], ["Original."])
+        self.assertEqual(len(self.rows("history", SLOT)), 1)
+
+    def test_missing_arguments_are_usage_errors(self):
+        self.remember(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "A fact.")]))
+        for args in (("about",), ("about", ""), ("history",), ("history", ""), ("recall",), ("recall", "")):
+            with self.subTest(args):
+                p = self.run_memory(*args)
+                self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+                self.assertIn("usage:", p.stderr)
 
     def test_locked_store_is_retried(self):
         self.assertEqual(self.run_memory("init").returncode, 0)

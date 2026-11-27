@@ -52,7 +52,7 @@ JSON
 - Entity keys are lowercase and stable: `adr-0045`, `wp-0`, `r2`, `refinery-a`, `owner`, `file:scripts/check.sh`.
 - Each fact is one self-contained sentence that names its source document when one exists.
 
-The command validates the episode before it writes anything, writes it in one transaction, and prints `memory: saved episode …`. A fact id belongs to one episode; reusing it in another episode is rejected. `scripts/memory.sh check` fails unless every slot holds exactly one current fact.
+The command validates the episode before it writes anything, writes it in one transaction, and prints `memory: saved episode …`. An episode id names one episode and a fact id belongs to one episode: reusing either for different content is rejected, so a new save gets new ids. `scripts/memory.sh check` fails unless every slot holds exactly one current fact.
 
 ## What memory must hold
 
