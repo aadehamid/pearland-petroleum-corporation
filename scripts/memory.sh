@@ -15,8 +15,10 @@
 #
 # The store is a Relate directory store in the git-ignored .relate-memory/
 # folder at the root of the main checkout, so every worktree and every agent
-# shares one memory, Git never tracks it, and sandboxed agents that cannot
-# write inside .git can still save. PPC_MEMORY_DB overrides the path.
+# shares one memory and Git never tracks it. A sandboxed agent that cannot
+# write inside .git can still save there when the main checkout is in its
+# workspace. A repository whose git directory is not named .git keeps the
+# store at <git dir>/relate-memory. PPC_MEMORY_DB overrides the path.
 # Output is JSON lines.
 set -euo pipefail
 
@@ -46,7 +48,8 @@ dropbox_conflicts() {
   local db
   db="$(store)"
   [ -d "$db" ] || return 0
-  find "$db" -name '*conflicted copy*' -print | head -20
+  # -H follows a store path that is itself a symlink.
+  find -H "$db" -name '*conflicted copy*' -print
 }
 
 refuse_on_conflicts() {
@@ -55,7 +58,7 @@ refuse_on_conflicts() {
   [ -z "$found" ] && return 0
   echo "memory: Dropbox conflicted copies in the store; another machine saved at the same time." >&2
   echo "memory: ask the owner to resolve them before anyone saves again:" >&2
-  printf '%s\n' "$found" >&2
+  sed -n '1,20p' <<< "$found" >&2
   exit 4
 }
 
@@ -105,6 +108,7 @@ read_query() {
 # on success, so show them only when it fails.
 init() {
   need_relate
+  refuse_on_conflicts
   local out
   if ! out="$(write "$cypher_dir/schema.cypher" 2>&1)"; then
     printf '%s\n' "$out" >&2
@@ -304,6 +308,6 @@ case "$cmd" in
     fi
     echo "memory: every slot holds exactly one current fact, each from one episode" ;;
   *)
-    sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "${BASH_SOURCE[0]}"
     [ -z "$cmd" ] || [ "$cmd" = "help" ] || [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ] || exit 2 ;;
 esac

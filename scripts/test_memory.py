@@ -35,7 +35,7 @@ def fact(fid, text, slot=SLOT, **extra):
 
 
 def git_env():
-    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "PPC_MEMORY_DB"}
 
 
 @unittest.skipUnless(shutil.which("relate"), "relate is not installed")
@@ -288,6 +288,30 @@ class MemoryScript(unittest.TestCase):
         os.remove(conflict)
         self.assertEqual([r["memory"] for r in self.rows("brief")], ["Before the conflict."])
         self.assert_check_passes()
+
+    def test_many_conflicted_copies_still_exit_4(self):
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        for i in range(3000):
+            open(os.path.join(self.db, f"part (Laptop's conflicted copy {i:04d}).bin"), "w").close()
+        for args in (("check",), ("init",)):
+            with self.subTest(args):
+                p = self.run_memory(*args)
+                self.assertEqual(p.returncode, 4, p.stderr[-300:])
+                self.assertEqual(p.stderr.count("conflicted copy"), 20)
+
+    def test_conflicts_are_found_through_a_symlinked_store(self):
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        open(os.path.join(self.db, "manifest (Laptop's conflicted copy).json"), "w").close()
+        link = os.path.join(self.tmp.name, "linked")
+        os.symlink(self.db, link)
+        p = self.run_memory("check", env=dict(self.env, PPC_MEMORY_DB=link))
+        self.assertEqual(p.returncode, 4, p.stderr)
+
+    def test_help_prints_the_whole_header(self):
+        p = self.run_memory("help")
+        self.assertEqual(p.returncode, 0)
+        self.assertTrue(p.stdout.rstrip().endswith("Output is JSON lines."), p.stdout[-200:])
+        self.assertNotIn("#", p.stdout)
 
     def test_store_path_outside_git_fails(self):
         outside = os.path.join(self.tmp.name, "loose")
