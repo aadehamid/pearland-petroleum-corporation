@@ -9,7 +9,7 @@ source_answers: docs/adr/answers/2026-11-26-first-principles-grill.md#round-2-20
 
 ## Context
 
-`ADR-009` in `PPC-REG-001` selected a standing Apache Jena/Fuseki server for formal semantics. Both `enterprise-performance-model` and `scada_harmonization` (PR #57) now standardize on Git Turtle validated with `pyshacl` projected directly into Neo4j Community, without a standing runtime triple store. Meanwhile, the generalized downstream business-process ontology is being derived separately from `kpi-store/1.2` on the `ds-business-process/1.0` branch of `downstream_oil_and_gas_ontology_release`.
+`ADR-009` in `PPC-REG-001` selected a standing Apache Jena/Fuseki server for formal semantics. Both `enterprise-performance-model` and `industrial-context-engineering` (formerly `scada_harmonization`, PR #57) now standardize on Git Turtle validated with `pyshacl` projected directly into Neo4j Community, without a standing runtime triple store. Meanwhile, the generalized downstream business-process ontology is being derived separately from `kpi-store/1.2` on the `ds-business-process/1.0` branch of `downstream_oil_and_gas_ontology_release`.
 
 ## Decision
 
