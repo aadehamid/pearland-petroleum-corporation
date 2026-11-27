@@ -21,3 +21,8 @@ The owner accepted Round 2 Q13 via "Yes to the rest." (`docs/adr/answers/2026-11
 ## Consequences
 
 - `PPC-011`, `PPC-ANALYTICS-001`, `PPC-012`, and `PPC-AGENT-001` must be updated to record Pyomo + HiGHS/IPOPT as the optimization stack and LangGraph + Pydantic-typed tool contracts + OpenTelemetry to self-hosted Langfuse as the agent stack.
+
+## Post-review amendment notes (2026-11-26)
+
+- **Staged by [ADR-0055](0055-slice1-hosting-observability-postgres-workflow-and-databricks-sync.md) (owner-delegated stand-in Claude Fable 2):** Slice 1 ships OTLP JSON traces hourly from a lightweight OpenTelemetry Collector to R2 `telemetry/otel/` (queried by DuckDB for leak tests), staging ClickHouse-backed self-hosted Langfuse v3 to `WP-7`; no local Ollama runs on the 12 GB `exe.dev` VM; live `WP-3B` LLM endpoint selection remains explicitly with Hamid Adesokan (with recorded responses for golden tests).
+- **Extended by [ADR-0056](0056-identity-steward-action-thresholds-and-refinery-a-parameters.md):** Locks numeric `AUTO_EXECUTE` / `REQUIRE_APPROVAL` Tier 1 & Tier 2 / `ESCALATE` / `PROHIBITED` (`DENIED`) thresholds and HiGHS (`1e-7`) / IPOPT (`1e-8`) solver tolerances.

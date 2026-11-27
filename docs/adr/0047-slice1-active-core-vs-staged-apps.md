@@ -22,4 +22,4 @@ The owner accepted Round 2 Q12 via "Yes to the rest." (`docs/adr/answers/2026-11
 ## Consequences
 
 - `ADR-007`, `ADR-014`, `ADR-022`, and `ADR-023` remain intact as staged roadmap choices rather than Slice 1 critical-path blockers.
-- Note for Round 3 reconciliation: T111 in the prior architecture transcript designated Relate WASM as a business-facing impact explorer (`EA09D-D09`); its exact promotion gate after Slice 1 remains to be confirmed.
+- Note (updated 2026-11-26): The Round 3 promotion question for Relate WASM (`T111`, `EA09D-D09`) is now decided by [ADR-0052](0052-two-stage-ux-dash-and-relate-wasm.md) as the Slice 1.5 business-facing Interactive Enterprise Context Explorer (`WP-5B`).

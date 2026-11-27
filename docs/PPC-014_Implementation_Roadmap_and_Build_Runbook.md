@@ -1,6 +1,6 @@
 # PPC-014 --- Implementation Roadmap and Build Runbook
 
-> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 phase inventory. Reconciled execution order, work packages (`WP-0`–`WP-8`), and amended tooling (`ADR-0040`–`0053`) are governed by [PPC-PLAN-001](enterprise-architecture/08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md).
+> **Reconciliation notice (2026-11-26):** Preserved historical Baseline v1.0 phase inventory. Reconciled execution order, work packages (`WP-0`–`WP-8B`), and amended tooling (`ADR-0040`–`0056`) are governed by [PPC-PLAN-001](enterprise-architecture/08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md).
 
 **Purpose:** Define the build sequence from empty environment to PPC
 World v0.1.

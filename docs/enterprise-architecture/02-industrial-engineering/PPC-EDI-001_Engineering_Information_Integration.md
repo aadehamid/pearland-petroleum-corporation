@@ -62,7 +62,7 @@ An extraction reviewer can accept an interpretation. Engineering change approval
 | Can two writers or a restart expose a partial graph? | Concurrent candidates with same base, injected stop before and after activation, reader-pinned snapshot, retry receipt comparison | Proposed recovery test. |
 | Can a late correction alter a past decision or another branch? | Run §4 against a frozen clock, capture both as-known queries and both branch manifests | Paper fixture. |
 | Is flat-drawing accuracy reproducible? | Rights-cleared, separately held-out sheets, frozen truth and profile, automatic and reviewed metrics, omissions and confidence by object/edge type | GAP-005 open. No public extraction or recovery qualification. |
-| Who may approve and adopt? | Named source approver and PPC world authority, denial cases, source rights and audit trail | Role boundaries proposed. Owner assignment pending. |
+| Who may approve and adopt? | Named source approver, `IDENTITY_STEWARD` (`ADR-0056`, held by PPC owner until delegated in writing), and PPC world authority; denial cases, source rights and audit trail; `WP-1` authors baseline `CFG-0` and its structured source, and `WP-2` adopts it through EDI with an identical digest | Role boundaries and `IDENTITY_STEWARD` decided ([ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md)); runtime negative tests pending (`WP-2`). |
 
 Independent review should determine which PPC source revision and rights-cleared sheet pair can seed the first controlled run, which unresolved attributes block adoption for each use case, and who accepts a configuration change after a branch fork. Engineering drawing evidence does not supply a control setpoint or authorize equipment operation.
 
