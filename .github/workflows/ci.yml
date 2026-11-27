@@ -1,0 +1,20 @@
+# All mechanical gates live in scripts/check.sh so CI and the local pre-push hook
+# run the exact same checks.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - name: Run repository checks
+        run: ./scripts/check.sh
