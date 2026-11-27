@@ -1,5 +1,7 @@
 # PPC-015 --- Three-Repository Operating Model
 
+> **Reconciliation Notice (2026-11-26):** This document preserves the original three-repository contract (`enterprise-performance-model`, `enterprise-context-engineering`, and `pearland-petroleum-corporation`). Owner decisions [`ADR-0041`](adr/0041-function-first-lean-core-enabling-stack.md), [`ADR-0042`](adr/0042-provisional-adapters-for-upstream-repositories.md), and [`ADR-0053`](adr/0053-legacy-data-quarantine-and-world-export-bundle.md) extend this operating model to the five-repository downstream ecosystem including `industrial-context-engineering` (ICE, formerly `scada_harmonization`) and `engineering-drawing-intelligence` (EDI, formerly `Engineering_Drawing_to_Graph`), designate PPC as the owner of the single canonical Refinery A v1 enterprise world model, consume upstream repositories through commit-pinned provisional adapters, and establish the two-part `WorldExportBundle` (`observable/` for sister repositories; `hidden_truth/` under `evaluation/hidden/` for grading only) published in `WP-8B`. See [`PPC-ARCH-000`](enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md) for current authority boundaries.
+
 **Baseline:** PPC Architecture Baseline v1.0\
 **Purpose:** Define how `enterprise-performance-model`,
 `enterprise-context-engineering`, and `pearland-petroleum-corporation`
