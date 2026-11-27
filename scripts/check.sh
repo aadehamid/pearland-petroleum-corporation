@@ -29,7 +29,7 @@ echo "== check guard and pre-push hook =="
 
 echo
 echo "== project memory =="
-command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; memory tests skip"
+command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; the memory tests that need it skip, the rest run"
 (cd scripts && python3 -m unittest test_memory)
 
 echo
