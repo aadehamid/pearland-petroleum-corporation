@@ -1,5 +1,7 @@
 # Pearland Petroleum Corporation
 
+> **Reconciliation Notice (2026-11-26):** This README preserves the original PPC charter and baseline stack overview. Owner decisions `ADR-0040` through `ADR-0056` in [`docs/adr/README.md`](docs/adr/README.md) supersede the retired baseline tools listed below (replacing DuckLake with Delta Lake on R2, Kafka/Debezium with transactional outboxes and NATS JetStream on IT plus OPC UA/Sparkplug B on OT, standing Jena/Fuseki with Git Turtle + `pyshacl` -> Neo4j Community, OR-Tools with Pyomo + HiGHS/IPOPT, and Cloudflare D1 with PostgreSQL, while staging Twenty CRM, ERPNext, OpenMetadata, Superset, Grafana, and Langfuse v3 to `WP-7`). For the authoritative implementation plan and repository path map, read [`docs/enterprise-architecture/08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md`](docs/enterprise-architecture/08-implementation/PPC-PLAN-001_Implementation_Work_Packages_and_Readiness.md) (superseding historical `docs/PPC-014`) and [`GLOSSARY.md`](GLOSSARY.md).
+
 > **An executable synthetic downstream oil and gas enterprise for proving Enterprise Performance Modeling and Enterprise Context Engineering end to end.**
 
 Pearland Petroleum Corporation (PPC) is a fictional North American downstream oil and gas company.

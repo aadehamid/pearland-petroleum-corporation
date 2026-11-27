@@ -24,7 +24,8 @@ The owner accepted Round 3 Q18 via "Yes to all." (`docs/adr/answers/2026-11-26-f
 
 ## Post-review clarification notes (2026-11-26)
 
-This note records two boundary clarifications surfaced by the independent external-model review. It does not alter the owner decision recorded above.
+This note records boundary clarifications without altering the owner decision recorded above.
 
 - **Two-part bundle split:** `WorldExportBundle` is partitioned into `observable/` (consumed by operational/analytical pipelines and sister repositories ICE, EDI, EPM, ECE) and `hidden_truth/` (stored exclusively under `evaluation/hidden/` for replay grading and backcasting attribution, unreadable by operational agents or integration pipelines).
-- **Certification timing:** While `WP-1` defines the `WorldExportBundle` manifest schema and certifies the canonical world checkpoint, the complete cross-repository `WorldExportBundle` (including OT L0 streams from `WP-2`, source/Delta tables from `WP-3`, EDI/EPM graph fixtures from `WP-5`, and ECE dossier fixtures from `WP-6`) is assembled and certified in `WP-8`.
+- **Schema and certification timing:** `WP-0` defines and freezes the `WorldExportBundle` JSON Schema (`schemas/world_export_bundle.schema.json`). The complete cross-repository `WorldExportBundle` v1 (including OT L0 streams from `WP-2`, Delta tables from `WP-3`, EDI/EPM graph fixtures from `WP-5`, and Scenario B ECE dossier fixtures from `WP-6`) is assembled and certified in `WP-8B` (after `WP-6` passes).
+- **Non-destructive legacy quarantine (`C8`):** `WP-0` inventories existing R2 objects and records `LEGACY_PRE_WORLD_MODEL` labels in a quarantine manifest without moving or deleting live prefixes (such as `scada_harmonization` L0 data on R2) unless the owner approves each prefix explicitly after `WP-1` passes.

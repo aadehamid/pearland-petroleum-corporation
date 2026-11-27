@@ -38,8 +38,8 @@ _probe/
 ## Canonical world
 
 Persist certified canonical synthetic-world snapshots under
-`cache/simulation/world_version=.../` with generation manifests. This
-ground truth is for simulator validation. Integration code must not use
+`evaluation/hidden/world_version=.../` with generation manifests (superseding the earlier `cache/simulation/` path so all hidden canonical state sits under one restricted credential boundary; see `ADR-0051`, `ADR-0053`, and `PPC-PLAN-001`). This
+canonical world state is for simulator validation and blind evaluation. Integration code must not use
 hidden canonical IDs to bypass source-system reconciliation.
 
 ## Raw

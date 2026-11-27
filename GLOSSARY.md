@@ -45,7 +45,7 @@ The instant a specific recipient or role can access a published revision through
 _Avoid_: Published time, current permission
 
 **UNRESOLVED**:
-The nondisclosing access-check result returned when no publication satisfies reader authorization, channel, delivery receipt, and cutoff rules, or when a required identity mapping resolves to zero eligible targets.
+The nondisclosing access-check result returned when no publication satisfies reader authorization, channel, delivery receipt, and cutoff rules, or when a required identity mapping resolves to zero or multiple unresolved targets.
 _Avoid_: Unknown, access denied error
 
 **UNKNOWN**:
@@ -53,22 +53,58 @@ An epistemic claim status stating that the accessible, authorized evidence canno
 _Avoid_: Unresolved, missing permission
 
 **Hidden Truth**:
-The restricted canonical simulation ledger, ground-truth decision rationales, and evaluation scoring keys stored under separate credentials and excluded from integration pipelines and blind agent retrieval.
-_Avoid_: Visible corpus, agent context
+The restricted canonical simulation ledger, evaluation decision rationales, and scoring keys stored under separate credentials under `evaluation/hidden/` and excluded from integration pipelines and blind agent retrieval.
+_Avoid_: Visible corpus, agent context, ground truth
 
-### Process interface units
+**Identity Steward (`IDENTITY_STEWARD`)**:
+The single governance role (held by the PPC owner until delegated in writing, `ADR-0056`) authorized to accept, reject, or supersede conflicting identity mapping assertions; agents may propose candidates but never accept them.
+_Avoid_: Auto-resolver, confidence merge
+
+**POTENTIAL_EXPOSURE**:
+The graph-connectivity label assigned when a topology path links a disrupted unit or stream to a downstream asset or commercial contract without a qualified model calculation establishing numeric impact.
+_Avoid_: Quantified impact, confirmed loss
+
+**QUALITY_HOLD**:
+The inventory disposition state preventing a crude or product lot from entering blending, commercial availability, or dispatch until an authorized passing LIMS assay and release gate clear it.
+_Avoid_: Soft warning, pending sale
+
+**RECOVERY_GAP**:
+The explicit halt condition raised on store restore when comparing a source outbox's highest committed sequence number against PostgreSQL `InboxReceipt` high-water marks and R2 raw logs reveals a missing tail inside the RPO window.
+_Avoid_: Silent drop, best-effort catchup
+
+### Process interface units and blending terms
 
 **Steam Methane Reformer (SMR)**:
-A hydrogen production interface unit that converts natural gas and steam into plant makeup hydrogen, fuel offgas, and carbon dioxide.
+A hydrogen production interface unit that converts natural gas and steam into plant makeup hydrogen, fuel offgas, and carbon dioxide (`ADR-0054`).
 _Avoid_: Unmodeled H2 source
 
+**Naphtha Hydrotreater (NHT)**:
+A hydrotreating interface unit that removes sulfur from light straight-run (LSR) and heavy straight-run naphtha (`<= 0.5 ppmw` sulfur) before gasoline blending or catalytic reforming (`ADR-0054`).
+_Avoid_: Sweetening-only unit
+
 **Diesel Hydrotreater (DHT)**:
-A hydrotreating interface unit that removes sulfur and saturates aromatics in straight-run distillates and FCC light cycle oil (LCO) using plant hydrogen before ULSD blending.
+A hydrotreating interface unit that removes sulfur and saturates aromatics in straight-run distillates and FCC light cycle oil (LCO) using plant hydrogen before ULSD blending (`ADR-0054`).
 _Avoid_: Direct LCO blending
 
 **Catalytic Reformer**:
-A naphtha-upgrading interface unit that converts hydrotreated heavy naphtha into high-octane reformate and byproduct hydrogen.
+A naphtha-upgrading interface unit that converts hydrotreated heavy naphtha and HCU heavy naphtha into high-octane reformate and byproduct hydrogen (`ADR-0054`).
 _Avoid_: Straight-run gasoline blendstock
+
+**FCC Selective HDS**:
+A selective hydrodesulfurization interface unit that lowers FCC naphtha sulfur (`<= 10 ppmw` target `8 ppmw`) while minimizing olefin saturation and octane loss before gasoline blending (`ADR-0054`).
+_Avoid_: Untreated FCC gasoline
+
+**Sulfur Recovery Unit (SRU)**:
+The Claus sulfur recovery and sour-water stripper interface unit converting `H2S` and `NH3` acid-gas streams into elemental sulfur export (`99.5%` recovery), boundary `SO2`, and `N2` (`ADR-0054`).
+_Avoid_: Unaccounted sour gas
+
+**Blendstock for Oxygenate Blending (BOB)**:
+Sub-octane refinery-gate gasoline (`RBOB` or `CBOB`, `>= 84.2` regular / `>= 88.6` premium `(R+M)/2`) blended to meet retail octane (`87.0` / `91.0`) and RVP limits after terminal splash-blending with `10 vol%` denatured ethanol (`E10`).
+_Avoid_: Finished retail gasoline at refinery gate
+
+**Planning LP**:
+The deliberately reduced linear optimization model (Pyomo + HiGHS, delta-base yield vectors, linear blend indices, lagged assays) kept structurally distinct from the nonlinear mechanistic Canonical World Kernel so `UC-3` LP calibration error is real and measurable (`ADR-0048`).
+_Avoid_: Identical world clone, simulator optimizer
 
 ### Ecosystem boundaries
 

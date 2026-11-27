@@ -5,7 +5,7 @@ Reconciled navigation record, 2026-11-26. Commits below reflect both the origina
 | Source | Original ARCH-000 pin | Verified local revision (2026-11-26) | Authority used here | Outstanding check |
 |---|---|---|---|---|
 | PPC | `01027a84` | `ef4eb08fd09298a8fe64cff4bac52242f6d6b5f6` (`main`; reconciled on `docs/first-principles-refinery-grill`) | Charter, baseline docs, `ADR-001`–`039`, new `ADR-0040`–`053` | Independent external review & Phase 0 authorization |
-| EPM | `511a9e8d` | `511a9e8db4008ef43a0dda0f92cef17664e4c995` (`main`) | Performance semantics, Git Turtle + `pyshacl` + Neo4j pattern | Per-module release & parity (`WP-3`, `WP-8`) |
+| EPM | `511a9e8d` | `511a9e8db4008ef43a0dda0f92cef17664e4c995` (`main`) | Performance semantics, Git Turtle + `pyshacl` + Neo4j pattern | Per-module release & parity (`WP-3`, `WP-8A`, `WP-8B`) |
 | Downstream ontology release | `ddf6b68b` | Local `share/epm-1.0` @ `2b3f02e`; `ds-business-process/1.0` separate upstream track | `kpi-store/1.2` lineage for generalized `DS_Business_Process` | Pending upstream release (`GAP-001`, `WP-7`) |
 | ICE (`scada_harmonization`) | `1467e927` | `30c20c3` (`main`, PR #68); `65ffe10` (`cursor/handoff-close-68`) | L0 contract, 1 s machine stream, Plane 3 split | Mapping YAML pending (`GAP-004`, `WP-2`) |
 | EDI (`Engineering_Drawing_to_Graph`) | `12a4a6a6` | `12a4a6a` (`main`, PR #56) | Bounded structured DEXPI contract | Flat drawing & PPC adapter (`GAP-005`, `WP-2`) |
