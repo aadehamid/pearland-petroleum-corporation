@@ -626,7 +626,9 @@ def hcu_evaluate(
     liq_gain_c5_pct = (100.0 * (c5_plus_bbl / actual_feed_bbl - 1.0)) if actual_feed_bbl > 0.0 else 0.0
 
     acid_gas_mass = float(outputs["acid_gas"]["mass_t_per_day"])
-    sulfur_out_t = s_to_h2s_t + hydrotreated_liquid_s_t
+    acid_gas_s_capacity_t = acid_gas_mass * (32.065 / 34.08088)
+    s_carried_in_acid_gas_t = min(s_to_h2s_t, acid_gas_s_capacity_t)
+    sulfur_out_t = s_carried_in_acid_gas_t + hydrotreated_liquid_s_t
     return {
         "feasible": feasible,
         "status": "FEASIBLE" if feasible else "INFEASIBLE",
@@ -648,6 +650,7 @@ def hcu_evaluate(
         "sulfur_balance": {
             "feed_sulfur_t_per_day": feed_sulfur_t,
             "s_to_h2s_t_per_day": s_to_h2s_t,
+            "s_carried_in_acid_gas_t_per_day": s_carried_in_acid_gas_t,
             "stoichiometric_h2s_t_per_day": stoich_h2s_t,
             "liquid_product_sulfur_t_per_day": hydrotreated_liquid_s_t,
             "sulfur_residual_t_per_day": sulfur_out_t - feed_sulfur_t,

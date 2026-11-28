@@ -54,4 +54,5 @@ module po09_branch_isolation {
   // Child intervention never alters baseline or saved checkpoint
   val inv_parent_unmutated = baseline.cap_bpd == 30000
   val inv_checkpoint_monotonic = baseline.processed_bbl >= checkpoint_processed
+  val safety_all = inv_parent_unmutated and inv_checkpoint_monotonic
 }

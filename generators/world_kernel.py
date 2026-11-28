@@ -49,6 +49,9 @@ class TankState:
     max_bbl: float
     sg_60_60: float
     mass_kg: float
+    inflow_kg_s: float = 0.0
+    outflow_kg_s: float = 0.0
+    loss_kg_s: float = 0.0
 
     @property
     def min_mass_kg(self) -> float:
@@ -61,6 +64,15 @@ class TankState:
     @property
     def volume_bbl(self) -> float:
         return eq.mass_kg_to_volume_bbl(self.mass_kg, self.sg_60_60)
+
+
+# W2-02 (WORLD-002 §3.2): physical restrictions always execute before discretionary requests at the same instant
+EVENT_ORDER_PRIORITY: dict[str, int] = {
+    "HCU_COMPRESSOR_DERATE": 0,
+    "SMR_TURNDOWN": 0,
+    "TANK_FLOW_SCHEDULE": 0,
+    "HCU_FEED_SETPOINT": 1,
+}
 
 
 @dataclass
@@ -88,6 +100,7 @@ class WorldState:
     hcu_condition: str = "NORMAL"
     hcu_running: bool = True
     smr_h2_t_per_day: float = 107.0
+    smr_target_h2_t_per_day: float | None = None
     reformer_h2_t_per_day: float = 73.0
     nht_h2_draw_t_per_day: float = 5.0
     fcc_hds_h2_draw_t_per_day: float = 5.0
@@ -97,25 +110,43 @@ class WorldState:
     hcu_cumulative_processed_t: float = 0.0
     tanks: dict[str, TankState] = field(default_factory=dict)
     applied_events: dict[str, str] = field(default_factory=dict)  # event_id -> payload_digest
+    rejected_events: dict[str, dict[str, Any]] = field(default_factory=dict)  # event_id -> rejection detail
     history: list[dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        if self.smr_target_h2_t_per_day is None:
+            self.smr_target_h2_t_per_day = self.smr_h2_t_per_day
+
     def digest(self) -> str:
-        """Deterministic SHA-256 state digest excluding branch_id metadata for cross-branch comparison."""
+        """Deterministic SHA-256 state digest covering ALL mutable physics fields (excluding branch_id)."""
         canonical = {
             "world_version": self.world_version,
             "current_time_utc": self.current_time_utc.isoformat(),
             "state_revision": self.state_revision,
             "hcu_planned_feed_bbl_per_day": round(self.hcu_planned_feed_bbl_per_day, 9),
+            "hcu_mech_cap_bbl_per_day": round(self.hcu_mech_cap_bbl_per_day, 9),
             "hcu_compressor_circ_fraction": round(self.hcu_compressor_circ_fraction, 9),
             "hcu_condition": self.hcu_condition,
             "hcu_running": self.hcu_running,
             "smr_h2_t_per_day": round(self.smr_h2_t_per_day, 9),
+            "smr_target_h2_t_per_day": round(float(self.smr_target_h2_t_per_day), 9),
+            "reformer_h2_t_per_day": round(self.reformer_h2_t_per_day, 9),
+            "nht_h2_draw_t_per_day": round(self.nht_h2_draw_t_per_day, 9),
+            "fcc_hds_h2_draw_t_per_day": round(self.fcc_hds_h2_draw_t_per_day, 9),
+            "h2_header_loss_t_per_day": round(self.h2_header_loss_t_per_day, 9),
+            "dht_committed_h2_t_per_day": round(self.dht_committed_h2_t_per_day, 9),
             "hcu_cumulative_processed_bbl": round(self.hcu_cumulative_processed_bbl, 9),
             "hcu_cumulative_processed_t": round(self.hcu_cumulative_processed_t, 9),
             "tanks": {
-                tid: round(t.mass_kg, 6) for tid, t in sorted(self.tanks.items())
+                tid: {
+                    "mass_kg": round(t.mass_kg, 6),
+                    "inflow_kg_s": round(t.inflow_kg_s, 9),
+                    "outflow_kg_s": round(t.outflow_kg_s, 9),
+                }
+                for tid, t in sorted(self.tanks.items())
             },
             "applied_events": dict(sorted(self.applied_events.items())),
+            "rejected_events": dict(sorted(self.rejected_events.items())),
         }
         return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -133,7 +164,9 @@ class RefineryWorldKernel:
 
     def schedule_event(self, event: WorldEvent) -> None:
         self._scheduled.append(event)
-        self._scheduled.sort(key=lambda e: (e.effective_at_utc, e.event_id))
+        self._scheduled.sort(
+            key=lambda e: (e.effective_at_utc, EVENT_ORDER_PRIORITY.get(e.event_type, 1), e.event_id)
+        )
 
     def checkpoint(self) -> dict[str, Any]:
         """Return an immutable deep-copied checkpoint with SHA-256 digest."""
@@ -149,8 +182,13 @@ class RefineryWorldKernel:
 
     @classmethod
     def from_checkpoint(cls, ckpt: Mapping[str, Any], branch_id: str | None = None) -> "RefineryWorldKernel":
-        """Restore a kernel from checkpoint, optionally forking an isolated child branch (PO-09)."""
+        """Restore a kernel from checkpoint after verifying SHA-256 integrity (WORLD-002 §4 / W2-07)."""
         restored_state: WorldState = copy.deepcopy(ckpt["state"])
+        actual_digest = restored_state.digest()
+        if str(ckpt.get("state_digest", "")) != actual_digest:
+            raise ValueError(
+                f"Checkpoint integrity violation (W2-07): recorded digest {ckpt.get('state_digest')!r} != actual {actual_digest!r}"
+            )
         if branch_id is not None:
             restored_state.branch_id = branch_id
         kernel = cls(
@@ -193,19 +231,35 @@ class RefineryWorldKernel:
                 fixture_mode=self.fixture_mode,
             )
             if not chk["feasible"]:
-                return {
+                rej = {
                     "status": "INFEASIBLE",
                     "event_id": ev.event_id,
+                    "event_type": ev.event_type,
+                    "effective_at_utc": ev.effective_at_utc.isoformat(),
                     "requested_bbl_per_day": req_bbl,
                     "max_permitted_bbl_per_day": chk["max_feed_bbl_per_day"],
                     "binding_constraint": chk["binding_constraint"],
                 }
+                self.state.rejected_events[ev.event_id] = rej
+                self.state.history.append(rej)
+                return rej
             self.state.hcu_planned_feed_bbl_per_day = req_bbl
         elif ev.event_type == "SMR_TURNDOWN":
             smr_h2 = float(ev.payload["smr_h2_t_per_day"])
             if not (54.0 <= smr_h2 <= 120.0):
                 raise eq.OutOfEnvelopeError(f"SMR H2 {smr_h2} outside [54.0, 120.0] t/day")
-            self.state.smr_h2_t_per_day = smr_h2
+            self.state.smr_target_h2_t_per_day = smr_h2
+            # Respect 2%/min SMR ramp during stepping unless explicit steady-state boundary fixture requests instant jump
+            if bool(ev.payload.get("instant_boundary_fixture", False)):
+                self.state.smr_h2_t_per_day = smr_h2
+        elif ev.event_type == "TANK_FLOW_SCHEDULE":
+            tid = str(ev.payload["tank_id"])
+            if tid not in self.state.tanks:
+                raise ValueError(f"Unknown tank_id in TANK_FLOW_SCHEDULE: {tid!r}")
+            tk = self.state.tanks[tid]
+            tk.inflow_kg_s = float(ev.payload.get("inflow_kg_s", tk.inflow_kg_s))
+            tk.outflow_kg_s = float(ev.payload.get("outflow_kg_s", tk.outflow_kg_s))
+            tk.loss_kg_s = float(ev.payload.get("loss_kg_s", tk.loss_kg_s))
         else:
             raise ValueError(f"Unknown event_type: {ev.event_type!r}")
 
@@ -222,14 +276,23 @@ class RefineryWorldKernel:
         return rec
 
     def _step_interval(self, dt_s: float) -> dict[str, Any]:
+        # Enforce SMR 2%/min ramp toward smr_target_h2_t_per_day inside every step (EQ-07)
+        target_smr = (
+            float(self.state.smr_target_h2_t_per_day)
+            if self.state.smr_target_h2_t_per_day is not None
+            else self.state.smr_h2_t_per_day
+        )
         h2 = eq.h2_header_balance(
-            self.state.smr_h2_t_per_day,
+            target_smr,
             self.state.reformer_h2_t_per_day,
             self.state.nht_h2_draw_t_per_day,
             self.state.fcc_hds_h2_draw_t_per_day,
             self.state.h2_header_loss_t_per_day,
             self.state.dht_committed_h2_t_per_day,
+            prev_smr_h2_t_per_day=self.state.smr_h2_t_per_day,
+            dt_minutes=dt_s / 60.0,
         )
+        self.state.smr_h2_t_per_day = float(h2["smr_effective_t_per_day"])
         hcu_res = eq.hcu_evaluate(
             requested_feed_bbl_per_day=self.state.hcu_planned_feed_bbl_per_day,
             mech_cap_bbl_per_day=self.state.hcu_mech_cap_bbl_per_day,
@@ -240,6 +303,21 @@ class RefineryWorldKernel:
         day_frac = dt_s / 86400.0
         self.state.hcu_cumulative_processed_bbl += hcu_res["actual_feed_bbl_per_day"] * day_frac
         self.state.hcu_cumulative_processed_t += hcu_res["actual_feed_t_per_day"] * day_frac
+
+        # Step every active tank in WorldState via EQ-02 exact intra-step t* bound crossing split
+        for tid in sorted(self.state.tanks):
+            tk = self.state.tanks[tid]
+            if tk.inflow_kg_s != 0.0 or tk.outflow_kg_s != 0.0 or tk.loss_kg_s != 0.0:
+                tres = eq.step_tank_with_exact_crossing(
+                    opening_mass_kg=tk.mass_kg,
+                    min_mass_kg=tk.min_mass_kg,
+                    max_mass_kg=tk.max_mass_kg,
+                    inflow_rate_kg_s=tk.inflow_kg_s,
+                    outflow_rate_kg_s=tk.outflow_kg_s,
+                    dt_s=dt_s,
+                    loss_rate_kg_s=tk.loss_kg_s,
+                )
+                tk.mass_kg = float(tres.closing_mass_kg)
         return hcu_res
 
     def advance_to(self, target_time_utc: datetime) -> list[dict[str, Any]]:
@@ -394,7 +472,8 @@ def evaluate_refinery_plant_snapshot(
         olefins_vol_pct=[1.0, 28.0, 1.0, 0.0],
         aromatics_vol_pct=[62.0, 25.0, 3.0, 0.0],
     )
-    bob_rvp = eq.chevron_rvp_psi([0.97, 0.03], [5.8, 52.0])
+    # Summer RFG Regular BOB trim (1% n-butane @ 52 psi in 5.6 psi base -> ~6.25 psi <= 6.4 psi max)
+    bob_rvp = eq.chevron_rvp_psi([0.99, 0.01], [5.6, 52.0])
     bob_gate = eq.evaluate_bob_and_e10_release(
         grade="REGULAR",
         bob_aki=rt70["aki"],
@@ -405,7 +484,8 @@ def evaluate_refinery_plant_snapshot(
         annual_avg_sulfur_ppmw=8.5,
     )
 
-    # Plant-wide liquid volume accounting (transparently reported alongside HCU C5+ gain)
+    # Plant-wide liquid volume accounting (includes any unprocessed VGO routed to TK-201 during HCU derate)
+    unprocessed_vgo_to_tk201_bbl = max(0.0, hcu_req_bbl - float(hcu["actual_feed_bbl_per_day"]))
     ref_bbl = eq.mass_kg_to_volume_bbl(reformer["reformate_t_per_day"] * 1000.0, 0.785)
     fcc_naph_bbl = eq.mass_kg_to_volume_bbl(fcc["streams_t_per_day"]["fcc_naphtha"] * 1000.0, 0.745)
     fcc_slurry_bbl = eq.mass_kg_to_volume_bbl(fcc["streams_t_per_day"]["slurry"] * 1000.0, 1.020)
@@ -422,6 +502,7 @@ def evaluate_refinery_plant_snapshot(
         + fcc_lco_rem_bbl
         + fcc_slurry_bbl
         + hcu["c5_plus_bbl_per_day"]
+        + unprocessed_vgo_to_tk201_bbl
         + cuts["VACUUM_RESIDUE"]["volume_bbl_per_day"]
     )
     plant_lpg_bbl = (
@@ -431,6 +512,11 @@ def evaluate_refinery_plant_snapshot(
     )
     plant_c5_gain_pct = 100.0 * (plant_c5_plus_bbl / total_crude_bbl - 1.0)
     plant_c3_gain_pct = 100.0 * ((plant_c5_plus_bbl + plant_lpg_bbl) / total_crude_bbl - 1.0)
+    hcu_h2_scf_per_bbl = (
+        (float(hcu["h2_net_t_per_day"]) * 1000.0 * 423.6) / float(hcu["actual_feed_bbl_per_day"])
+        if float(hcu["actual_feed_bbl_per_day"]) > 0.0
+        else 0.0
+    )
 
     return {
         "provenance_class": "SYNTHETIC",
@@ -441,11 +527,13 @@ def evaluate_refinery_plant_snapshot(
         "fcc": fcc,
         "h2_header": h2,
         "hcu": hcu,
+        "unprocessed_vgo_to_tk201_bbl_per_day": unprocessed_vgo_to_tk201_bbl,
         "hydraulics_all_feasible": hydraulics_ok,
         "ulsd_gate": ulsd_gate,
         "bob_gate": bob_gate,
         "volume_gain_summary": {
             "hcu_c5_plus_gain_pct": hcu["liquid_vol_gain_c5_pct"],
+            "hcu_h2_uptake_scf_per_bbl": hcu_h2_scf_per_bbl,
             "plant_c5_plus_gain_pct": plant_c5_gain_pct,
             "plant_c3_plus_gain_pct": plant_c3_gain_pct,
         },
@@ -453,7 +541,7 @@ def evaluate_refinery_plant_snapshot(
 
 
 def run_eng_v07_mode_benchmark(design_basis: Mapping[str, Any]) -> dict[str, Any]:
-    """Run ENG-V07 training-vs-holdout operating-mode benchmark with explicit residuals."""
+    """Run ENG-V07 training-vs-holdout operating-mode benchmark with transparent unit AND plant plausibility gates."""
     training_modes = {
         "train_nominal_design_blend": evaluate_refinery_plant_snapshot(
             design_basis,
@@ -494,6 +582,7 @@ def run_eng_v07_mode_benchmark(design_basis: Mapping[str, Any]) -> dict[str, Any
     def _summarize(mode_dict: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
         for name, snap in mode_dict.items():
+            vg = snap["volume_gain_summary"]
             out[name] = {
                 "cdu_mass_residual_t": abs(snap["cdu"]["mass_residual_t_per_day"]),
                 "cdu_sulfur_residual_t": abs(snap["cdu"]["sulfur_residual_t_per_day"]),
@@ -506,6 +595,13 @@ def run_eng_v07_mode_benchmark(design_basis: Mapping[str, Any]) -> dict[str, Any
                 "h2_no_double_alloc": snap["h2_header"]["no_double_allocation"],
                 "hydraulics_all_feasible": snap["hydraulics_all_feasible"],
                 "hcu_binding_constraint": snap["hcu"]["binding_constraint"],
+                "hcu_c5_plus_gain_pct": vg["hcu_c5_plus_gain_pct"],
+                "hcu_h2_uptake_scf_per_bbl": vg["hcu_h2_uptake_scf_per_bbl"],
+                "plant_c5_plus_gain_pct": vg["plant_c5_plus_gain_pct"],
+                "plant_c3_plus_gain_pct": vg["plant_c3_plus_gain_pct"],
+                "po12a_hcu_gain_in_4_to_10": 4.0 <= vg["hcu_c5_plus_gain_pct"] <= 10.0,
+                "po12a_hcu_h2_in_1000_to_2500": 1000.0 <= vg["hcu_h2_uptake_scf_per_bbl"] <= 2500.0,
+                "po12a_plant_c5_gain_in_4_to_10": 4.0 <= vg["plant_c5_plus_gain_pct"] <= 10.0,
             }
         return out
 
@@ -516,16 +612,24 @@ def run_eng_v07_mode_benchmark(design_basis: Mapping[str, Any]) -> dict[str, Any
             v["fcc_sulfur_residual_t"], v["hcu_mass_residual_t"], v["hcu_sulfur_residual_t"])
         for v in (*train_res.values(), *holdout_res.values())
     )
+    unit_and_conservation_pass = all(
+        v["fcc_heat_feasible"]
+        and v["hcu_acid_gas_covers_h2s"]
+        and v["h2_no_double_alloc"]
+        and v["hydraulics_all_feasible"]
+        and v["po12a_hcu_gain_in_4_to_10"]
+        and v["po12a_hcu_h2_in_1000_to_2500"]
+        for v in holdout_res.values()
+    )
+    po12a_plant_c5_band_pass = all(v["po12a_plant_c5_gain_in_4_to_10"] for v in holdout_res.values())
     return {
         "provenance_class": "SYNTHETIC",
         "training_modes": train_res,
         "holdout_modes": holdout_res,
         "max_absolute_residual_t_per_day": max_rel_residual,
-        "all_holdout_gates_pass": all(
-            v["fcc_heat_feasible"]
-            and v["hcu_acid_gas_covers_h2s"]
-            and v["h2_no_double_alloc"]
-            and v["hydraulics_all_feasible"]
-            for v in holdout_res.values()
-        ),
+        "unit_and_conservation_gates_pass": unit_and_conservation_pass,
+        "po12a_plant_c5_gain_band_pass": po12a_plant_c5_band_pass,
+        # Strict overall holdout gate does NOT pass while plant C5+ gain sits outside PO-12a +4..+10% band;
+        # requires independent PO-12a engineering review & Hamid Adesokan's owner sign-off (ADR-0059 / G3-d).
+        "all_holdout_gates_pass": unit_and_conservation_pass and po12a_plant_c5_band_pass,
     }

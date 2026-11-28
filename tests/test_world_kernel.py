@@ -10,15 +10,24 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timezone
 from fractions import Fraction
+from pathlib import Path
+
+import yaml
 
 from generators import equations as eq
 from generators.world_kernel import (
     RefineryWorldKernel,
+    TankState,
     WorldEvent,
     WorldState,
+    evaluate_refinery_plant_snapshot,
     local_business_day_elapsed_hours,
     paired_rng,
+    run_eng_v07_mode_benchmark,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DESIGN_BASIS_PATH = REPO_ROOT / "fixtures" / "golden" / "refinery_a_design_basis.yaml"
 
 
 class TestEquationsExactFixtures(unittest.TestCase):
@@ -341,6 +350,94 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         self.assertEqual(
             eq.evaluate_bob_and_e10_release("REGULAR", 86.0, 6.2, 6.4, 15.0, annual_avg_sulfur_ppmw=11.0)["disposition"],
             "QUALITY_HOLD",
+        )
+
+    def test_kernel_smr_ramp_w202_ordering_digest_checkpoint_and_tank_stepping(self):
+        t0 = datetime(2026, 6, 15, 8, 0, tzinfo=timezone.utc)
+        t1 = datetime(2026, 6, 15, 8, 10, tzinfo=timezone.utc)
+        t2 = datetime(2026, 6, 15, 8, 15, tzinfo=timezone.utc)
+
+        sg = 0.840
+        tk = TankState(
+            tank_id="TK-TEST",
+            min_bbl=1000.0,
+            max_bbl=12000.0,
+            sg_60_60=sg,
+            mass_kg=eq.volume_bbl_to_mass_kg(11950.0, sg),
+            inflow_kg_s=eq.volume_bbl_to_mass_kg(600.0, sg) / 3600.0,
+            outflow_kg_s=eq.volume_bbl_to_mass_kg(200.0, sg) / 3600.0,
+        )
+        st = WorldState("world-v1.0.0", "baseline", 42, t0, tanks={"TK-TEST": tk})
+        # All mutable physics fields affect digest()
+        d_init = st.digest()
+        for attr, new_val in (
+            ("hcu_mech_cap_bbl_per_day", 38000.0),
+            ("hcu_running", False),
+            ("reformer_h2_t_per_day", 70.0),
+            ("nht_h2_draw_t_per_day", 6.0),
+            ("fcc_hds_h2_draw_t_per_day", 6.0),
+            ("h2_header_loss_t_per_day", 6.0),
+            ("dht_committed_h2_t_per_day", 42.0),
+        ):
+            orig = getattr(st, attr)
+            setattr(st, attr, new_val)
+            self.assertNotEqual(st.digest(), d_init, f"digest() missed field {attr}")
+            setattr(st, attr, orig)
+        self.assertEqual(st.digest(), d_init)
+
+        k = RefineryWorldKernel(st, step_seconds=60, fixture_mode=True)
+        # W2-02: Schedule setpoint BEFORE derate at the SAME instant t1 — derate MUST execute first so setpoint is INFEASIBLE!
+        k.schedule_event(WorldEvent("EVT-A-SET", t1, "HCU_FEED_SETPOINT", {"requested_feed_bbl_per_day": 36000.0}))
+        k.schedule_event(WorldEvent("EVT-Z-DERATE", t1, "HCU_COMPRESSOR_DERATE", {"compressor_circ_fraction": 0.75}))
+        k.schedule_event(WorldEvent("EVT-SMR", t1, "SMR_TURNDOWN", {"smr_h2_t_per_day": 60.0}))
+
+        outcomes = k.advance_to(t2)
+        self.assertIn("EVT-A-SET", k.state.rejected_events)
+        self.assertEqual(k.state.rejected_events["EVT-A-SET"]["status"], "INFEASIBLE")
+        self.assertTrue(any(h.get("status") == "INFEASIBLE" and h.get("event_id") == "EVT-A-SET" for h in k.state.history))
+        self.assertTrue(any(o.get("status") == "INFEASIBLE" for o in outcomes))
+
+        # SMR ramped 5 minutes from 107.0 at 2%/min of 120 = 2.4 t/day/min -> 95.0 t/day (not instant 60.0!)
+        self.assertAlmostEqual(k.state.smr_h2_t_per_day, 95.0, places=6)
+
+        # Tank stepped via EQ-02 exact intra-step t* split and rode exactly at max 12,000 bbl without exceeding
+        self.assertAlmostEqual(k.state.tanks["TK-TEST"].volume_bbl, 12000.0, places=6)
+
+        # W2-07: Corrupted checkpoint MUST fail integrity verification
+        ckpt = k.checkpoint()
+        ckpt["state"].smr_h2_t_per_day = 55.0
+        with self.assertRaises(ValueError):
+            RefineryWorldKernel.from_checkpoint(ckpt)
+
+    def test_coupled_plant_snapshot_and_eng_v07_benchmark_transparency(self):
+        design_basis = yaml.safe_load(DESIGN_BASIS_PATH.read_text(encoding="utf-8"))
+        # Normal snapshot
+        snap = evaluate_refinery_plant_snapshot(design_basis)
+        self.assertTrue(snap["hydraulics_all_feasible"])
+        self.assertEqual(snap["ulsd_gate"]["disposition"], "RELEASE")
+        self.assertEqual(snap["bob_gate"]["disposition"], "RELEASE")
+        self.assertGreater(snap["volume_gain_summary"]["hcu_c5_plus_gain_pct"], 4.0)
+        self.assertTrue(1000.0 <= snap["volume_gain_summary"]["hcu_h2_uptake_scf_per_bbl"] <= 2500.0)
+        # Derated snapshot explicitly accounts for unprocessed VGO routed to TK-201
+        derated = evaluate_refinery_plant_snapshot(design_basis, hcu_compressor_circ_fraction=0.75)
+        self.assertGreater(derated["unprocessed_vgo_to_tk201_bbl_per_day"], 0.0)
+        # Non-tautological HCU sulfur check: fixture_mode with high sulfur detects acid_gas deficit
+        hcu_fix_hi_s = eq.hcu_evaluate(
+            requested_feed_bbl_per_day=30000.0,
+            feed_sulfur_wt_frac=0.05,
+            compressor_circ_fraction=0.75,
+            fixture_mode=True,
+        )
+        self.assertFalse(hcu_fix_hi_s["sulfur_balance"]["acid_gas_covers_stoichiometric_h2s"])
+        self.assertLess(hcu_fix_hi_s["sulfur_balance"]["sulfur_residual_t_per_day"], -1.0)
+
+        # ENG-V07 benchmark transparently reports unit+conservation vs plant C5+ band
+        bench = run_eng_v07_mode_benchmark(design_basis)
+        self.assertTrue(bench["unit_and_conservation_gates_pass"])
+        self.assertLessEqual(bench["max_absolute_residual_t_per_day"], 1e-6)
+        self.assertEqual(
+            bench["all_holdout_gates_pass"],
+            bench["unit_and_conservation_gates_pass"] and bench["po12a_plant_c5_gain_band_pass"],
         )
 
 

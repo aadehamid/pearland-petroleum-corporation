@@ -50,4 +50,5 @@ module po01_tank_bounds {
   val inv_bounds = stock_bbl >= MIN_BBL and stock_bbl <= MAX_BBL
   val inv_conservation = stock_bbl == opening_bbl + total_in_bbl - total_out_bbl
   val inv_nonneg_diverted = diverted_bbl >= 0
+  val safety_all = inv_bounds and inv_conservation and inv_nonneg_diverted
 }

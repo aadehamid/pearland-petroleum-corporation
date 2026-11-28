@@ -46,17 +46,30 @@ class TestZ3SymbolicProofs(unittest.TestCase):
         m = s.model()
         self.assertEqual(m[t_star].as_fraction(), Fraction(1, 2))
 
-        # Prove our exact-crossing EQ-02 invariant: for ALL valid opening stock in [min, max]
-        # and ALL non-negative rates, splitting at t* keeps closing stock strictly within [min, max].
-        s2 = z3.SolverFor("QF_LRA")
-        m0, m_min, m_max, r_in, r_out, dt = z3.Reals("m0 m_min m_max r_in r_out dt")
+        # Prove exact two-segment analytic split at t* (NOT forbidden end-of-step clipping!):
+        # For ALL valid opening stock in [m_min, m_max], ALL non-negative rates, and ANY interior
+        # instant tau in [0, dt]: splitting at exact t* = (m_max - m0)/(r_in - r_out) when rising
+        # past m_max (throttling r_in := r_out on [t*, dt]) or t* = (m0 - m_min)/(r_out - r_in) when
+        # falling past m_min (throttling r_out := r_in on [t*, dt]) keeps m(tau) in [m_min, m_max]
+        # everywhere on [0, dt], with zero intermediate excursion.
+        s2 = z3.Solver()
+        m0, m_min, m_max, r_in, r_out, dt, tau = z3.Reals("m0 m_min m_max r_in r_out dt tau")
         s2.add(m_min >= 0, m_max > m_min, m0 >= m_min, m0 <= m_max, r_in >= 0, r_out >= 0, dt > 0)
+        s2.add(tau >= 0, tau <= dt)
         net = r_in - r_out
         unconstrained = m0 + net * dt
-        # Under exact throttle at boundary, closing mass is clamped via analytic split at t*
-        closing = z3.If(unconstrained > m_max, m_max, z3.If(unconstrained < m_min, m_min, unconstrained))
-        # Negation of invariant: can closing ever escape [m_min, m_max]? Must be UNSAT!
-        s2.add(z3.Or(closing < m_min, closing > m_max))
+        # Two-segment analytic trajectory m(tau) with exact crossing time t*
+        t_star_hi = z3.If(net > 0, (m_max - m0) / net, dt)
+        t_star_lo = z3.If(net < 0, (m0 - m_min) / (-net), dt)
+        m_hi_split = z3.If(tau <= t_star_hi, m0 + net * tau, m0 + net * t_star_hi)
+        m_lo_split = z3.If(tau <= t_star_lo, m0 + net * tau, m0 + net * t_star_lo)
+        m_tau = z3.If(
+            unconstrained > m_max,
+            m_hi_split,
+            z3.If(unconstrained < m_min, m_lo_split, m0 + net * tau),
+        )
+        # Negation: can ANY interior instant tau in [0, dt] ever escape [m_min, m_max]? Must be UNSAT!
+        s2.add(z3.Or(m_tau < m_min, m_tau > m_max))
         self.assertEqual(s2.check(), z3.unsat)
 
     def test_po04_z3_proves_shared_h2_no_double_allocation_and_h2cont_counterexample(self):
