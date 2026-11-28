@@ -1,14 +1,18 @@
 # Owner Answers — Overnight Night-Run Execution and Stand-In Delegation (2026-11-27)
 
-This file records, in chronological order, the owner's instructions and the exact draft `night-run` brief presented to the owner on 2026-11-27 before launching the overnight run of `PPC-PLAN-001`.
+This file records, in chronological order, the agent questions, the exact draft `night-run` brief presented to the owner, and the owner's verbatim replies on 2026-11-27 before launching the overnight run of `PPC-PLAN-001`.
 
 ## 1. Owner prompt at 23:36 CST (plan continuation)
 
 > once you complete this please continue working on the plan until complete.
 
-## 2. Owner prompt at 23:37 CST (deep research, API keys, and confirmation of ADR Q1–Q4 plus plan sequence)
+## 2. Agent question at 23:36 CST and owner reply at 23:37 CST
 
-In reply to the agent's 23:36 CST question asking whether the owner accepted ADR consistency questions 1–4 and the proposed sequence (rebase and ship WP-0, propose the physical-model consistency graph before WP-1, and continue through the plan while stopping at owner gates):
+**Agent question (verbatim, referring to ADR consistency Q1–Q4 saved in `docs/adr/answers/2026-11-27-adr-consistency-rulings.md`):**
+
+> Please confirm two things in one reply so I can move straight through the work. First, do you accept all four recommendations for questions 1 through 4, and for question 4 should the `adr_graph.py check` gate go in a separate follow-up PR or the same PR? Second, after the ADR cleanup lands, should I rebase, review, and open the PR for WP-0 (`feat/wp0-schemas-pins-probes`), then send you the physical-model consistency graph design before writing WP-1 code, and continue through the plan while stopping at the gates reserved for you (`PO-12a` sign-off at WP-1 exit and live LLM endpoint choice before WP-3B)?
+
+**Owner verbatim reply (23:37 CST):**
 
 > /deep-research use for all your deep reserach. you will have to do some to gather information that will make the simluationa and synthetic data generation robuts. 
 > all api keys ypu need can be found in /Users/hamidadesokan/.config
