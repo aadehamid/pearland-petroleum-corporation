@@ -79,7 +79,9 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.db = os.path.join(self.tmp.name, "memory")
-        self.env = dict(git_env(), PROJECT_MEMORY_DB=self.db, TMPDIR=self.tmp.name)
+        # RELATE_AGENT_MODE=1 turns on relate's agent-mode row cap wherever the
+        # tests run, so the tests that guard against it bite in CI too.
+        self.env = dict(git_env(), PROJECT_MEMORY_DB=self.db, TMPDIR=self.tmp.name, RELATE_AGENT_MODE="1")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -151,6 +153,7 @@ class WithoutRelate(Base):
             "episode.at: not a UTC": episode("e1", "yesterday", "pi", [good]),
             "facts[0].validFrom: not a UTC": episode("e1", at, "pi", [fact("f1", "A fact.", validFrom="2026-11-27")]),
             "facts[0].validFrom: not a UTC ": episode("e1", at, "pi", [fact("f1", "A fact.", validFrom="2026-13-45T10:00:00Z")]),
+            "facts[0].validFrom: not a UTC  ": episode("e1", at, "pi", [fact("f1", "A fact.", validFrom="2026-11-27T10:00:00.0000001Z")]),
             "episode.at: not a UTC ": episode("e1", "2026-11-27T10:00:00+99:99", "pi", [good]),
             "episode.at: not a UTC  ": episode("e1", "2026-11-27T10:00:00+18:30", "pi", [good]),
             "episode.at: not a UTC   ": episode("e1", "٢٠٢٦-11-27T10:00:00Z", "pi", [good]),
@@ -165,6 +168,8 @@ class WithoutRelate(Base):
             "facts[0].slot: lowercase ": episode("e1", at, "pi", [fact("f1", "A fact.", slot="nosegment")]),
             "mentions[0].key: lowercase": episode("e1", at, "pi", [good], mentions=[{"key": " TRUE ", "name": "x"}]),
             "facts[0].about[0]: lowercase": episode("e1", at, "pi", [dict(good, about=["Pump 101"])]),
+            "episode.at: in the future": episode("e1", "2999-01-01T00:00:00Z", "pi", [good]),
+            "facts[0].validFrom: after episode.at": episode("e1", at, "pi", [fact("f1", "A plan.", validFrom="2026-11-28T00:00:00Z")]),
             "facts[1].id: repeats": episode("e1", at, "pi", [good, fact("f1", "Other slot.", slot="x/y")]),
         }
         for message, payload in cases.items():
@@ -221,7 +226,7 @@ class WithRelate(Base):
     def test_correction_supersedes_and_keeps_history(self):
         self.remember(episode("e1", "2026-11-27T10:00:00Z", "claude-code",
                               [fact("f1", "The maintenance lead owns pump 101.")]))
-        self.remember(episode("e2", "2026-11-28T10:00:00Z", "codex",
+        self.remember(episode("e2", "2026-11-27T11:00:00Z", "codex",
                               [fact("f2", "The shift engineer owns pump 101.")]))
 
         current = self.rows("recall", "pump", "owns")
@@ -238,13 +243,13 @@ class WithRelate(Base):
         self.assert_check_passes()
 
     def test_later_write_wins_whatever_the_learned_time(self):
-        self.remember(episode("e1", "2026-11-28T10:05:00Z", "codex", [fact("f1", "Newer by clock.")]))
-        self.remember(episode("e2", "2026-11-28T10:00:00Z", "kimi", [fact("f2", "Written later.")]))
+        self.remember(episode("e1", "2026-11-27T11:05:00Z", "codex", [fact("f1", "Newer by clock.")]))
+        self.remember(episode("e2", "2026-11-27T11:00:00Z", "kimi", [fact("f2", "Written later.")]))
         self.assertEqual([r["memory"] for r in self.rows("brief")], ["Written later."])
         self.assert_check_passes()
 
     def test_a_closed_range_never_ends_before_it_starts(self):
-        self.remember(episode("e1", "2026-11-28T10:05:00Z", "codex", [fact("f1", "Learned first.")]))
+        self.remember(episode("e1", "2026-11-27T11:05:00Z", "codex", [fact("f1", "Learned first.")]))
         self.remember(episode("e2", "2026-11-27T10:00:00Z", "kimi", [fact("f2", "True since earlier.")]))
         closed = [h for h in self.rows("history", SLOT) if h["closed"]]
         self.assertEqual(len(closed), 1)
@@ -260,8 +265,8 @@ class WithRelate(Base):
         self.assert_check_passes()
 
     def test_accepted_datetimes_are_ones_relate_parses(self):
-        for i, at in enumerate(("2026-11-27T10:00Z", "2026-11-27T10:00:00+18:00",
-                                "2026-11-27T10:00:00-18:00", "2026-11-27T10:00:00.123456Z")):
+        for i, at in enumerate(("2026-11-20T10:00Z", "2026-11-20T10:00:00+18:00",
+                                "2026-11-20T10:00:00-18:00", "2026-11-20T10:00:00.123456Z")):
             with self.subTest(at):
                 self.remember(episode(f"e{i}", at, "pi", [fact(f"f{i}", f"At {at}.", slot=f"time/{i}")]))
         self.assert_check_passes()
@@ -298,6 +303,133 @@ class WithRelate(Base):
         p = self.run_memory("history", "unit/none")
         self.assertEqual((p.stdout, "more exist" in p.stderr), ("", False))
 
+    def test_asof_answers_what_agents_believed_then(self):
+        self.remember(episode("e1", "2026-01-01T00:00:00Z", "pi", [fact("f1", "First belief.")]))
+        time.sleep(0.05)
+        self.remember(episode("e2", "2026-02-01T00:00:00Z", "pi", [fact("f2", "Corrected belief.")]))
+        recorded = {h["episode"]: h["recorded"] for h in self.rows("history", SLOT)}
+        self.assertEqual([r["memory"] for r in self.rows("asof", recorded["e1"])], ["First belief."])
+        self.assertEqual([r["memory"] for r in self.rows("asof", recorded["e2"])], ["Corrected belief."])
+        today = recorded["e2"][:10]
+        self.assertEqual([r["memory"] for r in self.rows("asof", today)], ["Corrected belief."])
+        self.assertEqual(self.rows("asof", "2000-01-01"), [])
+        self.assertEqual(self.run_memory("asof", "2026-11-27T10:00:00.123456789Z").returncode, 0)
+        self.assertTrue(recorded["e2"].endswith("Z"), recorded["e2"])
+        self.assertEqual([r["memory"] for r in self.rows("asof", "9999-12-31")], ["Corrected belief."])
+        self.assertEqual([r["memory"] for r in self.rows("asof", "9999-12-31T23:59:59.999999Z")], ["Corrected belief."])
+        for bad in ("", "yesterday", "2026-13-01", "2026-02-30", "2026-11-27T10:00:00", "2026-11-27 10:00Z",
+                    "2026-11-27T10:00:00+18:30", ("2026-11-27", "10:00Z")):
+            with self.subTest(bad):
+                p = self.run_memory("asof", *(bad if isinstance(bad, tuple) else (bad,)))
+                self.assertEqual(p.returncode, 2, p.stderr)
+                self.assertIn("usage:", p.stderr)
+
+    def test_asof_follows_the_recipe_for_a_change_planned_ahead(self):
+        # The cookbook's payments case: the move to us-east-1 is recorded on
+        # 20 February and valid from 1 March, so on 25 February the log still
+        # believed eu-west-1, even though its record was already closed.
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        self.cypher("CREATE (ep:Episode {id: 'e1', agent: 'pi', text: 'x', at: datetime('2024-01-01T09:00:00Z')}) "
+                    "CREATE (:Fact {id: 'd3', slot: 'payments/region', text: 'payments runs in eu-west-1', "
+                    "validFrom: datetime('2024-01-01T00:00:00Z'), validTo: datetime('2024-03-01T00:00:00Z'), "
+                    "recordedAt: datetime('2024-01-01T09:00:00Z'), closedAt: datetime('2024-02-20T09:00:00Z')})-[:FROM]->(ep) "
+                    "CREATE (:Fact:CurrentFact {id: 'd8', slot: 'payments/region', text: 'payments runs in us-east-1', "
+                    "validFrom: datetime('2024-03-01T00:00:00Z'), recordedAt: datetime('2024-02-20T09:00:00Z')})-[:FROM]->(ep)")
+        for when, believed in (("2024-02-10", ["payments runs in eu-west-1"]),
+                               ("2024-02-25", ["payments runs in eu-west-1"]),
+                               ("2024-02-25T00:00:00Z", ["payments runs in eu-west-1"]),
+                               ("2024-03-05", ["payments runs in us-east-1"]),
+                               ("2023-12-31", [])):
+            with self.subTest(when):
+                self.assertEqual([r["memory"] for r in self.rows("asof", when)], believed)
+
+    def test_asof_gives_one_belief_per_slot_on_older_stores(self):
+        # Stores written before future-dated facts were refused can hold a plan
+        # replaced by an earlier change; asof must still give one belief per slot.
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        self.cypher("CREATE (ep:Episode {id: 'e1', agent: 'pi', text: 'x', at: datetime('2024-01-01T09:00:00Z')}) "
+                    "CREATE (:Fact {id: 'f1', slot: 'region/now', text: 'eu-west-1', "
+                    "validFrom: datetime('2024-01-01T00:00:00Z'), validTo: datetime('2024-03-01T00:00:00Z'), "
+                    "recordedAt: datetime('2024-01-01T09:00:00Z'), closedAt: datetime('2024-02-20T09:00:00Z')})-[:FROM]->(ep) "
+                    "CREATE (:Fact:CurrentFact {id: 'f3', slot: 'region/now', text: 'us-west-2', "
+                    "validFrom: datetime('2024-02-22T00:00:00Z'), recordedAt: datetime('2024-02-22T09:00:00Z')})-[:FROM]->(ep)")
+        self.assertEqual([r["memory"] for r in self.rows("asof", "2024-02-25")], ["us-west-2"])
+
+    def test_asof_by_date_respects_zone_offsets(self):
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        # B starts at 20:00 Chicago time on the 27th, which is 02:00 UTC on the 28th.
+        self.cypher("CREATE (ep:Episode {id: 'e1', agent: 'pi', text: 'x', at: datetime('2026-11-01T00:00:00Z')}) "
+                    "CREATE (:Fact {id: 'a', slot: 'zone/test', text: 'Before.', "
+                    "validFrom: datetime('2026-11-01T00:00:00Z'), validTo: datetime('2026-11-27T20:00:00-06:00'), "
+                    "recordedAt: datetime('2026-11-01T00:00:00Z'), closedAt: datetime('2026-11-27T18:00:00Z')})-[:FROM]->(ep) "
+                    "CREATE (:Fact:CurrentFact {id: 'b', slot: 'zone/test', text: 'After.', "
+                    "validFrom: datetime('2026-11-27T20:00:00-06:00'), recordedAt: datetime('2026-11-27T18:00:00Z')})-[:FROM]->(ep)")
+        self.assertEqual([r["memory"] for r in self.rows("asof", "2026-11-27")], ["Before."])
+        self.assertEqual([r["memory"] for r in self.rows("asof", "2026-11-28")], ["After."])
+
+    def test_asof_by_day_keeps_a_fact_closed_on_a_later_day(self):
+        self.assertEqual(self.run_memory("init").returncode, 0)
+        self.cypher("CREATE (ep:Episode {id: 'e1', agent: 'pi', text: 'x', at: datetime('2026-11-20T00:00:00Z')}) "
+                    "CREATE (:Fact {id: 'old', slot: 'day/test', text: 'Closed next day.', "
+                    "validFrom: datetime('2026-11-20T00:00:00Z'), validTo: datetime('2026-11-26T00:00:00Z'), "
+                    "recordedAt: datetime('2026-11-25T08:00:00Z'), closedAt: datetime('2026-11-26T00:00:00Z')})-[:FROM]->(ep) "
+                    "CREATE (:Fact {id: 'same', slot: 'day/same', text: 'Closed same day.', "
+                    "validFrom: datetime('2026-11-20T00:00:00Z'), validTo: datetime('2026-11-25T23:59:59.999999999Z'), "
+                    "recordedAt: datetime('2026-11-25T08:00:00Z'), closedAt: datetime('2026-11-25T23:59:59.999999999Z')})-[:FROM]->(ep)")
+        self.assertEqual([r["memory"] for r in self.rows("asof", "2026-11-25")], ["Closed next day."])
+        self.assertEqual(self.rows("asof", "2026-11-26"), [])
+        self.assertEqual([r["memory"] for r in self.rows("asof", "2026-11-25T12:00:00Z")], ["Closed same day.", "Closed next day."])
+
+    def test_extra_arguments_are_usage_errors(self):
+        self.remember(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "A fact.")]))
+        for args in (("about", "pump-101", "x"), ("history", SLOT, "x"), ("brief", "5", "x"),
+                     ("slots", "x"), ("check", "x"), ("path", "x"), ("init", "x"), ("remember", "-", "x")):
+            with self.subTest(args):
+                p = self.run_memory(*args)
+                self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+                self.assertIn("usage:", p.stderr)
+
+    def test_time_rule_boundaries(self):
+        from datetime import datetime, timedelta, timezone
+        now = datetime.now(timezone.utc)
+        iso = lambda t: t.strftime("%Y-%m-%dT%H:%M:%SZ")
+        cases = {
+            "validFrom equal to at": (episode("e1", "2026-11-20T10:00:00Z", "pi",
+                                              [fact("f1", "Same.", validFrom="2026-11-20T10:00:00Z")]), True),
+            "at four and a half minutes ahead": (episode("e2", iso(now + timedelta(minutes=4, seconds=30)), "pi",
+                                                         [fact("f2", "Clock skew.", slot="skew/ok")]), True),
+            "at five and a half minutes ahead": (episode("e3", iso(now + timedelta(minutes=5, seconds=30)), "pi",
+                                             [fact("f3", "Too far.", slot="skew/no")]), "episode.at: in the future"),
+            "validFrom with nanoseconds": (episode("e5", "2026-11-20T10:00:00Z", "pi",
+                                                   [fact("f5", "Fine.", slot="nano/no", validFrom="2026-11-20T10:00:00.000000999Z")]),
+                                           "facts[0].validFrom: not a UTC"),
+            "validFrom one second after at": (episode("e4", "2026-11-20T10:00:00Z", "pi",
+                                                      [fact("f4", "Later.", slot="later/no", validFrom="2026-11-20T10:00:01Z")]),
+                                              "facts[0].validFrom: after episode.at"),
+        }
+        for name, (payload, expected) in cases.items():
+            with self.subTest(name):
+                p = self.run_memory("remember", "-", stdin=json.dumps(payload))
+                self.assertNotIn("Traceback", p.stderr)
+                if expected is True:
+                    self.assertEqual(p.returncode, 0, p.stderr)
+                else:
+                    self.assertEqual(p.returncode, 1, p.stderr)
+                    self.assertIn(expected, p.stderr)
+
+    def test_a_save_that_supersedes_many_slots_prints_every_row(self):
+        # remember prints one row per replaced slot; relate's agent-mode cap of
+        # 100 rows must not cut that output.
+        n = 120
+        first = episode("e1", "2026-11-20T10:00:00Z", "pi",
+                        [fact(f"a{i}", f"Old {i}.", slot=f"bulk/s{i}") for i in range(n)])
+        second = episode("e2", "2026-11-21T10:00:00Z", "pi",
+                         [fact(f"b{i}", f"New {i}.", slot=f"bulk/s{i}") for i in range(n)])
+        self.remember(first)
+        p = self.remember(second)
+        self.assertEqual(sum(1 for line in p.stdout.splitlines() if '"replaced"' in line), n)
+        self.assertNotIn("rowCap", p.stdout)
+
     def test_string_parameters_stay_strings(self):
         self.remember(episode("e1", "2026-11-27T10:00:00Z", "cursor",
                               [{"id": "f1", "text": "Flag 42 is true.", "slot": "true/42", "about": ["true"]}],
@@ -317,7 +449,7 @@ class WithRelate(Base):
 
     def test_fact_id_reused_by_another_episode_is_rejected(self):
         self.remember(episode("e1", "2026-11-27T10:00:00Z", "pi", [fact("f1", "Original.")]))
-        stderr = self.rejected(episode("e2", "2026-11-28T10:00:00Z", "pi", [fact("f1", "Reused id.")]))
+        stderr = self.rejected(episode("e2", "2026-11-27T11:00:00Z", "pi", [fact("f1", "Reused id.")]))
         self.assertIn("fact id belongs to episode e1", stderr)
         self.assertEqual([r["memory"] for r in self.rows("brief")], ["Original."])
 
@@ -556,7 +688,7 @@ class WithRelate(Base):
         with open(conflict, "w") as fh:
             fh.write("{}")
         p = self.run_memory("remember", "-", stdin=json.dumps(
-            episode("e2", "2026-11-28T10:00:00Z", "pi", [fact("f2", "After the conflict.")])))
+            episode("e2", "2026-11-27T11:00:00Z", "pi", [fact("f2", "After the conflict.")])))
         self.assertEqual(p.returncode, 4, p.stderr)
         self.assertIn("conflicted copies", p.stderr)
         self.assertEqual(self.run_memory("check").returncode, 4)
