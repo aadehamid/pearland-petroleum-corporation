@@ -65,7 +65,17 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
             r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 2, ("other_store", "baseline", "p"): 0},
         )
         self.assertEqual(zero_other["status"], "RECOVERY_GAP")
-        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_R2_EVIDENCE" for g in zero_other["gaps"]))
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_VS_R2" for g in zero_other["gaps"]))
+        # A valid sequence-0 partition (outbox=0, inbox=0, R2 watermark=0 per schema minimum 0) MUST pass CLEAN
+        seq0_row = [
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "zero", "source_sequence": 0, "delivery_key": "k0", "payload_digest": "d0"}
+        ]
+        seq0_res = check_recovery_gaps(
+            seq0_row,
+            [dict(seq0_row[0])],
+            r2_raw_high_water={("refinery_sqlite", "baseline", "zero"): 0},
+        )
+        self.assertEqual(seq0_res["status"], "CLEAN")
         # Explicit partial-store restore scope (expected_streams) tracks other R2 streams without false halt
         partial_ok = check_recovery_gaps(
             outbox,

@@ -85,6 +85,8 @@ def check_recovery_gaps(
     for row in inbox_rows:
         src, branch, part = _stream_key(row)
         seq = int(row["source_sequence"])
+        if seq < 0:
+            raise ValueError(f"inbox source_sequence must be >= 0, got {seq}")
         inbox_seqs_by_stream.setdefault((src, branch, part), []).append(seq)
         key = (src, branch, part, seq)
         if key in inbox_by_key:
@@ -118,6 +120,8 @@ def check_recovery_gaps(
     for row in outbox_rows:
         src, branch, part = _stream_key(row)
         seq = int(row["source_sequence"])
+        if seq < 0:
+            raise ValueError(f"outbox source_sequence must be >= 0, got {seq}")
         outbox_seqs_by_stream.setdefault((src, branch, part), []).append(seq)
         key = (src, branch, part, seq)
         if key in outbox_by_key:
@@ -197,8 +201,8 @@ def check_recovery_gaps(
         src, branch, part = stream
         out_seqs = sorted(set(outbox_seqs_by_stream.get(stream, [])))
         in_seqs = sorted(set(inbox_seqs_by_stream.get(stream, [])))
-        max_out = out_seqs[-1] if out_seqs else 0
-        max_in = in_seqs[-1] if in_seqs else 0
+        max_out: int | None = out_seqs[-1] if out_seqs else None
+        max_in: int | None = in_seqs[-1] if in_seqs else None
 
         for prev, curr in zip(out_seqs, out_seqs[1:]):
             if curr != prev + 1:
@@ -225,7 +229,7 @@ def check_recovery_gaps(
                     "missing_sequences": missing_in_outbox,
                 }
             )
-        if stream not in r2_hw or (r2_hw[stream] == 0 and max_out == 0):
+        if stream not in r2_hw:
             gaps.append(
                 {
                     "kind": "RECOVERY_GAP_MISSING_R2_EVIDENCE",
@@ -235,7 +239,7 @@ def check_recovery_gaps(
                     "outbox_high_water": max_out,
                 }
             )
-        elif r2_hw[stream] > max_out:
+        elif max_out is None or r2_hw[stream] > max_out:
             gaps.append(
                 {
                     "kind": "RECOVERY_GAP_MISSING_OUTBOX_VS_R2",
