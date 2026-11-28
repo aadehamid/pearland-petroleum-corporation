@@ -6,7 +6,7 @@
 | Status | Pending Owner Sign-Off |
 | Report date | `2026-11-28` |
 | Reviewed commit | `88f5fe4` (merged `main`, pull request #33) |
-| Reviewer | Claude Fable 5.2 (`claude-fable-5-2`), independent engineering reviewer. The reviewer did not write the kernel. |
+| Reviewer | Claude Fable 5.2 (`claude-fable-5-2`), AI automated technical reviewer (separate from the night-run coding session that authored commit `88f5fe4`; not a human process-engineering reviewer — see Section 2). |
 | Owner sign-off | Pending. Hamid Adesokan, per [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md). |
 | Governing decisions | [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) `G3-c` and `G3-d`, [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md), [PPC-REVIEW-004](PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) `PO-12a` |
 | Code and data reviewed | `generators/equations.py`, `generators/world_kernel.py`, `fixtures/golden/refinery_a_design_basis.yaml` |
@@ -21,7 +21,7 @@ The following checks pass:
 
 - The CDU/VDU cut split closes mass and sulfur.
 - The FCC 4-lump model closes mass and sulfur, and its heat balance is feasible.
-- HCU C5+ liquid volume gain is 8.19 to 8.64 percent. The band is 4 to 10 percent.
+- HCU C5+ liquid volume gain is 8.19 to 8.64 percent. The kernel's own `po12a_hcu_gain_in_4_to_10` flag checks a 4 to 10 percent band (not defined in `PPC-REVIEW-004` or `ADR-0056`; see Section 2).
 - HCU hydrogen uptake is 1,258 to 1,260 SCF/bbl. The band is 1,000 to 2,500 SCF/bbl.
 - The shared hydrogen header reports zero double allocation.
 - All six `EQ-03` transfer lines are hydraulically feasible.
@@ -39,7 +39,9 @@ I read the three source files at commit `88f5fe4`. I then ran `run_eng_v07_mode_
 
 I also ran `evaluate_refinery_plant_snapshot` for each mode to read values that the evidence file does not contain. These are FCC yields, HCU feed rates, cut volumes and the hydrogen header balance. Section 4 reports them and labels them as reviewer reproduction.
 
-I wrote no files and changed no code. I am an AI model. This report is an engineering review of the code and its outputs against the stated criteria. It is not a certification by a licensed process engineer.
+I wrote no files and changed no code. I am an AI model, not a human process engineer, and repository git metadata records only the owner's account rather than which model authored commit `88f5fe4`. `ADR-0056` `G3-d` and `PPC-REVIEW-004` require `PO-12a` evidence prepared by a process-engineering reviewer who did not write the kernel. An AI automated technical review does not by itself satisfy a human process-engineering reviewer qualification; Hamid Adesokan must decide whether this automated review suffices or whether to commission a separate human process-engineering review before closing `PO-12a`.
+
+`PPC-REVIEW-004` names four benchmark sources for `PO-12a`: EIA PADD 3 gain, Gary–Handwerk, Maples, and GPSA. This report checks only the EIA processing-gain definition and the numeric bands already recorded in `ADR-0056`, `PPC-REVIEW-004`, and the kernel code. Primary editions of Gary–Handwerk, Maples, and GPSA are not pinned in this repository and were not cross-checked here. In addition, the unit-level HCU C5+ gain band of 4 to 10 percent appears only in the kernel's `po12a_hcu_gain_in_4_to_10` flag (`generators/world_kernel.py`), not in `PPC-REVIEW-004` or `ADR-0056`.
 
 Claude Fable 5.2 is also the owner stand-in named in `ADR-0059`. That ADR keeps `PO-12a` sign-off with Hamid Adesokan. This report gives findings and a recommendation. It does not sign.
 
@@ -181,7 +183,7 @@ Plant C3+ gain adds LPG from the crude, the reformer, the FCC and the HCU. That 
 
 ### 5.3 The measurement basis of the PO-12a band
 
-`PO-12a` cites "EIA PADD 3 gain" as its benchmark for the +4 to +10 percent band. The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
+`PPC-REVIEW-004` lists "EIA PADD 3 gain" among four benchmark sources for `PO-12a` alongside the +4 to +10 percent acceptance band without binding that band to a single source. The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
 
 The `PO-12a` text applies that band to C5+ liquids only. On that basis the v1 flowsheet cannot reach +4 percent without changing parameters that `ADR-0056` `G3-c` locks. I did not check which products EIA counts in total output beyond this definition. The owner decision in section 6 should confirm the basis before it is written into `PO-12a`.
 
@@ -189,7 +191,7 @@ The `PO-12a` text applies that band to C5+ liquids only. On that basis the v1 fl
 
 These notes do not change the verdict. They limit how much weight the passing checks can carry.
 
-**HCU gain and hydrogen uptake are inputs, not predictions.** `ADR-0056` locks chemical hydrogen at 2.0 wt% of feed and purge at 0.10 wt%. Those two numbers and the VGO density give 1,258 to 1,260 SCF/bbl directly. The locked product selectivities and product densities give the 8.19 to 8.64 percent gain. The check confirms that the locked parameters sit inside published bands.
+**HCU gain and hydrogen uptake are inputs, not predictions.** `ADR-0056` locks chemical hydrogen at 2.0 wt% of feed and purge at 0.10 wt%. Those two numbers and the VGO density give 1,258 to 1,260 SCF/bbl directly. The locked product selectivities and product densities give the 8.19 to 8.64 percent gain. The check confirms that the locked parameters sit inside the `PPC-REVIEW-004` hydrogen band (1,000 to 2,500 SCF/bbl) and the kernel's unit-level HCU gain flag (4 to 10 percent).
 
 **Some residuals are zero by construction.** In runtime mode the HCU sizes its acid gas stream from the stoichiometric H2S, so the HCU sulfur residual is always zero. The FCC distributes sulfur by fixed fractions that sum to one. The CDU sulfur residual and all mass residuals are real tests.
 
