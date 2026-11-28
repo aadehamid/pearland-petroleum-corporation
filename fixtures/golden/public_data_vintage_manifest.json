@@ -10,7 +10,7 @@
     "start_date": "2024-01-01",
     "end_date": "2025-12-31"
   },
-  "captured_at_utc": "2026-11-28T07:13:49Z",
+  "captured_at_utc": "2026-11-28T07:17:47Z",
   "governing_adrs": [
     "ADR-0051",
     "ADR-0057"
@@ -199,6 +199,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "e1e6afedb0744b93e5dc30e35e649384",
       "provenance_class": "OBSERVED"
     },
     {
@@ -212,6 +213,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "59f216972479a926a73b68189c20899c",
       "provenance_class": "OBSERVED"
     },
     {
@@ -225,6 +227,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "79c7f6fadbc2fb9ac876d75a58bce4a1",
       "provenance_class": "OBSERVED"
     },
     {
@@ -238,6 +241,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "4655b0cc776d414698c68bf03db3f5e3",
       "provenance_class": "OBSERVED"
     },
     {
@@ -251,6 +255,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "9c97aad5e90fcf6596135c9b7f436891",
       "provenance_class": "OBSERVED"
     },
     {
@@ -264,6 +269,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "fd7a0787b85f034993121c2e591a97a2",
       "provenance_class": "OBSERVED"
     },
     {
@@ -277,6 +283,7 @@
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
       "uploaded": true,
+      "r2_etag": "98d2dc873d1196a33108753bfadfb60f",
       "provenance_class": "OBSERVED"
     },
     {
@@ -290,6 +297,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "4e4cdb250262fec7b6cf33ec865a6abd",
       "provenance_class": "OBSERVED"
     },
     {
@@ -303,6 +311,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "0ee5cd6b8ae8168ba3def9b6f96709c1",
       "provenance_class": "OBSERVED"
     },
     {
@@ -316,6 +325,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "216801036abb8e8e9fe4da2eed094785",
       "provenance_class": "OBSERVED"
     },
     {
@@ -329,6 +339,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "2b1ea63a2e3569828b06c21e7afe63fe",
       "provenance_class": "OBSERVED"
     },
     {
@@ -342,6 +353,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "37c7e3228e0eb64a02b53e140c5381a7",
       "provenance_class": "OBSERVED"
     },
     {
@@ -355,6 +367,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "81ff7908dc9a6c940d1c18b848addb11",
       "provenance_class": "OBSERVED"
     },
     {
@@ -368,6 +381,7 @@
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
       "uploaded": true,
+      "r2_etag": "05b46f9c39c83d92379c12dc808c0f46",
       "provenance_class": "OBSERVED"
     },
     {
@@ -381,6 +395,7 @@
       "date_min": "1851",
       "date_max": "2025",
       "uploaded": true,
+      "r2_etag": "2a6ab0d9316f55ff8b41fa232ea54921",
       "provenance_class": "OBSERVED"
     },
     {
@@ -394,8 +409,9 @@
       "date_min": null,
       "date_max": null,
       "uploaded": true,
+      "r2_etag": "c82542f912ea588a5863886de557c3d1",
       "provenance_class": "OBSERVED"
     }
   ],
-  "manifest_sha256": "6cceb486156bed3d13b6e773560f0112e4cf759c808b4bd0d10b952e5a0e7c2f"
+  "manifest_sha256": "1e0d8bb04c9044e744a26a6d715ea63cb02e2fda615813080b0f9ee7bc949955"
 }

@@ -113,8 +113,9 @@ class TestPublicIngest(unittest.TestCase):
                 return json.dumps([{"facility_id": 1000099, "state": "LA", "naics_code": "324110"}]).encode("utf-8")
             raise AssertionError(f"Unexpected URL: {url}")
 
-        def fake_upload(key: str, data: bytes, _ctype: str) -> None:
+        def fake_upload(key: str, data: bytes, _ctype: str) -> str:
             uploaded[key] = data
+            return hashlib.md5(data).hexdigest()
 
         manifest = public_ingest.run_public_ingest(
             vintage="2026-11-28",
@@ -171,24 +172,39 @@ class TestPublicIngest(unittest.TestCase):
             )
 
     def test_committed_vintage_manifest_integrity_and_no_secrets(self):
-        if not MANIFEST_PATH.exists():
-            self.skipTest("Committed vintage manifest not yet generated")
+        self.assertTrue(MANIFEST_PATH.exists(), f"Committed WP-1a vintage manifest missing: {MANIFEST_PATH}")
         raw = MANIFEST_PATH.read_text(encoding="utf-8")
         self.assertNotIn("EIA_API_KEY", raw)
         self.assertNotIn("SECRET_ACCESS_KEY", raw)
         data = json.loads(raw)
         self.assertEqual(data["provenance_class"], "OBSERVED")
         self.assertEqual(data["upload_status"], "UPLOADED_TO_R2")
-        self.assertTrue(all(o["uploaded"] for o in data["objects"]))
+        self.assertTrue(data.get("generator_version"))
+        self.assertTrue(all(o["uploaded"] and o.get("r2_etag") for o in data["objects"]))
         recorded = data.pop("manifest_sha256")
         computed = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
         self.assertEqual(recorded, computed)
         self.assertEqual(data["sources"]["eia"]["series_count"], 14)
+
+        objs_by_name = {o["name"]: o for o in data["objects"]}
         for sid, info in data["sources"]["eia"]["series"].items():
             self.assertGreater(info["row_count"], 0, f"EIA series {sid} returned zero rows")
-        noaa_obj = next(o for o in data["objects"] if o["source"] == "noaa")
+            obj = objs_by_name[sid]
+            self.assertEqual(obj["row_count"], info["row_count"])
+            self.assertEqual(obj["unit"], info["unit"])
+            self.assertEqual(obj["date_min"], info["date_min"])
+            self.assertEqual(obj["date_max"], info["date_max"])
+            self.assertLessEqual(info["min_value"], info["latest_value"])
+            self.assertLessEqual(info["latest_value"], info["max_value"])
+
+        noaa_obj = objs_by_name["hurdat2_atlantic_best_track"]
         self.assertEqual(noaa_obj["row_count"], data["sources"]["noaa"]["total_storms_in_archive"])
+        self.assertEqual(noaa_obj["date_min"], str(data["sources"]["noaa"]["archive_year_min"]))
+        self.assertEqual(noaa_obj["date_max"], str(data["sources"]["noaa"]["archive_year_max"]))
         self.assertGreater(data["sources"]["noaa"]["storms_since_2010"], 100)
+
+        epa_obj = objs_by_name["ghgrp_naics_324110_tx_la"]
+        self.assertEqual(epa_obj["row_count"], data["sources"]["epa"]["row_count"])
         self.assertGreater(data["sources"]["epa"]["unique_facilities"], 10)
 
 

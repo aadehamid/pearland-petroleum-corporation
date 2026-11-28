@@ -153,6 +153,7 @@ class IngestedObject:
     date_min: str | None
     date_max: str | None
     uploaded: bool
+    r2_etag: str | None = None
     provenance_class: str = "OBSERVED"
 
 
@@ -399,7 +400,7 @@ def run_public_ingest(
     end_date: str,
     eia_api_key: str,
     http_get: Callable[[str], bytes],
-    upload_fn: Callable[[str, bytes, str], None] | None = None,
+    upload_fn: Callable[[str, bytes, str], str | None] | None = None,
     phmsa_zip_bytes: bytes | None = None,
     target_bucket: str = "pearland-petroleum-corp",
 ) -> dict[str, Any]:
@@ -421,8 +422,10 @@ def run_public_ingest(
     ):
         r2_key = f"raw/external/{source}/vintage={vintage}/{rel_key}"
         uploaded = upload_fn is not None
+        etag: str | None = None
         if upload_fn is not None:
-            upload_fn(r2_key, payload, content_type)
+            raw_etag = upload_fn(r2_key, payload, content_type)
+            etag = str(raw_etag).strip('"') if raw_etag else None
         ingested.append(
             IngestedObject(
                 source=source,
@@ -435,6 +438,7 @@ def run_public_ingest(
                 date_min=date_min,
                 date_max=date_max,
                 uploaded=uploaded,
+                r2_etag=etag,
             )
         )
 
@@ -585,6 +589,7 @@ def run_public_ingest(
                 "date_min": o.date_min,
                 "date_max": o.date_max,
                 "uploaded": o.uploaded,
+                "r2_etag": o.r2_etag,
                 "provenance_class": o.provenance_class,
             }
             for o in ingested
@@ -627,8 +632,9 @@ def main() -> None:
             raise ValueError("Public raw ingestion must never write to the hidden-truth bucket (ADR-0057)")
         s3 = make_r2_client(r2_env)
 
-        def _put(key: str, data: bytes, ctype: str) -> None:
-            s3.put_object(Bucket=target_bucket, Key=key, Body=data, ContentType=ctype)
+        def _put(key: str, data: bytes, ctype: str) -> str | None:
+            resp = s3.put_object(Bucket=target_bucket, Key=key, Body=data, ContentType=ctype)
+            return str(resp.get("ETag", "")).strip('"') or None
 
         upload_fn = _put
 
