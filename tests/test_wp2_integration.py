@@ -107,12 +107,18 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 }
 
                 # 3. PO-03 Crash Point 1: DB commit succeeds, NATS ack fails -> redelivery is IDEMPOTENT_DUPLICATE
+                # Redelivering with a higher source_sequence (50) MUST NOT advance captured_seq or durable_seq!
                 with self.assertRaises(RuntimeError):
                     inbox.consume_event(ev1, inject_crash_after_staging_before_ack=True)
                 self.assertEqual(inbox.staging_count(), 1)
-                redeliv = inbox.consume_event(ev1)
+                redeliv_ev = dict(ev1, source_sequence=50)
+                redeliv = inbox.consume_event(redeliv_ev)
                 self.assertEqual(redeliv.status, "IDEMPOTENT_DUPLICATE")
                 self.assertEqual(inbox.staging_count(), 1)
+                self.assertEqual(
+                    inbox.watermarks("refinery_sqlite", "baseline"),
+                    {"captured_seq": 1, "durable_seq": 1, "applied_seq": 1, "published_seq": 0},
+                )
 
                 # 4. Same delivery_key + different digest -> idempotent CONFLICT_QUARANTINED (5 retries -> 1 row)
                 tampered = dict(ev1)
@@ -124,10 +130,11 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(inbox.staging_count(), 1)
 
                 # 5. Server-tracked revision monotonicity: forward gap AND regression BOTH quarantine
+                # AND neither advances captured_seq or durable_seq past applied_seq (INT-001 §2)!
                 ooo = dict(ev1)
                 ooo["delivery_key"] = "refinery_sqlite:baseline:unit:4B:rev3"
                 ooo["event_id"] = "EV-OOO-3"
-                ooo["source_sequence"] = 2
+                ooo["source_sequence"] = 99
                 ooo["source_revision"] = 3
                 self.assertEqual(inbox.consume_event(ooo).reason, "OUT_OF_ORDER_REVISION")
 
@@ -138,6 +145,10 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 reg["source_revision"] = 1
                 self.assertEqual(inbox.consume_event(reg).reason, "STALE_OR_DUPLICATE_REVISION")
                 self.assertEqual(inbox.staging_count(), 1)
+                self.assertEqual(
+                    inbox.watermarks("refinery_sqlite", "baseline"),
+                    {"captured_seq": 1, "durable_seq": 1, "applied_seq": 1, "published_seq": 0},
+                )
 
                 # 6. PO-03 Crash Point 2a (crash AFTER pin BEFORE sink):
                 # txn v1 pins row 1 and crashes before calling sink -> txn v2 MUST NOT claim row 1!
@@ -254,7 +265,11 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
             self.assertIsNone(
                 pub.ingest_sample(tag, 100.05, "Good", "2026-06-15T08:02:00Z", "2026-06-15T08:02:00Z", "2026-06-15T08:02:01Z")
             )
-            bad = pub.ingest_sample(tag, 100.05, "Bad", "2026-06-15T08:03:00Z", "2026-06-15T08:03:00Z", "2026-06-15T08:03:01Z")
+            # OT-02 exact inclusive boundary (100.11 - 100.0 == 0.11 deadband) MUST publish without float-rounding suppression!
+            exact_edge = pub.ingest_sample(tag, 100.11, "Good", "2026-06-15T08:02:30Z", "2026-06-15T08:02:30Z", "2026-06-15T08:02:31Z")
+            self.assertIsNotNone(exact_edge)
+            self.assertEqual(exact_edge.value, 100.11)
+            bad = pub.ingest_sample(tag, 100.11, "Bad", "2026-06-15T08:03:00Z", "2026-06-15T08:03:00Z", "2026-06-15T08:03:01Z")
             self.assertIsNotNone(bad)
             self.assertEqual(bad.quality, "Bad")
 

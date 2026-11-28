@@ -15,6 +15,7 @@ import math
 import os
 import tempfile
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -55,17 +56,18 @@ class SparkplugOTPublisher:
                 raise AmbiguousTagError(f"OT-01: tag {name!r} missing unambiguous equipment_id")
             unit = str(t.get("native_unit") or t.get("unit") or "")
             if "deadband" in t and t["deadband"] is not None:
-                deadband = float(t["deadband"])
+                deadband = Decimal(str(t["deadband"]))
             elif "eu_range" in t and "deadband_pct" in t:
-                lo, hi = float(t["eu_range"][0]), float(t["eu_range"][1])
-                deadband = (hi - lo) * float(t["deadband_pct"]) / 100.0
+                lo, hi = Decimal(str(t["eu_range"][0])), Decimal(str(t["eu_range"][1]))
+                deadband = (hi - lo) * Decimal(str(t["deadband_pct"])) / Decimal("100")
             else:
-                deadband = 0.0
+                deadband = Decimal("0")
             self.tags_by_name[name] = {
                 **dict(t),
                 "tag_name": name,
                 "unit": unit,
-                "deadband": deadband,
+                "deadband": float(deadband),
+                "deadband_decimal": deadband,
             }
 
         self.buffer_path = Path(buffer_path) if buffer_path is not None else None
@@ -212,10 +214,12 @@ class SparkplugOTPublisher:
         if not self.connected:
             return None
 
-        deadband = float(meta["deadband"])
+        deadband_dec: Decimal = meta["deadband_decimal"]
         prev = self._last_published.get(tag_name)
         quality_changed = (prev is None) or (prev[1] != quality)
-        exceeds_deadband = (prev is None) or (abs(value - prev[0]) >= deadband)
+        exceeds_deadband = (prev is None) or (
+            abs(Decimal(str(value)) - Decimal(str(prev[0]))) >= deadband_dec
+        )
         if not quality_changed and not exceeds_deadband:
             return None
 

@@ -161,9 +161,6 @@ class AtomicStagingInboxService:
         cur = self.conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
         try:
-            self._upsert_watermark(cur, src, branch, "captured_seq", seq)
-            self._upsert_watermark(cur, src, branch, "durable_seq", seq)
-
             existing = cur.execute(
                 "SELECT payload_digest, event_id FROM inbox_receipts WHERE delivery_key = ?",
                 (dkey,),
@@ -220,6 +217,10 @@ class AtomicStagingInboxService:
                     payload_digest=digest,
                     reason=reason,
                 )
+
+            # Advance captured/durable/applied watermarks ONLY for accepted, in-order events (INT-001 §2)
+            self._upsert_watermark(cur, src, branch, "captured_seq", seq)
+            self._upsert_watermark(cur, src, branch, "durable_seq", seq)
 
             cur.execute(
                 """
