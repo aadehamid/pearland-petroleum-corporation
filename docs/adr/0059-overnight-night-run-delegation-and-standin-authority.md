@@ -44,3 +44,7 @@ The owner (Hamid Adesokan) recorded the following instructions verbatim in [docs
 - Each stand-in ruling is saved verbatim under `docs/adr/answers/` and recorded in an ADR marked `authority: Owner-delegated stand-in (...)` so the owner can review or reverse any delegated decision afterward.
 - The two owner steps kept in the 23:39 CST brief remain with Hamid Adesokan: `PO-12a` owner sign-off at `WP-1` exit (log the independent benchmark report and continue unblocked work) and live LLM endpoint selection before `WP-3B` live-model wiring (do not start live LLM calls; offline recorded fixtures only).
 - Every stop condition from the approved 23:39 CST brief remains in force verbatim: a question evidence cannot settle; spending money or paid tiers; deleting remote data; rewriting `main`; any `after-merge.sh` refusal; `PO-12a` owner sign-off (log report and continue unblocked work); live LLM endpoint choice before `WP-3B` live-model wiring (do not start live LLM calls; offline recorded fixtures only). The brief's instruction to never commit or print secrets from `/Users/hamidadesokan/.config` also remains in force.
+
+## Clarification note (2026-11-28)
+
+- Clarified by [ADR-0062](0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md): the two owner gates reserved in this ADR (`PO-12a` owner sign-off and `WP-3B` live LLM endpoint selection) are now decided directly by Hamid Adesokan.

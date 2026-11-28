@@ -3,12 +3,12 @@
 | Document control | Value |
 |---|---|
 | Document ID | `PPC-REVIEW-005` |
-| Status | Pending Owner Sign-Off |
+| Status | Accepted with Conditions (Owner Signed 2026-11-28) |
 | Report date | `2026-11-28` |
 | Reviewed commit | `88f5fe4` (merged `main`, pull request #33) |
 | Reviewer | Claude Fable 5.2 (`claude-fable-5-2`), AI automated technical reviewer (separate from the night-run coding session that authored commit `88f5fe4`; not a human process-engineering reviewer — see Section 2). |
-| Owner sign-off | Pending. Hamid Adesokan, per [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md). |
-| Governing decisions | [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) `G3-c` and `G3-d`, [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md), [PPC-REVIEW-004](PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) `PO-12a` |
+| Owner sign-off | Signed by Hamid Adesokan on `2026-11-28` (accepted with conditions; see Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| Governing decisions | [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) `G3-c` and `G3-d`, [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md), [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md), [PPC-REVIEW-004](PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) `PO-12a` |
 | Code and data reviewed | `generators/equations.py`, `generators/world_kernel.py`, `fixtures/golden/refinery_a_design_basis.yaml` |
 | Evidence file | `/tmp/ppc_po12a_benchmark_main.json`, the output of `run_eng_v07_mode_benchmark`, copied in full in Appendix A |
 | Provenance class | `SYNTHETIC`. Pearland Petroleum Corporation is fictional. No value in this report describes a real refinery. |
@@ -247,12 +247,12 @@ A separate pull request can make these changes to the benchmark. None of them ch
 
 | Item | Entry |
 |---|---|
-| Decision 1 (A, B or C, with the basis and band if A) | |
-| Decision 2 (1, 2 or 3) | |
-| `PO-12a` disposition (accepted, accepted with conditions, or returned) | |
-| Conditions | |
-| Signed: Hamid Adesokan, PPC owner | |
-| Date | |
+| Decision 1 (A, B or C, with the basis and band if A) | Option A — restate `PO-12a` plant gain to plant C3+ volumetric gain `+2.5%` to `+4.5%` and formally register unit-level HCU C5+ gain `+4%` to `+10%` ([ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| Decision 2 (1, 2 or 3) | Option 1 — accept `22.09 wt%` FCC gas yield at the `532 °C` / `7.0` CTO holdout point as expected above nominal severity, and add FCC yield checks to the benchmark gate ([ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| `PO-12a` disposition (accepted, accepted with conditions, or returned) | Accepted with conditions for v1 synthetic qualification. |
+| Conditions | Implement the three non-physics benchmark follow-ups in Section 6 (include HCU H2 draw in header zero-double-allocation check; add FCC yields, `1e-9` residual tolerance test, restated `ADR-0062` gain bands, and plant-wide mass/sulfur balance to the gate; report whether a cap actively limits HCU feed). Note that review evidence is an AI automated technical review rather than a human process-engineering review (Section 2). |
+| Signed: Hamid Adesokan, PPC owner | Hamid Adesokan (recorded verbatim in [docs/adr/answers/2026-11-28-owner-po12a-llm-and-hosting-decisions.md](../../adr/answers/2026-11-28-owner-po12a-llm-and-hosting-decisions.md) and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)) |
+| Date | `2026-11-28` |
 
 ## Appendix A. Evidence file
 

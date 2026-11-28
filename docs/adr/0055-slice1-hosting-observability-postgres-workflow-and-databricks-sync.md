@@ -35,3 +35,7 @@ Claude Fable 2, acting as owner stand-in (`docs/adr/answers/2026-11-26-claude-fa
 ## Relation-verb reconciliation note (2026-11-27)
 
 - Owner confirmed in [2026-11-27-adr-consistency-rulings.md](answers/2026-11-27-adr-consistency-rulings.md) (`"Yes to all by the way"`): frontmatter and `docs/adr/README.md` align with Consequences and `G2-b` (`amends: ADR-0051`; clarifies `ADR-0045`; stages `ADR-0048`).
+
+## Amendment note (2026-11-28)
+
+- Amended by [ADR-0062](0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md): Slice 1 qualification runs on local Mac Docker Compose (`infra/docker-compose.yml`) at `$0` extra spend while keeping the existing `$15/month` `exe.dev` plan untouched until an always-on remote VM is needed; the `WP-3B` live LLM endpoint is locked to OpenRouter `"thinkingmachines/inkling-small"`.
