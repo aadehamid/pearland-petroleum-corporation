@@ -41,10 +41,10 @@ def _format_utc(dt: datetime) -> str:
 
 
 def _role_allowed(reader_role: str, allowed_roles: Any) -> bool:
-    """Fail-closed RBAC membership check: bare strings or non-iterables NEVER match."""
+    """Fail-closed RBAC membership check: bare strings, bytes, Mappings, and non-iterables NEVER match."""
     if not isinstance(reader_role, str) or not reader_role:
         return False
-    if isinstance(allowed_roles, (str, bytes, bytearray)) or not isinstance(allowed_roles, Iterable):
+    if isinstance(allowed_roles, (str, bytes, bytearray, Mapping)) or not isinstance(allowed_roles, Iterable):
         return False
     return any(isinstance(r, str) and r == reader_role for r in allowed_roles)
 
@@ -85,21 +85,25 @@ def build_filtered_graph_package(
         if not _role_allowed(reader_role, n.get("allowed_roles")):
             continue
         raw_props = dict(n.get("properties", {}))
-        prop_roles_raw = n.get("property_allowed_roles", {})
-        prop_roles: Mapping[str, Any] = prop_roles_raw if isinstance(prop_roles_raw, Mapping) else {}
-        clean_props = {
-            str(k): v
-            for k, v in raw_props.items()
-            if not str(k).startswith("_")
-            and (str(k) not in prop_roles or _role_allowed(reader_role, prop_roles[str(k)]))
-        }
         node_id = str(n["id"])
         raw_name = str(n.get("name", node_id))
-        safe_name = (
-            raw_name
-            if ("name" not in prop_roles or _role_allowed(reader_role, prop_roles["name"]))
-            else node_id
-        )
+        if "property_allowed_roles" in n and not isinstance(n["property_allowed_roles"], Mapping):
+            # Fail closed when property_allowed_roles container is malformed: emit zero properties and redact name
+            clean_props = {}
+            safe_name = node_id
+        else:
+            prop_roles: Mapping[str, Any] = n.get("property_allowed_roles") or {}
+            clean_props = {
+                str(k): v
+                for k, v in raw_props.items()
+                if not str(k).startswith("_")
+                and (str(k) not in prop_roles or _role_allowed(reader_role, prop_roles[str(k)]))
+            }
+            safe_name = (
+                raw_name
+                if ("name" not in prop_roles or _role_allowed(reader_role, prop_roles["name"]))
+                else node_id
+            )
         clean_node = {
             "id": node_id,
             "label": str(n["label"]),

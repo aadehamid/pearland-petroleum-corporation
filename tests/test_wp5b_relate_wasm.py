@@ -205,6 +205,42 @@ class TestWP5BRelateWasmExplorer(unittest.TestCase):
         )
         self.assertEqual(pkg_comm["nodes"], [])
 
+        # Malformed property_allowed_roles container (non-Mapping) AND dict-shaped allowed_roles MUST fail closed!
+        malformed_nodes = [
+            {
+                "id": "MALFORMED-PROP-ROLES",
+                "label": "Contract",
+                "name": "SECRET_NAME_MUST_REDACT",
+                "branch_id": "baseline",
+                "published_at_utc": "2026-06-15T08:00:00Z",
+                "allowed_roles": ("Planner",),
+                "properties": {"margin_secret": "TOP_SECRET_MALFORMED"},
+                "property_allowed_roles": "Executive",  # non-Mapping container -> drop all properties & redact name
+            },
+            {
+                "id": "DICT-ROLE-DENY",
+                "label": "Contract",
+                "name": "DICT_DENY_SECRET",
+                "branch_id": "baseline",
+                "published_at_utc": "2026-06-15T08:00:00Z",
+                "allowed_roles": {"Planner": False},  # Mapping role collection -> MUST fail closed!
+            },
+        ]
+        pkg_mal = mod.build_filtered_graph_package(
+            branch_id="baseline",
+            reader_role="Planner",
+            reader_cutoff_utc=cutoff,
+            nodes=malformed_nodes,
+            edges=[],
+        )
+        raw_mal = json.dumps(pkg_mal)
+        self.assertNotIn("TOP_SECRET_MALFORMED", raw_mal)
+        self.assertNotIn("SECRET_NAME_MUST_REDACT", raw_mal)
+        self.assertNotIn("DICT_DENY_SECRET", raw_mal)
+        self.assertEqual([n["id"] for n in pkg_mal["nodes"]], ["MALFORMED-PROP-ROLES"])
+        self.assertEqual(pkg_mal["nodes"][0]["properties"], {})
+        self.assertEqual(pkg_mal["nodes"][0]["name"], "MALFORMED-PROP-ROLES")
+
         # Cutoff BEFORE retraction (08:45Z) sees RETRACTED-NODE, RETRACTED_EDGE, and CARD-RETRACTED
         pkg_early = mod.build_filtered_graph_package(
             branch_id="baseline",
