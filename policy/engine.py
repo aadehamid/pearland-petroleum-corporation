@@ -9,7 +9,8 @@ Reads schemas/policy_thresholds.yaml directly and enforces server-side:
 - Required numeric estimates per action class: missing estimate counts as exceeded and escalates tier.
 - Payload-to-metrics cross-check (_effective_metrics) prevents smuggling large payloads under small metrics;
   payload_digest binds the canonical payload and is verified at authorization and execution;
-  expected_source_revision and policy_version are persisted and verified at authorization/execution;
+  expected_source_revision is persisted on the proposal and verified at execution, while policy_version
+  is persisted on proposal and authorization rows and verified at both authorization and execution;
   metrics and decision_id are persisted on action_proposals (metrics conservatively merged at submission).
 - proposer != approver and agents can never approve; supports session-bound authorization via AuthRBACStore.
 - Clean single-use ActionReceipt execution with transaction rollback on error and mandatory
@@ -76,6 +77,13 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                 merged[field] = float(p_val)
         elif p_val is not None and m_val is None:
             merged[field] = float(p_val)
+    # Reject non-finite auxiliary numeric payload fields too (NaN/Inf smuggling guard)
+    for aux_field in ("feed_bbl_per_day", "baseline_feed_bbl_per_day", "pinned_price_usd_per_bbl"):
+        aux_val = payload.get(aux_field)
+        if aux_val is not None:
+            af = float(aux_val)
+            if not math.isfinite(af):
+                raise ValueError(f"Non-finite payload field {aux_field}={aux_val!r}")
     # Guard against smuggling a huge feed_bbl_per_day target inside payload while reporting a tiny delta
     if payload.get("feed_bbl_per_day") is not None and merged.get("rate_change_bbl_per_day") is not None:
         if payload.get("baseline_feed_bbl_per_day") is not None:

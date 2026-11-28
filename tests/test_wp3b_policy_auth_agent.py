@@ -243,17 +243,26 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                         now_utc=t0 + timedelta(minutes=9),
                     )
                     self.assertNotEqual(p_auto_nonzero["authority_class"], "AUTO_EXECUTE")
-                with self.assertRaises(ValueError):
-                    gate.submit_proposal(
-                        proposal_id="AUTO-NAN",
-                        branch_id="baseline",
-                        action_type="raise_alert",
-                        proposer_id="usr-agent-1",
-                        proposer_is_agent=True,
-                        payload={"margin_effect_usd": float("nan")},
-                        metrics={"margin_effect_usd": float("nan")},
-                        now_utc=t0 + timedelta(minutes=9),
-                    )
+                for bad_field, bad_val in (
+                    ("margin_effect_usd", float("nan")),
+                    ("margin_effect_usd", float("inf")),
+                    ("margin_effect_usd", float("-inf")),
+                    ("feed_bbl_per_day", float("nan")),
+                    ("feed_bbl_per_day", float("inf")),
+                    ("baseline_feed_bbl_per_day", float("nan")),
+                    ("pinned_price_usd_per_bbl", float("inf")),
+                ):
+                    with self.assertRaises(ValueError):
+                        gate.submit_proposal(
+                            proposal_id=f"AUTO-NONFINITE-{bad_field}-{bad_val}",
+                            branch_id="baseline",
+                            action_type="raise_alert",
+                            proposer_id="usr-agent-1",
+                            proposer_is_agent=True,
+                            payload={bad_field: bad_val},
+                            metrics={bad_field: bad_val} if bad_field == "margin_effect_usd" else {},
+                            now_utc=t0 + timedelta(minutes=9),
+                        )
 
                 # 10. AUTO_EXECUTE hourly rate cap (20/agent/hour) enforced BOTH at classification AND on bulk-submit execution!
                 for i in range(25):
