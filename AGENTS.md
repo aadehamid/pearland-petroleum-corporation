@@ -14,7 +14,7 @@ Run `scripts/check.sh` before every push. CI runs the same script. Use `REVIEW_S
 
 1. `README.md` and `GLOSSARY.md` (canonical domain vocabulary)
 2. `docs/PPC-000_Master_Index_and_Architecture_Guide.md`
-3. `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` and `docs/adr/README.md` (`ADR-0040` onward, preserving `docs/PPC-REG-001_Architecture_Decision_Register.md` verbatim)
+3. `docs/enterprise-architecture/00-master-index/PPC-ARCH-000_Master_Architecture_Index_and_Authority_Baseline.md` and `docs/adr/README.md` (`ADR-0040` onward, preserving `docs/PPC-REG-001_Architecture_Decision_Register.md` verbatim). To see which later decisions changed a decision, run `scripts/adr_graph.py changed ADR-NNN`
 4. `docs/PPC-015_Three_Repository_Operating_Model.md`
 5. `docs/PPC-016_Evidence_Decision_Provenance_and_Evaluation_Architecture.md` before working on evidence, decision provenance, agents or evaluations.
 6. `docs/PPC-017_EPM_Dependency_Semantic_Authority_and_Process_Conformance_Contract.md` before consuming EPM artifacts, defining KPIs or validating process behavior.

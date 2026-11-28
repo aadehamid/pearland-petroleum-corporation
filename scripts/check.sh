@@ -28,6 +28,11 @@ echo "== check guard and pre-push hook =="
 (cd scripts && python3 -m unittest test_tree_state test_pre_push_hook)
 
 echo
+echo "== ADR graph =="
+(cd scripts && python3 -m unittest -q test_adr_graph)
+python3 scripts/adr_graph.py summary
+
+echo
 echo "== project memory =="
 command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; the memory tests that need it skip, the rest run"
 (cd scripts && python3 -m unittest test_memory)
