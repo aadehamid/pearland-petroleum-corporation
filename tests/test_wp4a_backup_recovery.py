@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline tests for WP-4A R2 op budget check (C9), RECOVERY_GAP checker, and stub restore drill."""
+"""Verification tests for WP-4A R2 op-budget (C9), RECOVERY_GAP checker, and stub restore drill."""
 from __future__ import annotations
 
 import unittest
@@ -12,52 +12,82 @@ from infra.backup.stub_restore_drill import run_sqlite_stub_restore_drill
 class TestWP4ABackupAndRecovery(unittest.TestCase):
     def test_c9_slice1_60s_backup_cadence_stays_inside_r2_free_tier(self):
         report = evaluate_r2_op_budget()
-        self.assertEqual(report["provenance_class"], "DERIVED")
+        self.assertEqual(report["provenance_class"], "ESTIMATED")
         self.assertEqual(report["status"], "PASSED")
         self.assertTrue(report["within_free_tier"])
         self.assertTrue(report["within_safety_margin"])
         self.assertLess(report["total_monthly_class_a_ops"], 500_000)
 
-        # Negative test: 1-second sync across 1 stream exceeds 1,000,000 Class A ops/month
-        bad = evaluate_r2_op_budget([SyncStreamSpec("too_fast", 1, 1, "1s flood")])
-        self.assertEqual(bad["status"], "EXCEEDED")
+        # Safety-margin-only zone (between 500k and 1M) must be distinguished from free-tier exceeded
+        margin_only = evaluate_r2_op_budget(
+            streams=(SyncStreamSpec("mid_freq", 30, 6, "535k ops/month"),),
+        )
+        self.assertTrue(margin_only["within_free_tier"])
+        self.assertFalse(margin_only["within_safety_margin"])
+        self.assertEqual(margin_only["status"], "SAFETY_MARGIN_EXCEEDED")
+
+        # Aggressive 1-second sync must be flagged as FREE_TIER_EXCEEDED
+        bad = evaluate_r2_op_budget(streams=(SyncStreamSpec("too_fast", 1, 1, "1s flood"),))
+        self.assertEqual(bad["status"], "FREE_TIER_EXCEEDED")
         self.assertFalse(bad["within_free_tier"])
 
-    def test_recovery_gap_checker_detects_missing_receipts_holes_and_digest_conflicts(self):
+    def test_recovery_gap_checker_detects_missing_receipts_tail_loss_holes_dups_and_conflicts(self):
         outbox = [
-            {"source_system": "logistics_mysql", "branch_id": "baseline", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "aaa"},
-            {"source_system": "logistics_mysql", "branch_id": "baseline", "source_sequence": 2, "delivery_key": "k2", "payload_digest": "bbb"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "d1"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 2, "delivery_key": "k2", "payload_digest": "d2"},
         ]
-        inbox = [
-            {"source_system": "logistics_mysql", "branch_id": "baseline", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "aaa"},
-            {"source_system": "logistics_mysql", "branch_id": "baseline", "source_sequence": 2, "delivery_key": "k2", "payload_digest": "bbb"},
-        ]
+        inbox = [dict(r) for r in outbox]
         self.assertEqual(check_recovery_gaps(outbox, inbox)["status"], "CLEAN")
 
-        # Missing InboxReceipt for sequence 2 -> RECOVERY_GAP
+        # 1. Missing receipt for seq 2 -> RECOVERY_GAP_UNAPPLIED_OUTBOX
         missing = check_recovery_gaps(outbox, inbox[:1])
         self.assertEqual(missing["status"], "RECOVERY_GAP")
         self.assertEqual(missing["gaps"][0]["kind"], "RECOVERY_GAP_UNAPPLIED_OUTBOX")
 
-        # Sequence hole (1 -> 3 skipping 2) -> RECOVERY_GAP_SEQUENCE_HOLE
-        hole_out = [outbox[0], {**outbox[1], "source_sequence": 3, "delivery_key": "k3"}]
-        hole_in = [inbox[0], {**inbox[1], "source_sequence": 3, "delivery_key": "k3"}]
-        hole = check_recovery_gaps(hole_out, hole_in)
-        self.assertEqual(hole["status"], "RECOVERY_GAP")
-        self.assertEqual(hole["gaps"][0]["kind"], "RECOVERY_GAP_SEQUENCE_HOLE")
+        # 2. Lost outbox tail (inbox has seq 1..3, restored outbox truncated at 1..2) -> RECOVERY_GAP_MISSING_OUTBOX_TAIL
+        inbox_tail = inbox + [
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 3, "delivery_key": "k3", "payload_digest": "d3"}
+        ]
+        tail_loss = check_recovery_gaps(outbox, inbox_tail)
+        self.assertEqual(tail_loss["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_TAIL" for g in tail_loss["gaps"]))
 
-        # Digest mismatch -> PAYLOAD_DIGEST_CONFLICT
-        bad_in = [inbox[0], {**inbox[1], "payload_digest": "CORRUPT"}]
-        conflict = check_recovery_gaps(outbox, bad_in)
+        # 3. R2 raw log proves higher sequence than restored outbox -> RECOVERY_GAP_MISSING_OUTBOX_VS_R2
+        r2_tail = check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline"): 4})
+        self.assertEqual(r2_tail["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_VS_R2" for g in r2_tail["gaps"]))
+
+        # 4. Sequence hole (1 -> 3) -> RECOVERY_GAP_SEQUENCE_HOLE
+        hole_outbox = [outbox[0], {**outbox[1], "source_sequence": 3, "delivery_key": "k3"}]
+        hole_inbox = [inbox[0], {**inbox[1], "source_sequence": 3, "delivery_key": "k3"}]
+        hole = check_recovery_gaps(hole_outbox, hole_inbox)
+        self.assertEqual(hole["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_SEQUENCE_HOLE" for g in hole["gaps"]))
+
+        # 5. Delivery key mismatch at same sequence -> DELIVERY_KEY_MISMATCH
+        dkey_bad = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "delivery_key": "k2-other"}])
+        self.assertEqual(dkey_bad["status"], "RECOVERY_GAP")
+        self.assertTrue(any(c["kind"] == "DELIVERY_KEY_MISMATCH" for c in dkey_bad["conflicts"]))
+
+        # 6. Duplicate outbox sequence with distinct delivery_key -> duplicate_outbox
+        dup_outbox = outbox + [{**outbox[0], "delivery_key": "k1-dup"}]
+        dup_res = check_recovery_gaps(dup_outbox, inbox)
+        self.assertEqual(dup_res["status"], "RECOVERY_GAP")
+        self.assertEqual(len(dup_res["duplicate_outbox"]), 1)
+
+        # 7. Digest conflict -> PAYLOAD_DIGEST_CONFLICT
+        conflict = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "payload_digest": "DIFFERENT"}])
         self.assertEqual(conflict["status"], "RECOVERY_GAP")
         self.assertEqual(conflict["conflicts"][0]["kind"], "PAYLOAD_DIGEST_CONFLICT")
 
     def test_sqlite_stub_writer_corruption_and_restore_drill_passes(self):
-        drill = run_sqlite_stub_restore_drill(row_count=30)
-        self.assertEqual(drill["status"], "PASSED")
-        self.assertTrue(drill["hash_equal"])
-        self.assertTrue(drill["rto_within_1h_target"])
-        self.assertEqual(drill["recovery_gap_status"], "CLEAN")
+        result = run_sqlite_stub_restore_drill(row_count=25)
+        self.assertEqual(result["status"], "PASSED")
+        self.assertEqual(result["provenance_class"], "SYNTHETIC")
+        self.assertTrue(result["hash_equal"])
+        self.assertTrue(result["rto_within_1h_target"])
+        self.assertEqual(result["recovery_gap_status"], "CLEAN")
+        self.assertLess(result["rto_seconds"], 60.0)
 
 
 if __name__ == "__main__":

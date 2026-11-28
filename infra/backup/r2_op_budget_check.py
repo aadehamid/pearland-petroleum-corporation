@@ -2,8 +2,13 @@
 """WP-4A Cloudflare R2 free-tier Class A write-operation budget check (C9, ADR-0055).
 
 Verifies that the 60-second SQLite Litestream / Postgres WAL / MySQL binlog /
-hourly OTel Collector + daily Neo4j dump sync cadences stay comfortably inside
-the Cloudflare R2 free-tier monthly Class A operation allowance (1,000,000/month).
+hourly OTel Collector + daily Neo4j dump sync cadences (governed by PPC-REVIEW-003 §2
+and ADR-0055) stay comfortably inside the Cloudflare R2 free-tier monthly Class A
+operation allowance (1,000,000/month, per Cloudflare R2 pricing docs).
+
+Provenance note: sync cadences are governed by PPC-REVIEW-003 §2, while per-sync
+Class A op counts are conservative operational estimates, so the resulting monthly
+total is classified as ESTIMATED rather than DERIVED.
 """
 from __future__ import annotations
 
@@ -60,14 +65,21 @@ def evaluate_r2_op_budget(
     utilization_pct = 100.0 * total_ops / monthly_limit
     within_free_tier = total_ops <= monthly_limit
     within_safety_margin = total_ops <= int(monthly_limit * safety_margin_ratio)
+    if not within_free_tier:
+        status = "FREE_TIER_EXCEEDED"
+    elif not within_safety_margin:
+        status = "SAFETY_MARGIN_EXCEEDED"
+    else:
+        status = "PASSED"
     return {
-        "provenance_class": "DERIVED",
+        "provenance_class": "ESTIMATED",
+        "input_basis": "ESTIMATED_OP_COUNTS_ON_GOVERNED_CADENCES",
         "monthly_free_tier_limit": monthly_limit,
         "conservative_days": DAYS_PER_MONTH,
         "total_monthly_class_a_ops": total_ops,
         "utilization_pct": round(utilization_pct, 2),
         "within_free_tier": within_free_tier,
         "within_safety_margin": within_safety_margin,
-        "status": "PASSED" if (within_free_tier and within_safety_margin) else "EXCEEDED",
+        "status": status,
         "breakdown": breakdown,
     }
