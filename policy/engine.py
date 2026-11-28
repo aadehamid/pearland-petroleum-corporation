@@ -3,12 +3,15 @@
 
 Reads schemas/policy_thresholds.yaml directly and enforces server-side:
 - PROHIBITED actions always resolve to DENIED (never approvable or executable).
+- AUTO_EXECUTE enforces zero physical/commercial/financial effect limits AND the 20/agent/logical-hour
+  rate cap at BOTH classification and execution time.
 - Required numeric estimates per action class: missing estimate counts as exceeded and escalates tier.
-- Payload-to-metrics binding: payload numeric magnitudes are cross-checked against metrics (conservative max),
-  and payload, metrics, decision_id, expected_source_revision, and policy_version are bound into payload_digest.
+- Payload-to-metrics cross-check (_effective_metrics) prevents smuggling large payloads under small metrics;
+  payload_digest binds the canonical payload, while metrics, decision_id, expected_source_revision, and
+  policy_version are persisted and verified as bound columns on action_proposals/action_authorizations.
 - proposer != approver and agents can never approve; supports session-bound authorization via AuthRBACStore.
-- Clean single-use ActionReceipt execution with transaction rollback on error, hourly AUTO_EXECUTE rate cap,
-  source-revision freshness check, and policy_version match.
+- Clean single-use ActionReceipt execution with transaction rollback on error, mandatory current_source_revision
+  freshness check (fails closed if omitted), and policy_version verification.
 """
 from __future__ import annotations
 
@@ -175,9 +178,27 @@ class PolicyGateService:
             }
 
         if action_type in classes["AUTO_EXECUTE"]["allowed_actions"]:
-            max_hr = int(classes["AUTO_EXECUTE"]["limits"]["max_executions_per_agent_per_logical_hour"])
-            if proposer_id and now_utc and self._auto_execute_count_last_hour(proposer_id, now_utc) >= max_hr:
-                # Rate limit exceeded -> escalate to Tier 1 approval
+            auto_lim = classes["AUTO_EXECUTE"]["limits"]
+            max_hr = int(auto_lim["max_executions_per_agent_per_logical_hour"])
+            exceeds_auto_limits = (
+                abs(float(eff_metrics.get("volume_bbl_60f") or 0.0)) > float(auto_lim["max_volume_bbl_60f"])
+                or abs(float(eff_metrics.get("margin_effect_usd") or 0.0)) > float(auto_lim["max_margin_effect_usd"])
+                or abs(float(eff_metrics.get("notional_usd") or 0.0)) > float(auto_lim["max_notional_usd"])
+                or abs(float(eff_metrics.get("rate_change_bbl_per_day") or 0.0)) > 0.0
+            )
+            rate_exceeded = bool(
+                proposer_id and now_utc and self._auto_execute_count_last_hour(proposer_id, now_utc) >= max_hr
+            )
+            if not exceeds_auto_limits and not rate_exceeded:
+                return {
+                    "authority_class": "AUTO_EXECUTE",
+                    "policy_result": "AUTO_EXECUTED",
+                    "tier": 0,
+                    "required_approver_role": None,
+                    "expiry_minutes": None,
+                    "policy_version": self.policy_version,
+                }
+            if rate_exceeded and not exceeds_auto_limits:
                 t1 = classes["REQUIRE_APPROVAL_TIER_1"]
                 return {
                     "authority_class": "REQUIRE_APPROVAL",
@@ -188,14 +209,7 @@ class PolicyGateService:
                     "policy_version": self.policy_version,
                     "rate_limit_escalated": True,
                 }
-            return {
-                "authority_class": "AUTO_EXECUTE",
-                "policy_result": "AUTO_EXECUTED",
-                "tier": 0,
-                "required_approver_role": None,
-                "expiry_minutes": None,
-                "policy_version": self.policy_version,
-            }
+            # Exceeding AUTO_EXECUTE zero-effect limits falls through to higher-tier evaluation/escalation!
 
         required = REQUIRED_ACTION_METRICS.get(action_type, ("margin_effect_usd",))
         missing_required = any(eff_metrics.get(k) is None for k in required)
@@ -487,12 +501,32 @@ class PolicyGateService:
             if prop["policy_version"] != self.policy_version:
                 cur.execute("ROLLBACK")
                 return {"status": "DENIED", "reason": "POLICY_VERSION_MISMATCH"}
-            eff_rev = current_source_revision if current_source_revision is not None else prop["expected_source_revision"]
+            if not current_source_revision:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "MISSING_CURRENT_SOURCE_REVISION"}
+            eff_rev = str(current_source_revision)
             if eff_rev != prop["expected_source_revision"]:
                 cur.execute("ROLLBACK")
                 return {"status": "DENIED", "reason": "SOURCE_REVISION_STALE"}
 
-            if prop["authority_class"] != "AUTO_EXECUTE":
+            if prop["authority_class"] == "AUTO_EXECUTE":
+                max_hr = int(
+                    self.thresholds["authority_classes"]["AUTO_EXECUTE"]["limits"][
+                        "max_executions_per_agent_per_logical_hour"
+                    ]
+                )
+                cutoff_hr = (now_utc - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                cnt_row = cur.execute(
+                    """
+                    SELECT COUNT(*) AS cnt FROM action_receipts
+                    WHERE proposer_id = ? AND authority_class = 'AUTO_EXECUTE' AND executed_at_utc >= ?
+                    """,
+                    (prop["proposer_id"], cutoff_hr),
+                ).fetchone()
+                if int(cnt_row["cnt"]) >= max_hr:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "AUTO_EXECUTE_RATE_LIMIT_EXCEEDED"}
+            else:
                 if not auth_id:
                     cur.execute("ROLLBACK")
                     return {"status": "DENIED", "reason": "MISSING_AUTHORIZATION"}

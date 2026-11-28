@@ -38,8 +38,13 @@ def _redact_value(val: Any) -> Any:
         return [_redact_value(item) for item in val]
     if isinstance(val, tuple):
         return [_redact_value(item) for item in val]
-    if isinstance(val, str) and val.strip().lower().startswith("bearer "):
-        return "[REDACTED]"
+    if isinstance(val, str):
+        low = val.lower()
+        if any(
+            pat in low
+            for pat in ("bearer ", "token=", "secret=", "password=", "api_key=", "apikey=", "authorization:")
+        ):
+            return "[REDACTED]"
     return val
 
 

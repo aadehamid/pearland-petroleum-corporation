@@ -132,7 +132,18 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 )
                 self.assertEqual(ok_auth["status"], "AUTHORIZED")
 
-                # 7. Stale source_revision, mutated payload, cross-branch, and expiry MUST be rejected
+                # 7. Missing current_source_revision, stale source_revision, mutated payload, cross-branch, and expiry MUST be rejected
+                missing_rev = gate.execute_authorized_action(
+                    idempotency_key="IDEM-NOREV",
+                    proposal_id="PROP-T1",
+                    auth_id="AUTH-OK-1",
+                    branch_id="baseline",
+                    payload=payload,
+                    now_utc=t0 + timedelta(minutes=3),
+                    current_source_revision=None,
+                )
+                self.assertEqual(missing_rev["reason"], "MISSING_CURRENT_SOURCE_REVISION")
+
                 stale = gate.execute_authorized_action(
                     idempotency_key="IDEM-STALE",
                     proposal_id="PROP-T1",
@@ -212,8 +223,21 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(ex_double["status"], "DENIED")
                 self.assertEqual(ex_double["reason"], "PROPOSAL_ALREADY_EXECUTED")
 
-                # 9. AUTO_EXECUTE hourly rate cap (20/agent/hour) escalates on the 21st call (also proves gate wasn't poisoned!)
-                for i in range(20):
+                # 9. AUTO_EXECUTE zero-effect limit enforcement: non-zero volume/margin MUST escalate out of AUTO_EXECUTE!
+                p_auto_nonzero = gate.submit_proposal(
+                    proposal_id="AUTO-NONZERO",
+                    branch_id="baseline",
+                    action_type="raise_alert",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
+                    metrics={"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
+                    now_utc=t0 + timedelta(minutes=9),
+                )
+                self.assertNotEqual(p_auto_nonzero["authority_class"], "AUTO_EXECUTE")
+
+                # 10. AUTO_EXECUTE hourly rate cap (20/agent/hour) enforced BOTH at classification AND on bulk-submit execution!
+                for i in range(25):
                     pa = gate.submit_proposal(
                         proposal_id=f"AUTO-{i}",
                         branch_id="baseline",
@@ -223,8 +247,10 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                         payload={"alert": i},
                         metrics={},
                         now_utc=t0 + timedelta(minutes=10),
+                        expected_source_revision="rev-42",
                     )
                     self.assertEqual(pa["authority_class"], "AUTO_EXECUTE")
+                for i in range(20):
                     er = gate.execute_authorized_action(
                         idempotency_key=f"IDEM-AUTO-{i}",
                         proposal_id=f"AUTO-{i}",
@@ -232,20 +258,34 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                         branch_id="baseline",
                         payload={"alert": i},
                         now_utc=t0 + timedelta(minutes=10),
+                        current_source_revision="rev-42",
                     )
                     self.assertEqual(er["status"], "EXECUTED")
-                p21 = gate.submit_proposal(
+                # 21st pre-submitted AUTO_EXECUTE MUST be denied at execution time (blocks bulk-submit bypass!)
+                er21 = gate.execute_authorized_action(
+                    idempotency_key="IDEM-AUTO-20",
                     proposal_id="AUTO-20",
+                    auth_id=None,
+                    branch_id="baseline",
+                    payload={"alert": 20},
+                    now_utc=t0 + timedelta(minutes=10),
+                    current_source_revision="rev-42",
+                )
+                self.assertEqual(er21["status"], "DENIED")
+                self.assertEqual(er21["reason"], "AUTO_EXECUTE_RATE_LIMIT_EXCEEDED")
+                # Subsequent submission also escalates to Tier 1
+                p26 = gate.submit_proposal(
+                    proposal_id="AUTO-25",
                     branch_id="baseline",
                     action_type="raise_alert",
                     proposer_id="usr-agent-1",
                     proposer_is_agent=True,
-                    payload={"alert": 20},
+                    payload={"alert": 25},
                     metrics={},
                     now_utc=t0 + timedelta(minutes=11),
                 )
-                self.assertEqual(p21["authority_class"], "REQUIRE_APPROVAL")
-                self.assertTrue(p21.get("rate_limit_escalated"))
+                self.assertEqual(p26["authority_class"], "REQUIRE_APPROVAL")
+                self.assertTrue(p26.get("rate_limit_escalated"))
             finally:
                 gate.close()
                 auth.close()
@@ -266,17 +306,21 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
             finally:
                 store.close()
 
-        # Recursive OTel redaction catches auth_token, Authorization: Bearer, and dicts inside lists
+        # Recursive OTel redaction catches auth_token, Authorization: Bearer, mid-string secrets, and dicts inside lists
         redacted = redact_otel_attributes(
             {
                 "auth_token": "sk-live-abc123",
                 "Authorization": "Bearer eyJsecret",
+                "detail": "request failed for Authorization: Bearer abc123",
+                "header": "token=xyz999",
                 "events": [{"secret": "leaked", "password": "p", "safe": "ok"}],
                 "nested": {"access_token": "tok-xyz", "note": "Bearer raw-val"},
             }
         )
         self.assertEqual(redacted["auth_token"], "[REDACTED]")
         self.assertEqual(redacted["Authorization"], "[REDACTED]")
+        self.assertEqual(redacted["detail"], "[REDACTED]")
+        self.assertEqual(redacted["header"], "[REDACTED]")
         self.assertEqual(redacted["events"][0]["secret"], "[REDACTED]")
         self.assertEqual(redacted["events"][0]["password"], "[REDACTED]")
         self.assertEqual(redacted["events"][0]["safe"], "ok")

@@ -5,12 +5,12 @@
   "provenance_class": "SYNTHETIC",
   "cases": {
     "SCN-A-T125": {
-      "epistemic_status": "ILLUSTRATIVE_RECORDED_FIXTURE",
+      "epistemic_status": "INFERENCE",
       "potential_exposure_paths": [
         {
           "badge": "POTENTIAL_EXPOSURE",
           "provenance_class": "SYNTHETIC",
-          "epistemic_status": "GRAPH_REACHABILITY_ONLY",
+          "epistemic_status": "INFERENCE",
           "source_unit": "4B",
           "target_tank": "TK-301",
           "affected_terminal": "TERM-01",
@@ -21,10 +21,10 @@
         {
           "badge": "MODEL_QUANTIFIED",
           "provenance_class": "SCENARIO_ASSUMPTION",
-          "epistemic_status": "RECORDED_FIXTURE_PENDING_WP5_MODEL_RUN",
+          "epistemic_status": "INFERENCE",
           "binding_constraint": "compressor_circulation_cap",
           "max_hcu_feed_bbl_per_day": 30000.0,
-          "basis_ref": "docs/enterprise-architecture/03-scenarios/PPC-SCENARIO-001_Flagship_Operational_Scenarios.md"
+          "basis_ref": "docs/enterprise-architecture/07-scenarios-verification/PPC-SCENARIO-001_Golden_Enterprise_Scenarios.md"
         }
       ],
       "recommended_action": {
