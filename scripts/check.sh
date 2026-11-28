@@ -73,6 +73,10 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
 
 echo
+echo "== WP-5B Relate WASM server-filtered graph package and PO-08 zero-byte redaction =="
+python3 -m unittest tests/test_wp5b_relate_wasm.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
