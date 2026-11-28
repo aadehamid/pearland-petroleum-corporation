@@ -68,9 +68,9 @@ class TestPublicIngest(unittest.TestCase):
         ])
         with self.assertRaises(ValueError):
             public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: next(pages), sleep_seconds=0.0)
-        # Malformed HURDAT2 row (<8 cols) must fail closed
+        # Malformed HURDAT2 row (<8 cols) must fail closed even on pre-2010 storms with default min_year=2010
         with self.assertRaises(ValueError):
-            public_ingest.parse_hurdat2_storms("AL092017, HARVEY, 1,\n20170825, 1800, , HU, 27.3N\n", min_year=0)
+            public_ingest.parse_hurdat2_storms("AL011999, ARLENE, 1,\n19990611, 1800, , TD, 28.0N\n")
         # Duplicate EIA period, missing/wrong series key, or out-of-window period must fail closed
         dup_periods = json.dumps(
             {"response": {"total": "2", "data": [

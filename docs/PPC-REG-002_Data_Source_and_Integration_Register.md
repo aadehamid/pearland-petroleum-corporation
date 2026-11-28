@@ -47,7 +47,7 @@ mapping, SLA, retry, failure behavior, DQ and owner.
 ### WP-1 Public Raw External Interfaces (`generators/public_ingest.py`)
 
 - **Schema/version:** `generators/schemas/public_data_vintage_manifest.schema.json` (`PPC-WP1-PUBLIC-DATA-VINTAGE` v`1.0.0`, instantiated in `fixtures/golden/public_data_vintage_manifest.json`), `provenance_class: OBSERVED`.
-- **Semantic mapping:** Raw `OBSERVED` external context landed under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` per `PPC-013` and `ADR-0057` (never written to the hidden-truth bucket); conditions fictional distributions without redefining EPM KPIs (`PPC-WORLD-001 §4`).
+- **Semantic mapping:** Raw `OBSERVED` external context landed under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` per `PPC-013` and `ADR-0057` (never written to the hidden-truth bucket); conditions fictional distributions without redefining EPM KPIs (`PPC-WORLD-001 §4`). In WP-1a, EPA ingests the GHGRP `PUB_DIM_FACILITY` registry (`rfs_rin_status: DEFERRED_RFS_RIN_CONTEXT`) and PHMSA ingests when `--phmsa-zip` is supplied (`DEFERRED_MANUAL_ARCHIVE` otherwise).
 - **SLA:** On-demand vintage pin per release window (daily/weekly historical series pinned by explicit date range).
 - **Retry:** Single 2-second backoff retry on HTTP 429; 60-second request timeout.
 - **Failure behavior:** Fail-closed on HTTP 4xx/5xx (with `api_key` redacted), missing/zero/truncated EIA `total`, duplicate EIA periods, filter mismatches (EIA series ID, EPA NAICS `324110`/state), malformed HURDAT2 rows, missing PHMSA `REPORT_NUMBER` data, or R2 ETag-vs-MD5 mismatch.

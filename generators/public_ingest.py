@@ -328,21 +328,21 @@ def parse_hurdat2_storms(raw_text: str, min_year: int = 2010) -> list[dict[str, 
         if len(track_lines) != n_rows:
             raise ValueError(f"Truncated HURDAT2 track for {storm_id}: expected {n_rows}, got {len(track_lines)}")
         year = int(storm_id[4:8])
+        max_wind_kt = 0
+        min_pres_mb: int | None = None
+        statuses: set[str] = set()
+        for tline in track_lines:
+            cols = [c.strip() for c in tline.split(",")]
+            if len(cols) < 8:
+                raise ValueError(f"Malformed HURDAT2 track row for {storm_id} (<8 columns): {tline!r}")
+            statuses.add(cols[3])
+            wind = int(cols[6])
+            if wind > max_wind_kt:
+                max_wind_kt = wind
+            pres = int(cols[7])
+            if pres > 0 and (min_pres_mb is None or pres < min_pres_mb):
+                min_pres_mb = pres
         if year >= min_year:
-            max_wind_kt = 0
-            min_pres_mb: int | None = None
-            statuses: set[str] = set()
-            for tline in track_lines:
-                cols = [c.strip() for c in tline.split(",")]
-                if len(cols) < 8:
-                    raise ValueError(f"Malformed HURDAT2 track row for {storm_id} (<8 columns): {tline!r}")
-                statuses.add(cols[3])
-                wind = int(cols[6])
-                if wind > max_wind_kt:
-                    max_wind_kt = wind
-                pres = int(cols[7])
-                if pres > 0 and (min_pres_mb is None or pres < min_pres_mb):
-                    min_pres_mb = pres
             storms.append(
                 {
                     "storm_id": storm_id,
@@ -683,7 +683,11 @@ def main() -> None:
     parser.add_argument("--r2-env", default=os.path.expanduser("~/.config/ppc/r2-standard.env"))
     parser.add_argument("--phmsa-zip", default=None, help="Optional local PHMSA Form 7000-1 ZIP archive path.")
     parser.add_argument("--out", required=True, help="Path to write secret-free OBSERVED vintage manifest JSON.")
-    parser.add_argument("--no-upload", action="store_true", help="Skip R2 upload (local manifest verification only).")
+    parser.add_argument(
+        "--no-upload",
+        action="store_true",
+        help="Skip R2 upload; still fetches public feeds over the network and writes the manifest locally.",
+    )
     args = parser.parse_args()
 
     eia_env = load_env_file(args.eia_env)
