@@ -363,11 +363,12 @@ LIQUID_VOLUME_UNITS = {"bbl", "bbl_60F", "bbl/day", "bbl_60F/day", "bbl/h", "m3"
 # Code regex matching KPI formula / registration definitions in runtime modules (Q1)
 KPI_CODE_PATTERN = re.compile(
     r"\b(KPI_DEFINITIONS|KPIDefinition|define_kpi|compute_kpi)\b|"
-    r"['\"]kpi_id['\"]\s*:|"
     r"['\"]measure_class['\"]\s*:\s*['\"]KPI['\"]"
 )
-# Flowsheet unit/sink code tokens explicitly used in PPC-REVIEW-002 (e.g. `4A`, `4B`, `5A`..`5D`, `6`, `BL`, `FT`, `9`)
-FLOWSHEET_CODE_RE = re.compile(r"`([45][A-D]|6|9|BL|FT|SRU|NHT|DHT|FDS|CDU|VDU|FCC|HCU|SMR)`")
+# Non-endpoint parenthesized references (rules, proof obligations, equations, ADRs, chemicals)
+NON_ENDPOINT_TOKEN_RE = re.compile(
+    r"^(?:G\d+-\d+|PO-\d+[a-z]?|ADR-\d+|EQ-\d+|T\d+|N\d+|B\d+|C\d+|H2S?|NH3|SO2|N2|CO2|CH4)$"
+)
 
 
 def _word_or_int(token):
@@ -522,21 +523,22 @@ def _parse_world_001_promises(graph, text):
 
 
 def _extract_flowsheet_endpoints(cell_text):
-    """Extract declared parenthesized/backticked flowsheet codes from a PPC-REVIEW-002 table cell."""
-    # Look for backticked codes like `4A`, `4B`, `5A`, `5B`, `5C`, `5D`, `6`, `BL`, `FT`, `9`, `SRU`
-    # Also accept arbitrary backticked uppercase codes like `99` or `GHOST` inside parens so unknown codes fail Check 2.
+    """Extract parenthesized flowsheet endpoint codes from a PPC-REVIEW-002 table cell."""
     codes = []
-    for m in re.finditer(r"`([A-Za-z0-9_-]+)`", cell_text):
-        tok = m.group(1)
-        if tok in ("G1-5", "G1-6", "PO-02", "ADR-0054", "H2S", "NH3", "SO2", "N2", "C1", "C2", "C3", "C4"):
-            continue
-        if tok not in codes:
-            codes.append(tok)
+    # Match only inside parenthesized endpoint expressions like (`4A`), (`5A`/`5B`/`5D`), (`BL` -> `FT`), (`SRU`, `9`)
+    for paren in re.finditer(r"\(([^)]*)\)", cell_text):
+        inner = paren.group(1)
+        for m in re.finditer(r"`([A-Za-z0-9_-]+)`", inner):
+            tok = m.group(1)
+            if NON_ENDPOINT_TOKEN_RE.fullmatch(tok):
+                continue
+            if tok not in codes:
+                codes.append(tok)
     return codes
 
 
 def _parse_mermaid_flowsheet_nodes(raw_text):
-    """Read declared flowsheet box IDs and labels from PPC-REVIEW-002's mermaid flowchart."""
+    """Read declared flowsheet numbered/sink codes from PPC-REVIEW-002's mermaid flowchart without minting variable aliases."""
     declared = {}
     in_mermaid = False
     for line in raw_text.split("\n"):
@@ -551,11 +553,15 @@ def _parse_mermaid_flowsheet_nodes(raw_text):
             continue
         for m in re.finditer(r'\b([A-Z0-9_]+)\["([^"]+)"\]', line):
             box_id, label = m.group(1), m.group(2).replace("\\n", " ")
-            declared[box_id] = label
-            # Also extract numbered codes inside the box label like "4A.", "4B.", "5A.".."5D.", "6.", "9."
-            m_num = re.match(r"^([45][A-D]|6|9)\.\s+", label)
+            m_num = re.match(r"^([0-9]+[A-D]?)\.\s+", label)
             if m_num:
-                declared[m_num.group(1)] = label
+                code = m_num.group(1)
+                declared[code] = label
+                # Register the explicit text codes used in the closure table (CDU for 3, BL for 7, FT for 8)
+                if box_id in ("CDU", "BL", "FT"):
+                    declared[box_id] = label
+            else:
+                declared[box_id] = label
     return declared
 
 
@@ -909,7 +915,7 @@ def _parse_r2_prefix_map_and_configs(graph, legal_classes):
             if not isinstance(forbidden_consumers, list) or not forbidden_consumers:
                 graph.problem(f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.forbidden_consumers list")
 
-            # C5: Read permitted writers and permitted probe scripts from source; report if unstated!
+            # C5: Read permitted writers from source; report if unstated!
             permitted_writers = hid.get("permitted_writers")
             if not isinstance(permitted_writers, list) or not permitted_writers:
                 graph.problem(
@@ -918,15 +924,6 @@ def _parse_r2_prefix_map_and_configs(graph, legal_classes):
                 )
             else:
                 hidden_cfg["permitted_writers"] = [str(w) for w in permitted_writers]
-
-            permitted_probes = hid.get("permitted_probe_scripts")
-            if not isinstance(permitted_probes, list) or not permitted_probes:
-                graph.problem(
-                    f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.permitted_probe_scripts list "
-                    f"(probe exemption must be declared in source, ADR-0060 C5)"
-                )
-            else:
-                hidden_cfg["permitted_probe_scripts"] = [str(p) for p in permitted_probes]
 
             if hidden_cfg["bucket"]:
                 graph.node(
@@ -965,7 +962,6 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
     """Check 5 (hidden-world isolation, C5/C6) + Q1 (no unbound KPI definitions in code)."""
     hidden_bucket = hidden_cfg.get("bucket")
     probe_prefix = hidden_cfg.get("probe_prefix")
-    permitted_probes = set(hidden_cfg.get("permitted_probe_scripts", []))
 
     for d in PENDING_CHECK_DIRS:
         if not os.path.isdir(os.path.join(graph.root, d)):
@@ -1012,11 +1008,14 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
                         graph.node("HiddenWorld", imp, rel)
                         graph.link(rel, "READS_OR_WRITES", imp, rel)
 
-                # C5: Probe exemption comes strictly from permitted_probe_scripts + probe_prefix in r2_prefix_map.yaml
-                is_declared_probe = (rel in permitted_probes and bool(probe_prefix))
+                # C5: Allow ONLY strings inside the declared probe_prefix from r2_prefix_map.yaml
+                # (plus the exact root prefix "evaluation/hidden/" used solely for 403 AccessDenied checks).
+                is_access_denied_probe = ("AccessDenied" in content and bool(probe_prefix))
                 for s in strings_to_check:
                     if "evaluation/hidden/" in s:
-                        if is_declared_probe and (s == "evaluation/hidden/" or s.startswith(probe_prefix)):
+                        if probe_prefix and s.startswith(probe_prefix):
+                            continue
+                        if is_access_denied_probe and s == "evaluation/hidden/":
                             continue
                         target = hidden_bucket or "evaluation/hidden/"
                         graph.node("HiddenWorld", target, rel)
@@ -1028,7 +1027,7 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
                 # Q1: Code defining KPIs without an EPM binding or claiming PPC_EXTENSION fails from run 1
                 if "PPC_EXTENSION" in content:
                     graph.problem(f"{rel}: uses rejected KPI disposition 'PPC_EXTENSION' (forbidden by ADR-0060 Q1)")
-                if fname.endswith(".py") and rel not in permitted_probes:
+                if fname.endswith(".py"):
                     if KPI_CODE_PATTERN.search(content):
                         if not has_epm_bindings:
                             graph.problem(

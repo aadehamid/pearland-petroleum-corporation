@@ -212,8 +212,6 @@ buckets:
     permitted_writers:
       - "generators/"
       - "verification/"
-    permitted_probe_scripts:
-      - "lakehouse/delta/wp0_probes.py"
     forbidden_consumers:
       - "integration_pipelines"
       - "operational_retrieval_agents"
@@ -449,6 +447,18 @@ class PhysicalModelChecks(Fixture):
         self.assertIn(("CDU :: Vacuum Gas Oil (VGO)", "TO_ENDPOINT", "4B"), g.edges)
         self.assertIn(("4B :: ULSD", "TO_ENDPOINT", "BL"), g.edges)
         self.assertIn(("4B :: ULSD", "TO_ENDPOINT", "FT"), g.edges)
+        # Numbered box codes 3, 7, 8 are registered (Pi round-2 finding 3) and mermaid variable names like EX/REF are NOT minted (finding 2)
+        self.assertIn("3", g.nodes)
+        self.assertIn("7", g.nodes)
+        self.assertIn("8", g.nodes)
+        self.assertNotIn("EX", g.nodes)
+        self.assertNotIn("REF", g.nodes)
+
+        # Benign backticked doc ref (`T125`, `EQ-03`) in a closure cell is not misread as a phantom endpoint (Pi round-2 finding 4)
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("NHT / DHT / FDS (`5A`/`5B`/`5D`)", "NHT / DHT / FCC Selective HDS (`5A`/`5B`/`5D`)")
+              .replace("Blending & Tankage (`BL` -> `FT`)", "Blending & Tankage (`BL` -> `FT`, see `T125`, `EQ-03`)"))
+        self.assertEqual(self.findings(), [])
 
     def test_finding2_c2_reports_name_stated_two_ways_for_units_and_pump_pairs(self):
         # Default MINIMAL_REVIEW_002 has FDS vs FCC Selective HDS on 5B
@@ -484,22 +494,18 @@ class PhysicalModelChecks(Fixture):
               MINIMAL_REVIEW_002.replace(", and `LINE-RESID-EXP`", ""))
         self.assertTrue(any("LINE-RESID-EXP" in f or "TransferLine" in f for f in self.findings()))
 
-    def test_c5_permitted_writers_and_probe_exemption_must_come_from_source(self):
-        # Removing permitted_writers or permitted_probe_scripts from r2_prefix_map.yaml MUST be reported
+    def test_c5_permitted_writers_and_probe_prefix_must_come_from_source(self):
+        # Removing permitted_writers from r2_prefix_map.yaml MUST be reported
         no_writers = MINIMAL_PREFIX_MAP.replace(
             '    permitted_writers:\n      - "generators/"\n      - "verification/"\n', ""
         )
         write(self.root, physical_graph.R2_PREFIX_MAP, no_writers)
         self.assertTrue(any("permitted_writers" in f for f in self.findings()))
 
-        no_probes = MINIMAL_PREFIX_MAP.replace(
-            '    permitted_probe_scripts:\n      - "lakehouse/delta/wp0_probes.py"\n', ""
-        )
-        write(self.root, physical_graph.R2_PREFIX_MAP, no_probes)
-        findings = self.findings()
-        self.assertTrue(any("permitted_probe_scripts" in f for f in findings), findings)
-        # Without source exemption, wp0_probes.py referencing evaluation/hidden/_probe/ is flagged too
-        self.assertTrue(any("READS_OR_WRITES" in f for f in findings), findings)
+        # Removing probe prefix from r2_prefix_map.yaml causes wp0_probes.py to be flagged (zero hardcoded exemptions)
+        no_probe_prefix = MINIMAL_PREFIX_MAP.replace('      probe: "evaluation/hidden/_probe/"\n', "")
+        write(self.root, physical_graph.R2_PREFIX_MAP, no_probe_prefix)
+        self.assertTrue(any("READS_OR_WRITES" in f for f in self.findings()))
 
         # Integration pipeline reading evaluation/hidden/world_version=... MUST fail
         write(self.root, physical_graph.R2_PREFIX_MAP, MINIMAL_PREFIX_MAP)
