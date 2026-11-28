@@ -675,6 +675,23 @@ class TestWP0SemanticAndInfra(unittest.TestCase):
         with self.assertRaises(ValueError):
             mod.delete_r2_prefix(None, "pearland-petroleum-corp", "delta/silver/")
 
+        # Run-level Dagster tag helper must match infra/dagster/dagster.yaml key verbatim
+        dagster_cfg = yaml.safe_load((INFRA_DIR / "dagster" / "dagster.yaml").read_text(encoding="utf-8"))
+        configured_keys = {
+            entry["key"]
+            for entry in dagster_cfg["run_coordinator"]["config"]["tag_concurrency_limits"]
+            if entry.get("value") == {"applyLimitPerUniqueValue": True} and entry.get("limit") == 1
+        }
+        run_tags = mod.delta_table_run_tags("kpi_probe")
+        self.assertEqual(run_tags, {mod.DELTA_CONCURRENCY_POOL_KEY: "kpi_probe"})
+        self.assertIn(mod.DELTA_CONCURRENCY_POOL_KEY, configured_keys)
+        with self.assertRaises(ValueError):
+            mod.delta_table_run_tags("   ")
+
+        probe_src = (REPO_ROOT / "lakehouse" / "delta" / "wp0_probes.py").read_text(encoding="utf-8")
+        self.assertNotIn('op_tags={"dagster/concurrency_key"', probe_src)
+        self.assertIn("tags=delta_table_run_tags(", probe_src)
+
 
 if __name__ == "__main__":
     unittest.main()

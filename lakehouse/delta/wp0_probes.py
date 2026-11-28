@@ -462,13 +462,20 @@ def run_databricks_synced_copy_probe(
                     cur.execute(f"DROP SCHEMA IF EXISTS {catalog}.{schema}")
 
 
+def delta_table_run_tags(table_name: str) -> dict[str, str]:
+    """Return Dagster run tags matching infra/dagster/dagster.yaml per-table concurrency limit."""
+    cleaned = table_name.strip()
+    if not cleaned:
+        raise ValueError("table_name must be a non-empty string")
+    return {DELTA_CONCURRENCY_POOL_KEY: cleaned}
+
+
 def build_dagster_definitions():
-    """Expose WP-0 Dagster asset definition enforcing concurrency pool=1 per Delta table."""
-    from dagster import Definitions, asset
+    """Expose WP-0 Dagster asset and tagged job enforcing concurrency pool=1 per Delta table."""
+    from dagster import Definitions, asset, define_asset_job
 
     @asset(
         name="wp0_databricks_synced_copy_probe",
-        op_tags={"dagster/concurrency_key": DELTA_CONCURRENCY_POOL_KEY},
         description="Dagster-driven synced copy of pinned R2 Delta snapshot into Databricks Free Edition managed Delta (ADR-0055 G2-a).",
     )
     def wp0_databricks_synced_copy_probe() -> dict[str, Any]:
@@ -476,7 +483,13 @@ def build_dagster_definitions():
         dbx_env = load_env_file(os.environ.get("PPC_DATABRICKS_ENV", os.path.expanduser("~/.config/databricks/epm.env")))
         return run_delta_r2_and_databricks_probes(std_env, dbx_env)
 
-    return Definitions(assets=[wp0_databricks_synced_copy_probe])
+    wp0_probe_job = define_asset_job(
+        name="wp0_databricks_synced_copy_probe_job",
+        selection=[wp0_databricks_synced_copy_probe],
+        tags=delta_table_run_tags("kpi_probe"),
+    )
+
+    return Definitions(assets=[wp0_databricks_synced_copy_probe], jobs=[wp0_probe_job])
 
 
 def main() -> None:
