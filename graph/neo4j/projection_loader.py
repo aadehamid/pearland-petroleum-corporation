@@ -37,9 +37,12 @@ def validate_and_project_rdf_to_cypher(
 
     conforms = True
     shacl_report = "No SHACL shapes provided; RDF syntax validated."
-    if shacl_path is not None and Path(shacl_path).exists():
+    if shacl_path is not None:
+        sp = Path(shacl_path)
+        if not sp.is_file():
+            raise FileNotFoundError(f"SHACL shapes file not found: {sp}")
         sg = Graph()
-        sg.parse(str(shacl_path), format="turtle")
+        sg.parse(str(sp), format="turtle")
         conforms, _res_graph, shacl_report = validate(g, shacl_graph=sg, inference="rdfs")
         if not conforms:
             raise ValueError(f"SHACL validation failed for {ttl_path}:\n{shacl_report}")

@@ -1,41 +1,74 @@
-// PO-08: Temporal and Permission Non-Interference for Reader-as-of Selection
-// Governing authorities: INFO-001 §3, DATA-001 §2, PPC-REVIEW-004 PO-08
+// Abstract Quint model of PO-08 temporal, receipt, grant, and cutoff-scoped retraction non-interference.
+// Companion specification to lakehouse/delta/reader_as_of.py (PPC-REVIEW-004 PO-08 stays planned until
+// model-to-implementation conformance runs in CI).
 module po08_noninterference {
-  type Role = str
-  type Pub = { pub_id: str, pub_time: int, allowed: Set[Role], retracted: bool, secret_val: int }
+  type Pub = {
+    id: str,
+    ordinal: int,
+    recorded_at: int,
+    published_at: int,
+    receipt_at: int,
+    retracted_at: int, // -1 means not retracted
+    restricted: bool,
+    payload: int
+  }
 
-  var pubs_world_1: Set[Pub]
-  var pubs_world_2: Set[Pub]
-  var cutoff: int
-  var reader_role: Role
+  var world_a: Set[Pub]
+  var world_b: Set[Pub]
+  var reader_cutoff: int
+  var reader_has_grant: bool
 
-  pure def visible(pubs: Set[Pub], role: Role, t_cut: int): Set[Pub] =
-    pubs.filter(p => role.in(p.allowed) and p.pub_time <= t_cut and not(p.retracted))
+  pure def is_visible(p: Pub, cutoff: int, has_grant: bool): bool =
+    has_grant
+      and (not(p.restricted))
+      and (p.recorded_at <= cutoff)
+      and (p.published_at <= cutoff)
+      and (p.receipt_at >= p.published_at)
+      and (p.receipt_at <= cutoff)
+      and (p.retracted_at == -1 or p.retracted_at > cutoff)
+
+  pure def visible_projection(w: Set[Pub], cutoff: int, has_grant: bool): Set[Pub] =
+    w.filter(p => is_visible(p, cutoff, has_grant))
 
   action init = all {
-    cutoff' = 1000,
-    reader_role' = "planner",
-    // World 1 and World 2 agree on all visible records, differing ONLY on restricted & post-cutoff records
-    pubs_world_1' = Set(
-      { pub_id: "S2-P1", pub_time: 930, allowed: Set("planner", "analyst"), retracted: false, secret_val: 1 },
-      { pub_id: "S2-P2", pub_time: 1300, allowed: Set("planner", "analyst"), retracted: false, secret_val: 2 },
-      { pub_id: "RESTRICTED-1", pub_time: 900, allowed: Set("admin"), retracted: false, secret_val: 100 }
+    reader_cutoff' = 100,
+    reader_has_grant' = true,
+    world_a' = Set(
+      { id: "P1", ordinal: 1, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
+      { id: "P_FUTURE", ordinal: 2, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 111 },
+      { id: "P_SECRET", ordinal: 3, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: -1, restricted: true, payload: 999 }
     ),
-    pubs_world_2' = Set(
-      { pub_id: "S2-P1", pub_time: 930, allowed: Set("planner", "analyst"), retracted: false, secret_val: 1 },
-      { pub_id: "S2-P2", pub_time: 1300, allowed: Set("planner", "analyst"), retracted: false, secret_val: 999 },
-      { pub_id: "RESTRICTED-1", pub_time: 900, allowed: Set("admin"), retracted: false, secret_val: 777 }
-    ),
+    world_b' = Set(
+      { id: "P1", ordinal: 1, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
+      { id: "P_FUTURE", ordinal: 2, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 222 },
+      { id: "P_SECRET", ordinal: 3, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: -1, restricted: true, payload: 888 }
+    )
   }
 
-  action step = all {
-    pubs_world_1' = pubs_world_1,
-    pubs_world_2' = pubs_world_2,
-    cutoff' = cutoff,
-    reader_role' = reader_role,
+  // Mutate hidden/future payloads or advance/rewind cutoff while keeping visible facts identical
+  action mutate_invisible_in_b = all {
+    reader_cutoff' = reader_cutoff,
+    reader_has_grant' = reader_has_grant,
+    world_a' = world_a,
+    world_b' = world_b.map(p =>
+      if (not(is_visible(p, reader_cutoff, reader_has_grant))) { ...p, payload: p.payload + 1 } else p
+    )
   }
 
-  // Non-interference invariant: changing restricted or post-cutoff records never alters reader-visible set
+  action toggle_grant = all {
+    reader_cutoff' = reader_cutoff,
+    reader_has_grant' = not(reader_has_grant),
+    world_a' = world_a,
+    world_b' = world_b
+  }
+
+  action step = any {
+    mutate_invisible_in_b,
+    toggle_grant
+  }
+
+  // PO-08 invariant: invisible (future, restricted, unreceipted, or already-retracted) mutations never change reader view
   val non_interference =
-    visible(pubs_world_1, reader_role, cutoff) == visible(pubs_world_2, reader_role, cutoff)
+    visible_projection(world_a, reader_cutoff, reader_has_grant)
+      == visible_projection(world_b, reader_cutoff, reader_has_grant)
 }

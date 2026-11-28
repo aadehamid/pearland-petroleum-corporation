@@ -2,10 +2,12 @@
 """WP-3 Delta Lake (delta-rs) + DuckDB Read-Only Publisher, Tall KPI Store, and ReleaseManifest (ADR-0045, DATA-001).
 
 Implements:
-- Idempotent delta-rs table writes keyed by (txnAppId, txnVersion) via CommitProperties + Transaction
+- Serialized single-writer idempotent delta-rs appends guarded by `_delta_log` `(txnAppId, txnVersion)` scan
+  and Delta `CommitProperties` + `Transaction` metadata (intended for single-writer Dagster concurrency pool = 1
+  per table per PPC-PLAN-001 WP-3)
 - Read-only DuckDB views over Delta tables (never writes Delta, ADR-0045)
 - EPM-aligned tall KPI facts with KPI / OPERATIONAL_METRIC / MARKET_INDICATOR measure classes and T100 decomposition links
-- Atomic signed ReleaseManifest generation and RETRACTED (L1/X1) cut handling
+- Deterministic SHA-256 digest-verified ReleaseManifest construction and RETRACTED (L1/X1) metadata
 - NEVER reads hidden canonical world truth (enforced by physical_graph.py C5)
 """
 from __future__ import annotations
@@ -45,16 +47,7 @@ def write_delta_table_idempotent(
     path.mkdir(parents=True, exist_ok=True)
     if (path / "_delta_log").exists():
         dt = DeltaTable(str(path))
-        txns = dt.get_add_actions(flatten=True)  # verify table readable
-        _ = txns
-        prior_ver = dt.history()
-        for entry in prior_ver:
-            if entry.get("operation") == "WRITE":
-                pass
-        # Query Delta transaction log natively via delta-rs app transaction state
-        existing_app_ver = dt.metadata()  # ensure loaded
-        _ = existing_app_ver
-        # Check committed txn log JSON directly for (appId, version) idempotency
+        # Scan committed _delta_log JSON entries for (appId, version) idempotency under single-writer serialization
         for log_file in sorted((path / "_delta_log").glob("*.json")):
             for line in log_file.read_text(encoding="utf-8").splitlines():
                 if not line.strip():
@@ -147,7 +140,7 @@ def build_release_manifest(
     supersedes_release_id: str | None = None,
     retraction_reason: str | None = None,
 ) -> dict[str, Any]:
-    """Construct an atomic signed ReleaseManifest supporting PUBLISHED / SUPERSEDED / RETRACTED (L1/X1)."""
+    """Construct a deterministic SHA-256 digest-verified ReleaseManifest for PUBLISHED / SUPERSEDED / RETRACTED."""
     if status not in LEGAL_RELEASE_STATUSES:
         raise ValueError(f"Invalid release status: {status!r}")
     if status == "RETRACTED" and not retraction_reason:
