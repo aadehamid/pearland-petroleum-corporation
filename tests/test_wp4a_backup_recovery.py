@@ -42,10 +42,23 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
         self.assertEqual(clean_res["status"], "CLEAN")
         self.assertEqual(clean_res["r2_evidence_consulted_streams"], ["refinery_sqlite:baseline:default"])
 
-        # 0. Missing R2 raw-log evidence for a stream MUST fail closed (PPC-REVIEW-003 §2)
+        # 0. Missing, zero/lagging, or negative R2 raw-log evidence MUST fail closed (PPC-REVIEW-003 §2)
         no_r2 = check_recovery_gaps(outbox, inbox, r2_raw_high_water={})
         self.assertEqual(no_r2["status"], "RECOVERY_GAP")
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_R2_EVIDENCE" for g in no_r2["gaps"]))
+        zero_r2 = check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 0})
+        self.assertEqual(zero_r2["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_R2_LAGS_OUTBOX" for g in zero_r2["gaps"]))
+        with self.assertRaises(ValueError):
+            check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline", "default"): -1})
+        # Out-of-scope R2 stream in a partial-store restore does not cause false-positive halt
+        extra_r2 = check_recovery_gaps(
+            outbox,
+            inbox,
+            r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 2, ("other_store", "baseline", "p"): 9},
+        )
+        self.assertEqual(extra_r2["status"], "CLEAN")
+        self.assertEqual(extra_r2["out_of_scope_r2_streams"], ["other_store:baseline:p"])
 
         # 1. Missing receipt for seq 2 -> RECOVERY_GAP_UNAPPLIED_OUTBOX
         missing = check_recovery_gaps(outbox, inbox[:1], r2_raw_high_water=r2_ok)

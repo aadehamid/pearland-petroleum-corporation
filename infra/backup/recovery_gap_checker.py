@@ -2,7 +2,7 @@
 """Post-restore outbox-sequence vs InboxReceipt RECOVERY_GAP checker (WP-4A/WP-4B, PO-03).
 
 Compares committed source outbox sequences and delivery keys against applied
-InboxReceipt records (and optional R2 raw-event high-water marks) scoped strictly
+InboxReceipt records and mandatory R2 raw-event high-water marks scoped strictly
 per `(source_system, branch_id, partition_key)` in accordance with PPC-INT-001 §2
 ("Source sequence is ordered only within its declared partition"; "Same key with
 different digest is a conflict").
@@ -10,6 +10,7 @@ different digest is a conflict").
 Exposes:
 - Unapplied outbox rows (`RECOVERY_GAP_UNAPPLIED_OUTBOX`)
 - Missing outbox rows proven committed by InboxReceipt or R2 raw log (`RECOVERY_GAP_MISSING_OUTBOX_TAIL`, `RECOVERY_GAP_MISSING_OUTBOX_VS_R2`)
+- Missing or lagging R2 raw-log durability (`RECOVERY_GAP_MISSING_R2_EVIDENCE`, `RECOVERY_GAP_R2_LAGS_OUTBOX`)
 - Interior per-partition sequence holes (`RECOVERY_GAP_SEQUENCE_HOLE`)
 - Duplicate per-partition sequence rows (`duplicate_outbox`, `duplicate_inbox`)
 - Cross-sequence delivery-key reuse or digest conflicts (`DELIVERY_KEY_REUSED_ACROSS_SEQUENCES`, `PAYLOAD_DIGEST_CONFLICT`, `DELIVERY_KEY_MISMATCH`)
@@ -36,7 +37,10 @@ def _normalize_r2_hw(
             raise ValueError(
                 f"r2_raw_high_water keys must be 3-tuples (source_system, branch_id, partition_key), got {k!r}"
             )
-        out[(str(k[0]), str(k[1]), str(k[2]))] = int(v)
+        val = int(v)
+        if val < 0:
+            raise ValueError(f"r2_raw_high_water value for {k!r} must be non-negative, got {val}")
+        out[(str(k[0]), str(k[1]), str(k[2]))] = val
     return out
 
 
@@ -158,14 +162,16 @@ def check_recovery_gaps(
             )
 
     r2_hw = _normalize_r2_hw(r2_raw_high_water)
-    all_streams = set(outbox_seqs_by_stream) | set(inbox_seqs_by_stream) | set(r2_hw)
-    for stream in sorted(all_streams):
+    restored_streams = set(outbox_seqs_by_stream) | set(inbox_seqs_by_stream)
+    out_of_scope_r2_streams = sorted(f"{s}:{b}:{p}" for s, b, p in (set(r2_hw) - restored_streams))
+    # If both outbox and inbox are completely empty, any positive R2 high-water proves total loss
+    streams_to_check = restored_streams if restored_streams else {k for k, v in r2_hw.items() if v > 0}
+    for stream in sorted(streams_to_check):
         src, branch, part = stream
         out_seqs = sorted(set(outbox_seqs_by_stream.get(stream, [])))
         in_seqs = sorted(set(inbox_seqs_by_stream.get(stream, [])))
         max_out = out_seqs[-1] if out_seqs else 0
         max_in = in_seqs[-1] if in_seqs else 0
-        max_r2 = r2_hw.get(stream, 0)
 
         for prev, curr in zip(out_seqs, out_seqs[1:]):
             if curr != prev + 1:
@@ -213,13 +219,25 @@ def check_recovery_gaps(
                     "r2_raw_high_water": r2_hw[stream],
                 }
             )
+        elif r2_hw[stream] < max_out:
+            gaps.append(
+                {
+                    "kind": "RECOVERY_GAP_R2_LAGS_OUTBOX",
+                    "source_system": src,
+                    "branch_id": branch,
+                    "partition_key": part,
+                    "outbox_high_water": max_out,
+                    "r2_raw_high_water": r2_hw[stream],
+                }
+            )
 
     clean = not gaps and not conflicts and not duplicate_inbox and not duplicate_outbox
     return {
         "status": "CLEAN" if clean else "RECOVERY_GAP",
         "outbox_count": len(outbox_rows),
         "inbox_count": len(inbox_rows),
-        "r2_evidence_consulted_streams": sorted(f"{s}:{b}:{p}" for s, b, p in r2_hw),
+        "r2_evidence_consulted_streams": sorted(f"{s}:{b}:{p}" for s, b, p in (restored_streams & set(r2_hw))),
+        "out_of_scope_r2_streams": out_of_scope_r2_streams,
         "gaps": gaps,
         "conflicts": conflicts,
         "duplicate_inbox": duplicate_inbox,
