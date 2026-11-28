@@ -443,6 +443,8 @@ class PhysicalModelChecks(Fixture):
         write(self.root, physical_graph.PPC_REVIEW_002,
               MINIMAL_REVIEW_002.replace("NHT / DHT / FDS (`5A`/`5B`/`5D`)", "NHT / DHT / FCC Selective HDS (`5A`/`5B`/`5D`)"))
         g = physical_graph.build(self.root)
+        self.assertIn(("LINE-CRUDE-CHG", "CONNECTS_FROM", "TK-102"), g.edges)
+        self.assertNotIn(("TK-102", "CONNECTS_TO", "LINE-CRUDE-CHG"), g.edges)
         self.assertIn(("CDU :: Vacuum Gas Oil (VGO)", "TO_ENDPOINT", "4A"), g.edges)
         self.assertIn(("CDU :: Vacuum Gas Oil (VGO)", "TO_ENDPOINT", "4B"), g.edges)
         self.assertIn(("4B :: ULSD", "TO_ENDPOINT", "BL"), g.edges)

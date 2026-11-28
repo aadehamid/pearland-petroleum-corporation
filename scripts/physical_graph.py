@@ -338,6 +338,7 @@ EPM_KPI_BINDINGS = "semantic/mappings/epm_kpi_bindings.yaml"
 REQUIRED_LINKS = [
     ("Tank", "LOCATED_AT", "out", "every storage tank belongs to a facility"),
     ("TransferLine", "LOCATED_AT", "out", "every hydraulic transfer line belongs to a facility"),
+    ("TransferLine", "CONNECTS_FROM", "out", "every transfer line connects from a declared tank or unit"),
     ("Pump", "DRIVES", "out", "every pump drives a declared transfer line"),
     ("Stream", "FROM_ENDPOINT", "out", "every stream must have a declared source endpoint"),
     ("Stream", "TO_ENDPOINT", "out", "every stream must have a declared destination endpoint"),
@@ -719,7 +720,7 @@ def _parse_review_002(graph, legal_classes, declared_aliases=None):
                     graph.link(tid, "LOCATED_AT", "SITE-REF-A", PPC_REVIEW_002)
                     info["doc_tanks"].add(tid)
                     for lid in lines_in_row:
-                        graph.link(tid, "CONNECTS_TO", lid, PPC_REVIEW_002)
+                        graph.link(lid, "CONNECTS_FROM", tid, PPC_REVIEW_002)
                 for lid in lines_in_row:
                     graph.node("TransferLine", lid, PPC_REVIEW_002)
                     graph.link(lid, "LOCATED_AT", "SITE-REF-A", PPC_REVIEW_002)
