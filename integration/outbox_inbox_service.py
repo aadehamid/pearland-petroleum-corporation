@@ -1,0 +1,422 @@
+#!/usr/bin/env python3
+"""Atomic Silver Staging + InboxReceipt Consumer and Idempotent Delta Publisher (WP-2, PO-03).
+
+Implements INT-001 §2 and ADR-0046 in SQLite ACID transactions:
+- Commits Silver staging row + InboxReceipt in ONE ACID transaction (Crash Point 1 safe).
+- Identical duplicate delivery_key + payload_digest returns prior InboxReceipt (zero double effect).
+- Same delivery_key + DIFFERENT payload_digest routes idempotently to conflict_quarantine (IDENTITY_STEWARD).
+- Service-tracked per-partition `source_revision` monotonicity: both forward gaps (rev > last + 1)
+  and regressions/duplicates (rev <= last under a new delivery_key) quarantine idempotently.
+- Crash Point 2 safe idempotent publish ledger keyed by (txn_app_id, txn_version) with pre-pinned
+  `delta_publish_batches` row sets so rows staged during a crash window are never silently lost.
+- NEVER imports or queries hidden canonical world truth.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Mapping
+
+
+@dataclass(frozen=True)
+class ConsumeOutcome:
+    status: str  # APPLIED | IDEMPOTENT_DUPLICATE | CONFLICT_QUARANTINED | REVISION_QUARANTINED
+    delivery_key: str
+    event_id: str
+    payload_digest: str
+    reason: str | None = None
+
+
+class AtomicStagingInboxService:
+    """SQLite ACID staging + InboxReceipt + idempotent quarantine consumer."""
+
+    def __init__(self, db_path: str | Path):
+        self.db_path = Path(db_path)
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(str(self.db_path), isolation_level=None)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        self.conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS inbox_receipts (
+                delivery_key TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                partition_key TEXT NOT NULL,
+                source_sequence INTEGER NOT NULL,
+                source_revision INTEGER NOT NULL,
+                payload_digest TEXT NOT NULL,
+                applied_result TEXT NOT NULL,
+                acknowledged_at_utc TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS silver_staging (
+                staging_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                delivery_key TEXT NOT NULL UNIQUE,
+                event_id TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                partition_key TEXT NOT NULL,
+                source_sequence INTEGER NOT NULL,
+                source_revision INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                effective_at_utc TEXT NOT NULL,
+                recorded_at_utc TEXT NOT NULL,
+                published_at_utc TEXT,
+                provenance_class TEXT NOT NULL,
+                access_label TEXT NOT NULL,
+                payload_digest TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                pinned_txn_key TEXT,
+                delta_published INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS conflict_quarantine (
+                quarantine_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                delivery_key TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                existing_digest TEXT,
+                incoming_digest TEXT NOT NULL,
+                incoming_payload_json TEXT NOT NULL,
+                resolution_status TEXT NOT NULL DEFAULT 'PENDING_IDENTITY_STEWARD',
+                quarantined_at_utc TEXT NOT NULL,
+                UNIQUE(delivery_key, reason, incoming_digest)
+            );
+            CREATE TABLE IF NOT EXISTS partition_revisions (
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                partition_key TEXT NOT NULL,
+                last_applied_revision INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (source_system, branch_id, partition_key)
+            );
+            CREATE TABLE IF NOT EXISTS source_watermarks (
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                captured_seq INTEGER NOT NULL DEFAULT 0,
+                durable_seq INTEGER NOT NULL DEFAULT 0,
+                applied_seq INTEGER NOT NULL DEFAULT 0,
+                published_seq INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (source_system, branch_id)
+            );
+            CREATE TABLE IF NOT EXISTS delta_publish_batches (
+                txn_app_id TEXT NOT NULL,
+                txn_version INTEGER NOT NULL,
+                table_name TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                staging_ids_json TEXT NOT NULL,
+                pinned_at_utc TEXT NOT NULL,
+                PRIMARY KEY (txn_app_id, txn_version)
+            );
+            CREATE TABLE IF NOT EXISTS delta_publish_ledger (
+                txn_app_id TEXT NOT NULL,
+                txn_version INTEGER NOT NULL,
+                table_name TEXT NOT NULL,
+                row_count INTEGER NOT NULL,
+                committed_at_utc TEXT NOT NULL,
+                PRIMARY KEY (txn_app_id, txn_version)
+            );
+            """
+        )
+
+    def _upsert_watermark(
+        self, cur: sqlite3.Cursor, source_system: str, branch_id: str, column: str, seq: int
+    ) -> None:
+        if column not in ("captured_seq", "durable_seq", "applied_seq", "published_seq"):
+            raise ValueError(f"Invalid watermark column: {column}")
+        cur.execute(
+            "INSERT OR IGNORE INTO source_watermarks (source_system, branch_id) VALUES (?, ?)",
+            (source_system, branch_id),
+        )
+        cur.execute(
+            f"UPDATE source_watermarks SET {column} = MAX({column}, ?) WHERE source_system = ? AND branch_id = ?",
+            (seq, source_system, branch_id),
+        )
+
+    def consume_event(
+        self,
+        event: Mapping[str, Any],
+        *,
+        inject_crash_after_staging_before_ack: bool = False,
+    ) -> ConsumeOutcome:
+        """Apply one event atomically to Silver staging + InboxReceipt with server-tracked revision checks."""
+        dkey = str(event["delivery_key"])
+        eid = str(event["event_id"])
+        src = str(event["source_system"])
+        branch = str(event["branch_id"])
+        part = str(event["partition_key"])
+        seq = int(event["source_sequence"])
+        rev = int(event["source_revision"])
+        digest = str(event["payload_digest"])
+        payload_json = str(event["payload_json"])
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            existing = cur.execute(
+                "SELECT payload_digest, event_id FROM inbox_receipts WHERE delivery_key = ?",
+                (dkey,),
+            ).fetchone()
+            if existing is not None:
+                if existing["payload_digest"] == digest:
+                    cur.execute("COMMIT")
+                    return ConsumeOutcome(
+                        status="IDEMPOTENT_DUPLICATE",
+                        delivery_key=dkey,
+                        event_id=eid,
+                        payload_digest=digest,
+                    )
+                cur.execute(
+                    """
+                    INSERT OR IGNORE INTO conflict_quarantine (
+                        delivery_key, event_id, branch_id, reason,
+                        existing_digest, incoming_digest, incoming_payload_json, quarantined_at_utc
+                    ) VALUES (?, ?, ?, 'CONFLICTING_PAYLOAD_DIGEST', ?, ?, ?, ?)
+                    """,
+                    (dkey, eid, branch, existing["payload_digest"], digest, payload_json, now_utc),
+                )
+                cur.execute("COMMIT")
+                return ConsumeOutcome(
+                    status="CONFLICT_QUARANTINED",
+                    delivery_key=dkey,
+                    event_id=eid,
+                    payload_digest=digest,
+                    reason="CONFLICTING_PAYLOAD_DIGEST",
+                )
+
+            # Server-tracked bidirectional per-partition revision check (INT-001 §2)
+            rev_row = cur.execute(
+                "SELECT last_applied_revision FROM partition_revisions WHERE source_system = ? AND branch_id = ? AND partition_key = ?",
+                (src, branch, part),
+            ).fetchone()
+            last_rev = int(rev_row["last_applied_revision"]) if rev_row is not None else 0
+            if rev != last_rev + 1:
+                reason = "OUT_OF_ORDER_REVISION" if rev > last_rev + 1 else "STALE_OR_DUPLICATE_REVISION"
+                cur.execute(
+                    """
+                    INSERT OR IGNORE INTO conflict_quarantine (
+                        delivery_key, event_id, branch_id, reason,
+                        existing_digest, incoming_digest, incoming_payload_json, quarantined_at_utc
+                    ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
+                    """,
+                    (dkey, eid, branch, reason, digest, payload_json, now_utc),
+                )
+                cur.execute("COMMIT")
+                return ConsumeOutcome(
+                    status="REVISION_QUARANTINED",
+                    delivery_key=dkey,
+                    event_id=eid,
+                    payload_digest=digest,
+                    reason=reason,
+                )
+
+            # Advance captured/durable/applied watermarks ONLY for accepted, in-order events (INT-001 §2)
+            self._upsert_watermark(cur, src, branch, "captured_seq", seq)
+            self._upsert_watermark(cur, src, branch, "durable_seq", seq)
+
+            cur.execute(
+                """
+                INSERT INTO silver_staging (
+                    delivery_key, event_id, source_system, branch_id, partition_key,
+                    source_sequence, source_revision, event_type,
+                    effective_at_utc, recorded_at_utc, published_at_utc,
+                    provenance_class, access_label, payload_digest, payload_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    dkey,
+                    eid,
+                    src,
+                    branch,
+                    part,
+                    seq,
+                    rev,
+                    str(event["event_type"]),
+                    str(event["effective_at_utc"]),
+                    str(event["recorded_at_utc"]),
+                    event.get("published_at_utc"),
+                    str(event.get("provenance_class", "SYNTHETIC")),
+                    str(event.get("access_label", "INTERNAL")),
+                    digest,
+                    payload_json,
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO inbox_receipts (
+                    delivery_key, event_id, source_system, branch_id, partition_key,
+                    source_sequence, source_revision, payload_digest, applied_result, acknowledged_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'APPLIED', ?)
+                """,
+                (dkey, eid, src, branch, part, seq, rev, digest, now_utc),
+            )
+            cur.execute(
+                """
+                INSERT INTO partition_revisions (source_system, branch_id, partition_key, last_applied_revision)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(source_system, branch_id, partition_key)
+                DO UPDATE SET last_applied_revision = excluded.last_applied_revision
+                """,
+                (src, branch, part, rev),
+            )
+            self._upsert_watermark(cur, src, branch, "applied_seq", seq)
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
+
+        if inject_crash_after_staging_before_ack:
+            raise RuntimeError("INJECTED_CRASH_POINT_1_BEFORE_NATS_ACK")
+
+        return ConsumeOutcome(
+            status="APPLIED",
+            delivery_key=dkey,
+            event_id=eid,
+            payload_digest=digest,
+        )
+
+    def publish_staging_to_delta_idempotent(
+        self,
+        *,
+        txn_app_id: str,
+        txn_version: int,
+        table_name: str,
+        source_system: str,
+        branch_id: str,
+        sink_commit_fn: Any,
+        inject_crash_after_pin_before_sink: bool = False,
+        inject_crash_after_sink_before_mark: bool = False,
+    ) -> dict[str, Any]:
+        """PO-03 Crash Point 2 safe idempotent publisher with exclusive per-row pre-pinned batch ownership.
+
+        Rows are claimed exclusively via `pinned_txn_key` inside an ACID transaction BEFORE calling
+        `sink_commit_fn`, so:
+        - No concurrent or later transaction (txn v2) can claim or double-publish rows pinned by txn v1
+          even if txn v1 crashes between pin and sink commit.
+        - Retrying txn v1 only commits/marks its own pinned rows that are still `delta_published = 0`
+          and never swallows newly arrived staging rows.
+        - The Delta sink is still expected to enforce `(txnAppId, txnVersion)` idempotency on retry.
+        """
+        prior = self.conn.execute(
+            "SELECT row_count FROM delta_publish_ledger WHERE txn_app_id = ? AND txn_version = ?",
+            (txn_app_id, txn_version),
+        ).fetchone()
+        if prior is not None:
+            return {"status": "IDEMPOTENT_ALREADY_PUBLISHED", "row_count": int(prior["row_count"])}
+
+        txn_key = f"{txn_app_id}:{txn_version}"
+        cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            pinned = cur.execute(
+                "SELECT staging_ids_json FROM delta_publish_batches WHERE txn_app_id = ? AND txn_version = ?",
+                (txn_app_id, txn_version),
+            ).fetchone()
+            if pinned is not None:
+                ids = [int(i) for i in json.loads(pinned["staging_ids_json"])]
+            else:
+                pending_rows = cur.execute(
+                    """
+                    SELECT staging_id FROM silver_staging
+                    WHERE source_system = ? AND branch_id = ? AND delta_published = 0 AND pinned_txn_key IS NULL
+                    ORDER BY staging_id ASC
+                    """,
+                    (source_system, branch_id),
+                ).fetchall()
+                ids = [int(r["staging_id"]) for r in pending_rows]
+                if not ids:
+                    cur.execute("ROLLBACK")
+                    return {"status": "NO_PENDING_ROWS", "row_count": 0}
+                cur.executemany(
+                    "UPDATE silver_staging SET pinned_txn_key = ? WHERE staging_id = ?",
+                    [(txn_key, i) for i in ids],
+                )
+                cur.execute(
+                    """
+                    INSERT INTO delta_publish_batches (
+                        txn_app_id, txn_version, table_name, source_system, branch_id,
+                        staging_ids_json, pinned_at_utc
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        txn_app_id,
+                        txn_version,
+                        table_name,
+                        source_system,
+                        branch_id,
+                        json.dumps(ids),
+                        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    ),
+                )
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
+
+        if inject_crash_after_pin_before_sink:
+            raise RuntimeError("INJECTED_CRASH_AFTER_PIN_BEFORE_SINK")
+
+        placeholders = ",".join("?" for _ in ids)
+        rows = [
+            dict(r)
+            for r in self.conn.execute(
+                f"SELECT * FROM silver_staging WHERE staging_id IN ({placeholders}) AND delta_published = 0 ORDER BY staging_id ASC",
+                ids,
+            ).fetchall()
+        ]
+        if not rows:
+            return {"status": "IDEMPOTENT_ALREADY_PUBLISHED", "row_count": 0}
+
+        sink_commit_fn(table_name=table_name, rows=rows, txn_app_id=txn_app_id, txn_version=txn_version)
+
+        if inject_crash_after_sink_before_mark:
+            raise RuntimeError("INJECTED_CRASH_POINT_2_BEFORE_STAGING_MARK")
+
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        max_seq = max(int(r["source_sequence"]) for r in rows)
+        cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            cur.executemany("UPDATE silver_staging SET delta_published = 1 WHERE staging_id = ?", [(i,) for i in ids])
+            cur.execute(
+                """
+                INSERT INTO delta_publish_ledger (txn_app_id, txn_version, table_name, row_count, committed_at_utc)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (txn_app_id, txn_version, table_name, len(rows), now_utc),
+            )
+            self._upsert_watermark(cur, source_system, branch_id, "published_seq", max_seq)
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
+        return {"status": "PUBLISHED", "row_count": len(rows), "published_seq": max_seq}
+
+    def watermarks(self, source_system: str, branch_id: str) -> dict[str, int]:
+        row = self.conn.execute(
+            "SELECT captured_seq, durable_seq, applied_seq, published_seq FROM source_watermarks WHERE source_system = ? AND branch_id = ?",
+            (source_system, branch_id),
+        ).fetchone()
+        if row is None:
+            return {"captured_seq": 0, "durable_seq": 0, "applied_seq": 0, "published_seq": 0}
+        return dict(row)
+
+    def staging_count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM silver_staging").fetchone()[0])
+
+    def unpublished_count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM silver_staging WHERE delta_published = 0").fetchone()[0])
+
+    def quarantine_count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM conflict_quarantine").fetchone()[0])
+
+    def close(self) -> None:
+        self.conn.close()

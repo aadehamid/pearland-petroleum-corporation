@@ -88,6 +88,17 @@ authority_classes:
     approver_roles:
       physical: "Refinery Operations Manager"
       commercial: "Commercial Manager"
+    action_domains:
+      feed_rate_change_inside_envelope: "physical"
+      unit_mode_change_inside_envelope: "physical"
+      cdu_vdu_cut_point_shift: "physical"
+      in_refinery_tank_transfer: "physical"
+      larger_feed_rate_change: "physical"
+      max_distillate_or_max_gasoline_mode_swing: "physical"
+      reroute_held_lot_to_another_hold: "physical"
+      inter_terminal_transfer: "commercial"
+      spot_purchase_or_sale: "commercial"
+      delivery_reschedule: "commercial"
     expiry_logical_minutes: 240
 
   ESCALATE:
