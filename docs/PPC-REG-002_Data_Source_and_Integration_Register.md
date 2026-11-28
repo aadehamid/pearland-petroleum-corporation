@@ -29,7 +29,7 @@ and replaces DuckLake with Delta Lake on Cloudflare R2 (`ADR-0045`, single-write
 
   NOAA/NHC     weather       advisories/tracks                   Worker/API→R2/event   B           R2 raw
 
-  EPA          regulatory    GHGRP Subpart Y; RFS/RIN context    API/file→R2           C           R2 raw
+  EPA          regulatory    GHGRP facility registry; RFS/RIN    API/file→R2           C           R2 raw
 
   PHMSA        pipeline      incident history                    file/API→R2           C           R2 raw
 

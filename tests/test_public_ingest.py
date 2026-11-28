@@ -50,11 +50,17 @@ class TestPublicIngest(unittest.TestCase):
                 "petroleum/pri/spt/data/", "RWTC", "daily", "2024-01-01", "2025-12-31", "DUMMY_KEY", length=5001
             )
 
-    def test_eia_empty_series_raises_instead_of_emitting_observed(self):
+    def test_eia_empty_series_and_missing_total_raise(self):
         entry = public_ingest.EIA_SERIES_CATALOG[0]
         empty_resp = json.dumps({"response": {"total": "0", "data": []}}).encode("utf-8")
         with self.assertRaises(ValueError):
             public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: empty_resp)
+        missing_total = json.dumps({"response": {"data": [{"period": "2025-01-02", "value": "70.0"}]}}).encode("utf-8")
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: missing_total)
+        sanitized = public_ingest.sanitize_url_for_logs("https://api.eia.gov/v2/x?api_key=SUPERSECRET123&length=5000")
+        self.assertNotIn("SUPERSECRET123", sanitized)
+        self.assertIn("api_key=REDACTED", sanitized)
 
     def test_epa_pagination_collects_multiple_pages_without_truncation(self):
         calls: list[str] = []
@@ -135,7 +141,7 @@ class TestPublicIngest(unittest.TestCase):
         self.assertIn("manifests/ingestion/public_vintage_2026-11-28.json", uploaded)
         self.assertNotIn("TEST_SECRET_NEVER_STORED", json.dumps(manifest))
 
-        # Dry-run (--no-upload) must NOT claim R2 upload occurred
+        # Dry-run (--no-upload) must NOT claim R2 upload occurred or PHMSA INGESTED
         dry = public_ingest.run_public_ingest(
             vintage="2026-11-28",
             start_date="2025-01-01",
@@ -143,10 +149,26 @@ class TestPublicIngest(unittest.TestCase):
             eia_api_key="TEST_SECRET_NEVER_STORED",
             http_get=fake_get,
             upload_fn=None,
+            phmsa_zip_bytes=_make_phmsa_zip(),
+            target_bucket="custom-operational-bucket",
         )
         self.assertEqual(dry["upload_status"], "LOCAL_DRY_RUN_NOT_UPLOADED")
         self.assertIsNone(dry["r2_bucket"])
+        self.assertEqual(dry["target_r2_bucket"], "custom-operational-bucket")
+        self.assertEqual(dry["sources"]["phmsa"]["status"], "PARSED_LOCAL_DRY_RUN")
         self.assertTrue(all(not o["uploaded"] for o in dry["objects"]))
+
+        # Hidden-truth bucket MUST be rejected inside run_public_ingest (ADR-0057)
+        with self.assertRaises(ValueError):
+            public_ingest.run_public_ingest(
+                vintage="2026-11-28",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                eia_api_key="TEST_SECRET_NEVER_STORED",
+                http_get=fake_get,
+                upload_fn=fake_upload,
+                target_bucket="pearland-petroleum-hidden",
+            )
 
     def test_committed_vintage_manifest_integrity_and_no_secrets(self):
         if not MANIFEST_PATH.exists():

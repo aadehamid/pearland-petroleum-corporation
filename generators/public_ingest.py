@@ -3,10 +3,10 @@
 
 Ingests verified primary public observations (EIA Open Data API v2 PADD 3 stocks,
 inputs, and USGC spot prices; NOAA NHC HURDAT2 Atlantic best-track archive;
-EPA Envirofacts GHGRP Subpart Y NAICS 324110 PADD 3 refinery metadata; and
-PHMSA hazardous liquid accident ZIP archives) into the operational R2 bucket
-under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` and writes a
-secret-free `OBSERVED` vintage manifest.
+EPA Envirofacts GHGRP facility registry PUB_DIM_FACILITY NAICS 324110 TX/LA
+subset of PADD 3; and PHMSA hazardous liquid accident ZIP archives) into the
+operational R2 bucket under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/`
+and writes a secret-free `OBSERVED` vintage manifest.
 
 Governing authorities: PPC-WORLD-001 §4, PPC-PLAN-001 WP-1, PPC-013, ADR-0051, ADR-0057.
 Never commits or prints API keys or R2 credentials.
@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import time
 import urllib.parse
 import zipfile
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+GENERATOR_VERSION = "wp1-public-ingest-1.0.0"
 EIA_BASE_URL = "https://api.eia.gov/v2"
 NOAA_HURDAT2_URL = "https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt"
 EPA_GHGRP_BASE_URL = "https://data.epa.gov/efservice"
@@ -226,8 +228,10 @@ def fetch_eia_series(
         batch = resp.get("data", [])
         if not isinstance(batch, list):
             raise ValueError(f"Unexpected EIA payload structure for {entry['series_id']}")
+        if "total" not in resp:
+            raise ValueError(f"EIA response missing required 'total' field for {entry['series_id']}")
         rows.extend(batch)
-        total = int(resp.get("total", len(rows)))
+        total = int(resp["total"])
         offset += len(batch)
         if not batch or offset >= total:
             break
@@ -365,15 +369,28 @@ def make_r2_client(r2_env: dict[str, str]):
     )
 
 
+def sanitize_url_for_logs(url: str) -> str:
+    """Redact api_key query parameters so secrets never appear in errors or logs."""
+    return re.sub(r"(api_key=)[^&]+", r"\1REDACTED", url)
+
+
 def default_http_get(url: str) -> bytes:
     import requests
 
-    resp = requests.get(url, timeout=60, headers={"User-Agent": "PPC-PublicDataIngest/1.0"})
-    if resp.status_code == 429:
-        time.sleep(2.0)
+    try:
         resp = requests.get(url, timeout=60, headers={"User-Agent": "PPC-PublicDataIngest/1.0"})
-    resp.raise_for_status()
-    return resp.content
+        if resp.status_code == 429:
+            time.sleep(2.0)
+            resp = requests.get(url, timeout=60, headers={"User-Agent": "PPC-PublicDataIngest/1.0"})
+        if resp.status_code >= 400:
+            raise RuntimeError(
+                f"HTTP {resp.status_code} error fetching {sanitize_url_for_logs(url)}"
+            )
+        return resp.content
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"HTTP transport error ({type(exc).__name__}) fetching {sanitize_url_for_logs(url)}"
+        ) from None
 
 
 def run_public_ingest(
@@ -384,8 +401,11 @@ def run_public_ingest(
     http_get: Callable[[str], bytes],
     upload_fn: Callable[[str, bytes, str], None] | None = None,
     phmsa_zip_bytes: bytes | None = None,
+    target_bucket: str = "pearland-petroleum-corp",
 ) -> dict[str, Any]:
     """Run deterministic public ingestion and return a secret-free OBSERVED vintage manifest."""
+    if "hidden" in target_bucket.lower():
+        raise ValueError("Public raw ingestion must never target the hidden-truth bucket (ADR-0057)")
     ingested: list[IngestedObject] = []
 
     def emit(
@@ -477,7 +497,7 @@ def run_public_ingest(
         date_max=str(max(s["year"] for s in all_storms)),
     )
 
-    # 3. EPA Envirofacts GHGRP Subpart Y PADD 3 refinery facilities (NAICS 324110, TX & LA; full pagination)
+    # 3. EPA Envirofacts GHGRP facility registry (PUB_DIM_FACILITY, NAICS 324110, TX & LA subset of PADD 3)
     epa_records: list[dict[str, Any]] = []
     for state in ("TX", "LA"):
         epa_records.extend(fetch_epa_ghgrp_state(state, http_get=http_get))
@@ -518,10 +538,12 @@ def run_public_ingest(
             row_count=len(phmsa_rows),
             unit="incident_rows",
         )
-        phmsa_status = "INGESTED"
+        phmsa_status = "INGESTED" if upload_fn is not None else "PARSED_LOCAL_DRY_RUN"
 
     manifest: dict[str, Any] = {
         "schema_version": "1.0.0",
+        "generator_version": GENERATOR_VERSION,
+        "code_file": "generators/public_ingest.py",
         "manifest_kind": "PPC-WP1-PUBLIC-DATA-VINTAGE",
         "provenance_class": "OBSERVED",
         "upload_status": "UPLOADED_TO_R2" if upload_fn is not None else "LOCAL_DRY_RUN_NOT_UPLOADED",
@@ -529,8 +551,8 @@ def run_public_ingest(
         "window": {"start_date": start_date, "end_date": end_date},
         "captured_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "governing_adrs": ["ADR-0051", "ADR-0057"],
-        "r2_bucket": "pearland-petroleum-corp" if upload_fn is not None else None,
-        "target_r2_bucket": "pearland-petroleum-corp",
+        "r2_bucket": target_bucket if upload_fn is not None else None,
+        "target_r2_bucket": target_bucket,
         "sources": {
             "eia": {"series_count": len(EIA_SERIES_CATALOG), "series": eia_summary},
             "noaa": {
@@ -592,18 +614,21 @@ def main() -> None:
     args = parser.parse_args()
 
     eia_env = load_env_file(args.eia_env)
-    api_key = eia_env.get("EIA_API_KEY") or next(iter(eia_env.values()))
+    api_key = eia_env.get("EIA_API_KEY")
+    if not api_key:
+        raise KeyError(f"EIA_API_KEY missing from {args.eia_env}")
 
     upload_fn = None
+    target_bucket = "pearland-petroleum-corp"
     if not args.no_upload:
         r2_env = load_env_file(args.r2_env)
+        target_bucket = r2_env["R2_BUCKET"]
+        if "hidden" in target_bucket.lower():
+            raise ValueError("Public raw ingestion must never write to the hidden-truth bucket (ADR-0057)")
         s3 = make_r2_client(r2_env)
-        bucket = r2_env["R2_BUCKET"]
-        if "hidden" in bucket:
-            raise ValueError("Public raw ingestion must never write to the hidden-truth bucket")
 
         def _put(key: str, data: bytes, ctype: str) -> None:
-            s3.put_object(Bucket=bucket, Key=key, Body=data, ContentType=ctype)
+            s3.put_object(Bucket=target_bucket, Key=key, Body=data, ContentType=ctype)
 
         upload_fn = _put
 
@@ -616,6 +641,7 @@ def main() -> None:
         http_get=default_http_get,
         upload_fn=upload_fn,
         phmsa_zip_bytes=phmsa_bytes,
+        target_bucket=target_bucket,
     )
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)

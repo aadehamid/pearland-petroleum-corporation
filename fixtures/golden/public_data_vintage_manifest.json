@@ -1,5 +1,7 @@
 {
   "schema_version": "1.0.0",
+  "generator_version": "wp1-public-ingest-1.0.0",
+  "code_file": "generators/public_ingest.py",
   "manifest_kind": "PPC-WP1-PUBLIC-DATA-VINTAGE",
   "provenance_class": "OBSERVED",
   "upload_status": "UPLOADED_TO_R2",
@@ -8,7 +10,7 @@
     "start_date": "2024-01-01",
     "end_date": "2025-12-31"
   },
-  "captured_at_utc": "2026-11-28T07:05:13Z",
+  "captured_at_utc": "2026-11-28T07:13:49Z",
   "governing_adrs": [
     "ADR-0051",
     "ADR-0057"
@@ -395,5 +397,5 @@
       "provenance_class": "OBSERVED"
     }
   ],
-  "manifest_sha256": "6d68d9bf1fadef787147f74a691f0c8ce3cb04bef568685da5ce348c26280da4"
+  "manifest_sha256": "6cceb486156bed3d13b6e773560f0112e4cf759c808b4bd0d10b952e5a0e7c2f"
 }
