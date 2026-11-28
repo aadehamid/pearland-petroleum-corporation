@@ -34,6 +34,12 @@ python3 scripts/adr_graph.py check
 python3 scripts/adr_graph.py summary
 
 echo
+echo "== physical-model consistency graph =="
+uv run --no-project --with pyyaml python3 -m unittest -q scripts/test_physical_graph.py
+uv run --no-project --with pyyaml python3 scripts/physical_graph.py check || echo "  note  physical_graph check findings remain until Q2 reconciliation PR (ADR-0060 Q3)"
+uv run --no-project --with pyyaml python3 scripts/physical_graph.py summary
+
+echo
 echo "== project memory =="
 command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; the memory tests that need it skip, the rest run"
 (cd scripts && python3 -m unittest test_memory)
