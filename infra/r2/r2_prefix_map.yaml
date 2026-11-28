@@ -3,7 +3,7 @@
 # Secrets are never stored in this file; credentials live outside Git in separate bucket-scoped env files.
 
 schema_version: "1.0.0"
-updated_date: "2026-11-27"
+updated_date: "2026-11-28"
 provenance_class: "OBSERVED"
 governing_adrs:
   - "ADR-003"
@@ -13,6 +13,7 @@ governing_adrs:
   - "ADR-0053"
   - "ADR-0055"
   - "ADR-0057"
+  - "ADR-0060"
 
 connection:
   provider: "cloudflare_r2"
