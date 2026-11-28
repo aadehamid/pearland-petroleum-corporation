@@ -53,3 +53,8 @@ Testing that question showed that Codex's workspace sandbox can read a store ins
 
 - Owner verbatim (2026-11-27): `"yes, build the skill and update PPC"`, in reply to the proposal to build the skill in `personal-agent-skills` and use it to bring PPC up to date.
 - `scripts/memory.sh`, `scripts/memory/*.cypher` and `scripts/test_memory.py` now come from the skill's installer (`install.py --update`), which replaces them on each update. The choices in items 1 to 5 are unchanged. The store-path override is renamed to `PROJECT_MEMORY_DB`, the name the skill uses in every project.
+
+## Amendment 2026-11-28: macOS `test_memory.py` `PermissionError` fix via upstream installer (`ADR-0059`)
+
+- Authority: Owner-delegated stand-in (Claude Fable 5.2, per `docs/adr/0059-night-run-owner-stand-in-delegation.md`; verbatim ruling archived in `docs/adr/answers/2026-11-28-claude-fable-5-2-test-memory-eperm-ruling.md`).
+- Ruling: Fix the transient macOS `os.killpg(pgid, 0)` `PermissionError` race in `WithRelate._group_alive` upstream in `personal-agent-skills` (`relate-project-memory` PR #124), then pull the change into PPC via a dedicated `install.py --update --tests-dir scripts` chore PR (PR #25) without hand-editing `scripts/test_memory.py` or bypassing hooks. The choices in items 1 to 5 are unchanged.
