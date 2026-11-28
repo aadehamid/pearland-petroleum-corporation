@@ -36,7 +36,7 @@ python3 scripts/adr_graph.py summary
 echo
 echo "== physical-model consistency graph =="
 uv run --no-project --with pyyaml python3 -m unittest -q scripts/test_physical_graph.py
-uv run --no-project --with pyyaml python3 scripts/physical_graph.py check || echo "  note  physical_graph check findings remain until Q2 reconciliation PR (ADR-0060 Q3)"
+uv run --no-project --with pyyaml python3 scripts/physical_graph.py check || echo "  note  physical_graph check has 10 C2 alias findings remaining until the WP-1 design-basis alias table (fixtures/golden/refinery_a_design_basis.yaml) lands (ADR-0060 Q3)"
 uv run --no-project --with pyyaml python3 scripts/physical_graph.py summary
 
 echo
@@ -48,6 +48,10 @@ echo
 echo "== WP-0 contracts, schemas, adapters, semantic, and infra =="
 uv run --no-project --with jsonschema --with referencing --with pyyaml --with rdflib --with pyshacl \
   python3 -m unittest tests/test_wp0_contracts.py
+
+echo
+echo "== WP-1a public data ingest contracts =="
+uv run --no-project --with jsonschema python3 -m unittest tests/test_public_ingest.py
 
 echo
 echo "== WP-4A backup op-budget, recovery-gap checker, and SQLite restore drill =="

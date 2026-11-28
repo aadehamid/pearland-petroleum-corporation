@@ -775,11 +775,9 @@ pearland-petroleum-corporation/
 │   └── refinery/
 ├── integration/
 │   ├── dagster/
-│   ├── debezium/
-│   ├── kafka/
 │   └── workers/
 ├── lakehouse/
-│   ├── ducklake/
+│   ├── delta/
 │   └── databricks/
 ├── data-products/
 ├── kpi-store/
