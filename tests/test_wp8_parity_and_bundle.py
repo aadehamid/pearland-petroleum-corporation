@@ -146,6 +146,25 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("gzip_leak", gzip.compress(b"ref: evaluation/hidden/scoring_keys.json")),
             ("gzip_trailing_pad", gzip.compress(b"evaluation/hidden/keys.json") + b"\x00pad"),
             ("gzip_multimember_pad", gzip.compress(b"no marker here") + gzip.compress(b"evaluation/hidden/keys.json") + b"\x00pad"),
+            (
+                "gzip_17_members_pad",
+                b"".join(gzip.compress(f"pad{i}".encode()) for i in range(16))
+                + gzip.compress(b"evaluation/hidden/keys.json")
+                + b"\x00pad",
+            ),
+            (
+                "leak_behind_40_sha256_hashes",
+                (
+                    '{"records":['
+                    + ",".join(
+                        f'{{"record_sha256":"{hashlib.sha256(str(i).encode()).hexdigest()}"}}'
+                        for i in range(40)
+                    )
+                    + '],"ref":"'
+                    + base64.b64encode(base64.b64encode(gzip.compress(b"evaluation/hidden/keys.json"))).decode("ascii")
+                    + '"}'
+                ).encode("utf-8"),
+            ),
             ("base64_leak", base64.b64encode(b"evaluation/hidden/score.key")),
             ("base64_urlsafe", base64.urlsafe_b64encode(b"\x01\x9c" + b"hidden_truth" + b"\xff")),
             ("base64_unpadded", base64.b64encode(b"hidden_truth!").rstrip(b"=")),

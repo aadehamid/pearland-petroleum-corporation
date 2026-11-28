@@ -64,21 +64,26 @@ def _text_views_from_bytes(buf: bytes) -> list[str]:
     return views
 
 
+_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024
+
+
 def _decompress_all_members(buf: bytes) -> list[bytes]:
-    """Decompress single- and multi-member gzip/zlib/raw-deflate streams tolerating trailing non-member bytes."""
+    """Decompress all members of gzip/zlib/raw-deflate streams tolerating trailing non-member bytes."""
     results: list[bytes] = []
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
         rem = buf
         chunks: list[bytes] = []
-        for _ in range(16):
-            if not rem:
-                break
+        total_out = 0
+        while rem:
             try:
                 dobj = zlib.decompressobj(wbits)
-                part = dobj.decompress(rem) + dobj.flush()
+                part = dobj.decompress(rem, _MAX_DECOMPRESSED_BYTES - total_out) + dobj.flush()
                 if part:
+                    total_out += len(part)
                     chunks.append(part)
                     results.append(part)
+                    if total_out >= _MAX_DECOMPRESSED_BYTES:
+                        break
                 nxt = dobj.unused_data
                 if not nxt or len(nxt) >= len(rem):
                     break
@@ -143,7 +148,7 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> list[str]
         next_frontier: list[bytes] = []
         for buf in frontier:
             for child in _decode_one_layer(buf):
-                if child not in seen and len(seen) < 64:
+                if child not in seen:
                     seen.add(child)
                     byte_candidates.append(child)
                     next_frontier.append(child)
