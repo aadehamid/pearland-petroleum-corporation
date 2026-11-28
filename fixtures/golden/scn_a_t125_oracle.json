@@ -1,0 +1,38 @@
+{
+  "schema_version": "1.0.0",
+  "oracle_id": "SCN-A-T125-EXTERNAL-ORACLE-V1",
+  "provenance_class": "SYNTHETIC",
+  "governing_refs": ["PPC-PLAN-001 WP-5 C17", "PPC-REVIEW-002 §3", "PPC-WORLD-002 §6", "ADR-0054", "ADR-0056"],
+  "scenarios": {
+    "SCN-A-T125": {
+      "description": "Hydrocracker recycle compressor 75% derate under normal 170 t/day net H2 header (125 t/day HCU headroom)",
+      "compressor_circ_fraction": 0.75,
+      "expected_binding_constraint": "compressor_circulation_cap",
+      "expected_max_hcu_feed_bbl_per_day": 30000.0,
+      "expected_max_hcu_feed_t_per_day": 4336.08,
+      "infeasible_probe_bbl_per_day": 30001.0,
+      "shift_70min_baseline_processed_bbl": 1500.0,
+      "shift_70min_child_24k_processed_bbl": 1375.0,
+      "shift_70min_branch_delta_bbl": 125.0,
+      "ot_delay_event_published_utc": "2026-06-15T08:15:30Z",
+      "ot_delay_invisible_cutoff_utc": "2026-06-15T08:15:00Z",
+      "ot_delay_visible_cutoff_utc": "2026-06-15T08:16:00Z"
+    },
+    "SCN-A-H2CONT": {
+      "description": "SMR turndown to 57 t/day (120 t/day net H2 -> 75 t/day HCU headroom) overrides compressor cap",
+      "smr_h2_t_per_day": 57.0,
+      "expected_hcu_headroom_t_per_day": 75.0,
+      "expected_binding_constraint": "shared_h2_cap",
+      "expected_max_hcu_feed_t_per_day": 3750.0,
+      "expected_max_hcu_feed_bbl_per_day_approx": 25945.1
+    }
+  },
+  "pinned_market_context_vintage_2026_11_28": {
+    "provenance_class": "OBSERVED",
+    "wti_rwtc_usd_per_bbl": 57.26,
+    "usgc_ulsd_usd_per_gal": 1.999,
+    "usgc_reg_gasoline_usd_per_gal": 1.737,
+    "usgc_jet_usd_per_gal": 1.911,
+    "henry_hub_usd_per_mmbtu": 4.00
+  }
+}
