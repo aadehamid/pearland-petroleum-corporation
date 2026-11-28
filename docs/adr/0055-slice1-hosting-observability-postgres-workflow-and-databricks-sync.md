@@ -1,7 +1,7 @@
 ---
 status: Decided
 date: 2026-11-26
-amends: ADR-0045, ADR-0048, ADR-0051
+amends: ADR-0051
 authority: Owner-delegated stand-in (Claude Fable 2, claude-fable-5-2)
 source_answers: docs/adr/answers/2026-11-26-claude-fable-2-owner-standin.md#gate-2--adr-0045-and-adr-0051-operations
 ---
@@ -31,3 +31,7 @@ Claude Fable 2, acting as owner stand-in (`docs/adr/answers/2026-11-26-claude-fa
 - `ADR-0045` is clarified to lock Dagster-driven synced copies into Databricks Free Edition workspace-managed tables in `WP-8A`, gated by the `WP-0` ingest probe.
 - `ADR-0048` is staged so Slice 1 ships OTLP JSON traces to R2 `telemetry/otel/` (queried by DuckDB for leak tests) while ClickHouse-backed Langfuse v3 enters in `WP-7`. The `WP-3B` LLM endpoint choice remains explicitly reserved for Hamid Adesokan (with recorded responses for golden tests).
 - `ADR-0051` is amended to lock the 12 GB single VM (or 8 GB + 4 GB two-VM fallback) topology and consolidate all workflow, approval, and LangGraph checkpoint state into PostgreSQL on `exe.dev`, removing Cloudflare D1 from v1.
+
+## Relation-verb reconciliation note (2026-11-27)
+
+- Owner confirmed in [2026-11-27-adr-consistency-rulings.md](answers/2026-11-27-adr-consistency-rulings.md) (`"Yes to all by the way"`): frontmatter and `docs/adr/README.md` align with Consequences and `G2-b` (`amends: ADR-0051`; clarifies `ADR-0045`; stages `ADR-0048`).

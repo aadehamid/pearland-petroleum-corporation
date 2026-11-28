@@ -1,6 +1,7 @@
 ---
 status: Decided
 date: 2026-11-26
+amends: PPC-011, PPC-012
 source_answers: docs/adr/answers/2026-11-26-first-principles-grill.md#round-2-2026-11-26
 ---
 

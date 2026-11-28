@@ -1,7 +1,7 @@
 ---
 status: Decided
 date: 2026-11-26
-amends: ADR-0043, ADR-0048, ADR-0050
+amends: none
 authority: Owner-delegated stand-in (Claude Fable 2, claude-fable-5-2)
 source_answers: docs/adr/answers/2026-11-26-claude-fable-2-owner-standin.md#gate-3--governance-thresholds-and-parameters
 ---
@@ -35,3 +35,7 @@ Claude Fable 2, acting as owner stand-in (`docs/adr/answers/2026-11-26-claude-fa
 
 - `PPC-AGENT-001`, `PPC-ENG-001`, `PPC-REVIEW-002`, `PPC-REVIEW-003`, `PPC-REVIEW-004`, and `PPC-PLAN-001` adopt `IDENTITY_STEWARD`, the `PROHIBITED` class (`DENIED`), the numeric Tier 1/Tier 2/`ESCALATE` limits, and the locked parameter/numerical tolerances.
 - `PO-12` splits cleanly into `PO-12a` (Refinery A plausibility signed by Hamid at `WP-1` exit) and `PO-12b` (measurable Planning LP calibration error at `WP-3A` exit).
+
+## Relation-verb reconciliation note (2026-11-27)
+
+- Owner confirmed in [2026-11-27-adr-consistency-rulings.md](answers/2026-11-27-adr-consistency-rulings.md) (`"Yes to all by the way"`): frontmatter and `docs/adr/README.md` align with target ADR notes (`amends: none`; extends `ADR-0043`, `ADR-0048`, and `ADR-0050`).
