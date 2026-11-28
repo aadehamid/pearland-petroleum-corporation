@@ -344,7 +344,8 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(p_phys["tier"], 2)
                 self.assertEqual(p_phys["required_approver_role"], "Refinery Operations Manager")
 
-                # 12. Derived rate_change_pct (10,000 -> 11,500 = 15% > 10% Tier 1 cap) MUST promote to Tier 2
+                # 12. Derived rate_change_pct (10,000 -> 11,500 = 15% > 10% Tier 1 cap) MUST promote to Tier 2;
+                # feed_bbl_per_day WITHOUT baseline_feed_bbl_per_day (even <= 50,000) MUST fail closed to ESCALATE!
                 p_pct = gate.submit_proposal(
                     proposal_id="PROP-DERIVED-PCT",
                     branch_id="baseline",
@@ -357,6 +358,18 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 )
                 self.assertEqual(p_pct["tier"], 2)
                 self.assertEqual(p_pct["required_approver_role"], "Refinery Operations Manager")
+
+                p_nobase = gate.submit_proposal(
+                    proposal_id="PROP-NO-BASELINE-45K",
+                    branch_id="baseline",
+                    action_type="feed_rate_change_inside_envelope",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"feed_bbl_per_day": 45000.0},
+                    metrics={"margin_effect_usd": 5.0, "rate_change_bbl_per_day": 100.0, "rate_change_pct": 0.5},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_nobase["authority_class"], "ESCALATE")
 
                 # 13. Derived notional_usd = volume_bbl_60f * pinned_price_usd_per_bbl (40,000 * $200 = $8M > $5M cap)
                 # MUST escalate AND ESCALATED proposals MUST be terminal (never approvable or executable)!

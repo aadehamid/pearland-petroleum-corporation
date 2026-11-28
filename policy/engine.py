@@ -44,21 +44,6 @@ REQUIRED_ACTION_METRICS: dict[str, tuple[str, ...]] = {
 }
 
 
-# Server-side Tier 2 action_type -> domain mapping (ADR-0056 G3-b; never taken from caller metrics["domain"])
-TIER2_ACTION_DOMAIN: dict[str, str] = {
-    "feed_rate_change_inside_envelope": "physical",
-    "unit_mode_change_inside_envelope": "physical",
-    "cdu_vdu_cut_point_shift": "physical",
-    "in_refinery_tank_transfer": "physical",
-    "larger_feed_rate_change": "physical",
-    "max_distillate_or_max_gasoline_mode_swing": "physical",
-    "reroute_held_lot_to_another_hold": "physical",
-    "inter_terminal_transfer": "commercial",
-    "spot_purchase_or_sale": "commercial",
-    "delivery_reschedule": "commercial",
-}
-
-
 def canonical_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -102,7 +87,9 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                 if not math.isfinite(af):
                     raise ValueError(f"Non-finite {container_name} field {aux_field}={aux_val!r}")
 
-    # Derive rate_change_bbl_per_day AND rate_change_pct from feed_bbl_per_day + baseline_feed_bbl_per_day
+    # Derive rate_change_bbl_per_day AND rate_change_pct from feed_bbl_per_day + baseline_feed_bbl_per_day.
+    # If feed_bbl_per_day is given WITHOUT baseline_feed_bbl_per_day, the delta cannot be verified, so
+    # fail conservatively by marking rate_change_pct unverifiable (None -> missing_estimate_counts_as_exceeded).
     feed_val = payload.get("feed_bbl_per_day") if payload.get("feed_bbl_per_day") is not None else merged.get("feed_bbl_per_day")
     base_val = (
         payload.get("baseline_feed_bbl_per_day")
@@ -121,14 +108,16 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                 merged["rate_change_bbl_per_day"] = implied_delta
             if merged.get("rate_change_pct") is None or implied_pct > abs(float(merged["rate_change_pct"])):
                 merged["rate_change_pct"] = implied_pct
-        elif abs(feed_f) > 50000.0:
-            # Exceeds Tier 2 absolute volume envelope without baseline proof -> force conservative magnitude
+        else:
+            # Unverifiable target feed without baseline proof: fail closed (force escalation)
+            merged["rate_change_pct"] = None
             merged["rate_change_bbl_per_day"] = max(
                 abs(float(merged.get("rate_change_bbl_per_day") or 0.0)), abs(feed_f)
             )
-            merged["volume_bbl_60f"] = max(
-                abs(float(merged.get("volume_bbl_60f") or 0.0)), abs(feed_f)
-            )
+            if abs(feed_f) > 50000.0:
+                merged["volume_bbl_60f"] = max(
+                    abs(float(merged.get("volume_bbl_60f") or 0.0)), abs(feed_f)
+                )
 
     # Derive notional_usd per schemas/policy_thresholds.yaml formula: volume_bbl_60F * pinned_price_usd_per_bbl
     price_val = (
@@ -153,6 +142,15 @@ class PolicyGateService:
     def __init__(self, thresholds_path: str | Path, db_path: str | Path):
         self.thresholds = yaml.safe_load(Path(thresholds_path).read_text(encoding="utf-8"))
         self.policy_version = str(self.thresholds.get("policy_version", "1.0.0"))
+        t1_cfg = self.thresholds["authority_classes"]["REQUIRE_APPROVAL_TIER_1"]
+        t2_cfg = self.thresholds["authority_classes"]["REQUIRE_APPROVAL_TIER_2"]
+        self.tier2_action_domains: dict[str, str] = dict(t2_cfg.get("action_domains", {}))
+        for act in (*t1_cfg["allowed_actions"], *t2_cfg["allowed_actions"]):
+            dom = self.tier2_action_domains.get(act)
+            if dom not in t2_cfg["approver_roles"]:
+                raise ValueError(
+                    f"schemas/policy_thresholds.yaml missing valid action_domains mapping for {act!r}: {dom!r}"
+                )
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path), isolation_level=None)
@@ -324,8 +322,8 @@ class PolicyGateService:
                 and (cut_shift_c is None or abs(float(cut_shift_c)) <= lim["max_cut_point_shift_c"])
                 and (resched_h is None or abs(float(resched_h)) <= lim["max_delivery_reschedule_hours"])
             )
-            if within_t2 and action_type in TIER2_ACTION_DOMAIN:
-                domain = TIER2_ACTION_DOMAIN[action_type]
+            if within_t2 and action_type in self.tier2_action_domains:
+                domain = self.tier2_action_domains[action_type]
                 role = t2["approver_roles"][domain]
                 return {
                     "authority_class": "REQUIRE_APPROVAL",
