@@ -1,7 +1,7 @@
 ---
 status: Decided
 date: 2026-11-26
-amends: ADR-003, ADR-004, ADR-010, ADR-018
+amends: none
 source_answers: docs/adr/answers/2026-11-26-first-principles-grill.md#round-3-2026-11-26
 ---
 
