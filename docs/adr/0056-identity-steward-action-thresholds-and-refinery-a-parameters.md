@@ -39,3 +39,7 @@ Claude Fable 2, acting as owner stand-in (`docs/adr/answers/2026-11-26-claude-fa
 ## Relation-verb reconciliation note (2026-11-27)
 
 - Owner confirmed in [2026-11-27-adr-consistency-rulings.md](answers/2026-11-27-adr-consistency-rulings.md) (`"Yes to all by the way"`): frontmatter and `docs/adr/README.md` align with target ADR notes (`amends: none`; extends `ADR-0043`, `ADR-0048`, and `ADR-0050`).
+
+## Amendment note (2026-11-28)
+
+- Amended by [ADR-0062](0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md): Hamid Adesokan accepted [PPC-REVIEW-005](../enterprise-architecture/independent-review/PPC-REVIEW-005_PO-12a_Refinery_A_Empirical_Plausibility_Benchmark_Report.md) with conditions for v1 synthetic qualification, restated the `PO-12a` plant volumetric gain criterion to plant C3+ gain `+2.5%` to `+4.5%` plus registered unit-level HCU C5+ gain `+4%` to `+10%`, and accepted the `22.09 wt%` FCC gas yield at the `532 °C` / `7.0` CTO holdout point as expected above nominal severity.

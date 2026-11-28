@@ -3,35 +3,35 @@
 | Document control | Value |
 |---|---|
 | Document ID | `PPC-REVIEW-005` |
-| Status | Pending Owner Sign-Off |
+| Status | Accepted with Conditions (Owner Signed 2026-11-28) |
 | Report date | `2026-11-28` |
 | Reviewed commit | `88f5fe4` (merged `main`, pull request #33) |
 | Reviewer | Claude Fable 5.2 (`claude-fable-5-2`), AI automated technical reviewer (separate from the night-run coding session that authored commit `88f5fe4`; not a human process-engineering reviewer — see Section 2). |
-| Owner sign-off | Pending. Hamid Adesokan, per [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md). |
-| Governing decisions | [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) `G3-c` and `G3-d`, [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md), [PPC-REVIEW-004](PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) `PO-12a` |
+| Owner sign-off | Signed by Hamid Adesokan on `2026-11-28` (accepted with conditions; see Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| Governing decisions | [ADR-0056](../../adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md) `G3-c` and `G3-d`, [ADR-0059](../../adr/0059-overnight-night-run-delegation-and-standin-authority.md), [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md), [PPC-REVIEW-004](PPC-REVIEW-004_Proof_Obligation_and_Validation_Register.md) `PO-12a` |
 | Code and data reviewed | `generators/equations.py`, `generators/world_kernel.py`, `fixtures/golden/refinery_a_design_basis.yaml` |
 | Evidence file | `/tmp/ppc_po12a_benchmark_main.json`, the output of `run_eng_v07_mode_benchmark`, copied in full in Appendix A |
 | Provenance class | `SYNTHETIC`. Pearland Petroleum Corporation is fictional. No value in this report describes a real refinery. |
 
 ## 1. Verdict
 
-The unit-level and conservation checks pass in all five operating modes. The plant-level `PO-12a` criterion fails in all five. The benchmark reports `all_holdout_gates_pass: false`, and that value is correct.
+The unit-level and conservation checks pass in all five operating modes. The plant-level `PO-12a` criterion fails in all five. The benchmark reports `all_holdout_gates_pass: false`, and that value is correct. (Dated note, 2026-11-28: this finding is against the original plant C5+ band of `+4%` to `+10%`. [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) restated the `PO-12a` plant criterion to plant C3+ volumetric gain `+2.5%` to `+4.5%` and recorded conditional acceptance pending the benchmark gate update in Section 6.)
 
 The following checks pass:
 
 - The CDU/VDU cut split closes mass and sulfur.
 - The FCC 4-lump model closes mass and sulfur, and its heat balance is feasible.
-- HCU C5+ liquid volume gain is 8.19 to 8.64 percent. The kernel's own `po12a_hcu_gain_in_4_to_10` flag checks a 4 to 10 percent band (not defined in `PPC-REVIEW-004` or `ADR-0056`; see Section 2).
+- HCU C5+ liquid volume gain is 8.19 to 8.64 percent. The kernel's own `po12a_hcu_gain_in_4_to_10` flag checks a 4 to 10 percent band (not defined in `PPC-REVIEW-004` or `ADR-0056` at review time; see Section 2; dated note 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) formally registered this unit-level HCU C5+ `+4%` to `+10%` band in `PPC-REVIEW-004` and `ADR-0056`).
 - HCU hydrogen uptake is 1,258 to 1,260 SCF/bbl. The band is 1,000 to 2,500 SCF/bbl.
 - The shared hydrogen header reports zero double allocation.
 - All six `EQ-03` transfer lines are hydraulically feasible.
 - The largest mass or sulfur residual is 3.6e-12 t/day. The `ADR-0056` tolerance is 1e-9.
 
-The plant-level criterion in `PO-12a` is a plant C5+ volumetric gain of +4 to +10 percent. The kernel gives -3.48 to -4.98 percent. Plant C3+ gain, which adds LPG, is +3.00 to +3.99 percent. That is also below +4 percent in every mode.
+The plant-level criterion in `PO-12a` at review time was a plant C5+ volumetric gain of +4 to +10 percent. The kernel gives -3.48 to -4.98 percent. Plant C3+ gain, which adds LPG, is +3.00 to +3.99 percent. That was also below +4 percent in every mode. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) restated the `PO-12a` plant criterion to plant C3+ volumetric gain `+2.5%` to `+4.5%` and registered the unit-level HCU C5+ band `+4%` to `+10%`, keeping the measured results above as the finding against the original C5+ band.)
 
 The benchmark sets `unit_and_conservation_gates_pass: true` and `po12a_plant_c5_gain_band_pass: false`. The overall flag is the logical AND of the two, so it is false. No parameter was tuned to move the plant figure into the band. `ADR-0056` `G3-d` requires that: "If WP-1 cannot close a balance inside a range, it returns to the owner and does not tune silently."
 
-The owner must decide two things before `WP-1` can exit. The first is the measurement basis of the plant gain criterion. The second is one FCC yield that is outside its range. Section 6 states both decisions.
+The owner must decide two things before `WP-1` can exit. The first is the measurement basis of the plant gain criterion. The second is one FCC yield that is outside its range. Section 6 states both decisions. (Dated note, 2026-11-28: Hamid Adesokan decided both items and recorded conditional acceptance of `PO-12a` in Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).)
 
 ## 2. Method
 
@@ -39,9 +39,9 @@ I read the three source files at commit `88f5fe4`. I then ran `run_eng_v07_mode_
 
 I also ran `evaluate_refinery_plant_snapshot` for each mode to read values that the evidence file does not contain. These are FCC yields, HCU feed rates, cut volumes and the hydrogen header balance. Section 4 reports them and labels them as reviewer reproduction.
 
-I wrote no files and changed no code. I am an AI model, not a human process engineer, and repository git metadata records only the owner's account rather than which model authored commit `88f5fe4`. `ADR-0056` `G3-d` and `PPC-REVIEW-004` require `PO-12a` evidence prepared by a process-engineering reviewer who did not write the kernel. An AI automated technical review does not by itself satisfy a human process-engineering reviewer qualification; Hamid Adesokan must decide whether this automated review suffices or whether to commission a separate human process-engineering review before closing `PO-12a`.
+I wrote no files and changed no code. I am an AI model, not a human process engineer, and repository git metadata records only the owner's account rather than which model authored commit `88f5fe4`. `ADR-0056` `G3-d` and `PPC-REVIEW-004` require `PO-12a` evidence prepared by a process-engineering reviewer who did not write the kernel. An AI automated technical review does not by itself satisfy a human process-engineering reviewer qualification; Hamid Adesokan must decide whether this automated review suffices or whether to commission a separate human process-engineering review before closing `PO-12a`. (Dated note, 2026-11-28: Hamid Adesokan conditionally accepted this automated review for v1 synthetic qualification in Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).)
 
-`PPC-REVIEW-004` names four benchmark sources for `PO-12a`: EIA PADD 3 gain, Gary–Handwerk, Maples, and GPSA. This report checks only the EIA processing-gain definition and the numeric bands already recorded in `ADR-0056`, `PPC-REVIEW-004`, and the kernel code. Primary editions of Gary–Handwerk, Maples, and GPSA are not pinned in this repository and were not cross-checked here. In addition, the unit-level HCU C5+ gain band of 4 to 10 percent appears only in the kernel's `po12a_hcu_gain_in_4_to_10` flag (`generators/world_kernel.py`), not in `PPC-REVIEW-004` or `ADR-0056`.
+`PPC-REVIEW-004` names four benchmark sources for `PO-12a`: EIA PADD 3 gain, Gary–Handwerk, Maples, and GPSA. This report checks only the EIA processing-gain definition and the numeric bands already recorded in `ADR-0056`, `PPC-REVIEW-004`, and the kernel code. Primary editions of Gary–Handwerk, Maples, and GPSA are not pinned in this repository and were not cross-checked here. In addition, the unit-level HCU C5+ gain band of 4 to 10 percent appears only in the kernel's `po12a_hcu_gain_in_4_to_10` flag (`generators/world_kernel.py`), not in `PPC-REVIEW-004` or `ADR-0056`. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) formally registered the unit-level HCU C5+ `+4%` to `+10%` band in `PPC-REVIEW-004` and `ADR-0056`.)
 
 Claude Fable 5.2 is also the owner stand-in named in `ADR-0059`. That ADR keeps `PO-12a` sign-off with Hamid Adesokan. This report gives findings and a recommendation. It does not sign.
 
@@ -183,15 +183,15 @@ Plant C3+ gain adds LPG from the crude, the reformer, the FCC and the HCU. That 
 
 ### 5.3 The measurement basis of the PO-12a band
 
-`PPC-REVIEW-004` lists "EIA PADD 3 gain" among four benchmark sources for `PO-12a` alongside the +4 to +10 percent acceptance band without binding that band to a single source. The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
+`PPC-REVIEW-004` lists "EIA PADD 3 gain" among four benchmark sources for `PO-12a` alongside the +4 to +10 percent acceptance band without binding that band to a single source. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) updated `PPC-REVIEW-004` so the `+4%` to `+10%` band applies to unit-level HCU C5+ gain and restated the plant band to C3+ `+2.5%` to `+4.5%`.) The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
 
-The `PO-12a` text applies that band to C5+ liquids only. On that basis the v1 flowsheet cannot reach +4 percent without changing parameters that `ADR-0056` `G3-c` locks. I did not check which products EIA counts in total output beyond this definition. The owner decision in section 6 should confirm the basis before it is written into `PO-12a`.
+The `PO-12a` text applies that band to C5+ liquids only. On that basis the v1 flowsheet cannot reach +4 percent without changing parameters that `ADR-0056` `G3-c` locks. I did not check which products EIA counts in total output beyond this definition. The owner decision in section 6 should confirm the basis before it is written into `PO-12a`. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) restated `PO-12a` to plant C3+ volumetric gain `+2.5%` to `+4.5%` and formally registered the unit-level HCU C5+ band `+4%` to `+10%`.)
 
 ### 5.4 Limits on what the passing checks show
 
 These notes do not change the verdict. They limit how much weight the passing checks can carry.
 
-**HCU gain and hydrogen uptake are inputs, not predictions.** `ADR-0056` locks chemical hydrogen at 2.0 wt% of feed and purge at 0.10 wt%. Those two numbers and the VGO density give 1,258 to 1,260 SCF/bbl directly. The locked product selectivities and product densities give the 8.19 to 8.64 percent gain. The check confirms that the locked parameters sit inside the `PPC-REVIEW-004` hydrogen band (1,000 to 2,500 SCF/bbl) and the kernel's unit-level HCU gain flag (4 to 10 percent).
+**HCU gain and hydrogen uptake are inputs, not predictions.** `ADR-0056` locks chemical hydrogen at 2.0 wt% of feed and purge at 0.10 wt%. Those two numbers and the VGO density give 1,258 to 1,260 SCF/bbl directly. The locked product selectivities and product densities give the 8.19 to 8.64 percent gain. The check confirms that the locked parameters sit inside the `PPC-REVIEW-004` hydrogen band (1,000 to 2,500 SCF/bbl) and the kernel's unit-level HCU gain flag (4 to 10 percent; dated note 2026-11-28: registered in `PPC-REVIEW-004` and `ADR-0056` by [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)).
 
 **Some residuals are zero by construction.** In runtime mode the HCU sizes its acid gas stream from the stoichiometric H2S, so the HCU sulfur residual is always zero. The FCC distributes sulfur by fixed fractions that sum to one. The CDU sulfur residual and all mass residuals are real tests.
 
@@ -211,11 +211,11 @@ These notes do not change the verdict. They limit how much weight the passing ch
 
 ## 6. Owner decision required
 
-This section is for Hamid Adesokan. `ADR-0056` `G3-d` and `ADR-0059` keep `PO-12a` sign-off with the owner. No agent or stand-in has signed or may sign it.
+This section is for Hamid Adesokan. `ADR-0056` `G3-d` and `ADR-0059` keep `PO-12a` sign-off with the owner. No agent or stand-in has signed or may sign it. (Dated note, 2026-11-28: Hamid Adesokan recorded his owner rulings and conditional sign-off in the Sign-off table below and in [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).)
 
 ### Decision 1. Plant gain criterion
 
-`PO-12a` requires plant C5+ volumetric gain of +4 to +10 percent. The kernel gives -3.48 to -4.98 percent. The options are:
+`PO-12a` requires plant C5+ volumetric gain of +4 to +10 percent. The kernel gives -3.48 to -4.98 percent. (Dated note, 2026-11-28: Hamid Adesokan chose option A below, restating `PO-12a` to plant C3+ volumetric gain `+2.5%` to `+4.5%` and registering unit-level HCU C5+ gain `+4%` to `+10%` in [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).) The options are:
 
 | Option | Action | Consequence |
 |---|---|---|
@@ -223,11 +223,11 @@ This section is for Hamid Adesokan. `ADR-0056` `G3-d` and `ADR-0059` keep `PO-12
 | B | Keep the C5+ band and return `WP-1` for a flowsheet or parameter change. | The change must reopen ranges that `ADR-0056` `G3-c` locks, or add a unit to the v1 flowsheet in `ADR-0054`. |
 | C | Keep the C5+ band and accept the result as a recorded deviation for v1. | `PO-12a` closes with a known failure on its plant criterion. Later work packages inherit it. |
 
-I recommend option A. The unit models conserve mass and give ordinary yields, and section 5.3 shows that the band and its benchmark use different bases. Plant C3+ gain is also below +4 percent, so a change of basis to C3+ alone does not close the criterion. The new basis and band need the owner's choice.
+I recommend option A. The unit models conserve mass and give ordinary yields, and section 5.3 shows that the band and its benchmark use different bases. Plant C3+ gain is also below +4 percent, so a change of basis to C3+ alone does not close the criterion. The new basis and band need the owner's choice. (Dated note, 2026-11-28: Hamid Adesokan chose plant C3+ volumetric gain `+2.5%` to `+4.5%` and registered unit-level HCU C5+ gain `+4%` to `+10%` in Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).)
 
 ### Decision 2. FCC gas yield at the high-severity holdout
 
-FCC gas yield is 22.09 wt% at 532 °C and catalyst-to-oil 7.0. The `ADR-0056` range is 16 to 22 wt%. The owner must choose one of these:
+FCC gas yield is 22.09 wt% at 532 °C and catalyst-to-oil 7.0. The `ADR-0056` range is 16 to 22 wt%. The owner must choose one of these (dated note, 2026-11-28: Hamid Adesokan chose option 1 in the Sign-off table below and in [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)):
 
 1. Accept the result, because the holdout point is at higher severity than the range was written for.
 2. Widen the range in an ADR.
@@ -247,12 +247,12 @@ A separate pull request can make these changes to the benchmark. None of them ch
 
 | Item | Entry |
 |---|---|
-| Decision 1 (A, B or C, with the basis and band if A) | |
-| Decision 2 (1, 2 or 3) | |
-| `PO-12a` disposition (accepted, accepted with conditions, or returned) | |
-| Conditions | |
-| Signed: Hamid Adesokan, PPC owner | |
-| Date | |
+| Decision 1 (A, B or C, with the basis and band if A) | Option A — restate `PO-12a` plant gain to plant C3+ volumetric gain `+2.5%` to `+4.5%` and formally register unit-level HCU C5+ gain `+4%` to `+10%` ([ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| Decision 2 (1, 2 or 3) | Option 1 — accept `22.09 wt%` FCC gas yield at the `532 °C` / `7.0` CTO holdout point as expected above nominal severity, and add FCC yield checks to the benchmark gate ([ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)). |
+| `PO-12a` disposition (accepted, accepted with conditions, or returned) | Accepted with conditions for v1 synthetic qualification. |
+| Conditions | Implement the three non-physics benchmark follow-ups in Section 6 (include HCU H2 draw in header zero-double-allocation check; add FCC yields, `1e-9` residual tolerance test, and plant-wide mass/sulfur balance to the gate; report whether a cap actively limits HCU feed), and update the benchmark gate with the restated `ADR-0062` gain bands per Decision 1 Option A. Note that review evidence is an AI automated technical review rather than a human process-engineering review (Section 2). |
+| Signed: Hamid Adesokan, PPC owner | Hamid Adesokan (recorded verbatim in [docs/adr/answers/2026-11-28-owner-po12a-llm-and-hosting-decisions.md](../../adr/answers/2026-11-28-owner-po12a-llm-and-hosting-decisions.md) and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md)) |
+| Date | `2026-11-28` |
 
 ## Appendix A. Evidence file
 
