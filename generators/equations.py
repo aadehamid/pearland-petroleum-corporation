@@ -364,6 +364,21 @@ def cdu_vdu_cut_split(
     deltas = list(overlap_shifts) if overlap_shifts is not None else [0.0] * 7
     if len(deltas) != 7 or abs(sum(deltas)) > 1e-12:
         raise ValueError("Per-crude fractionation overlap deltas must have length 7 and sum strictly to 0")
+    for idx, d in enumerate(deltas):
+        if abs(d) > 0.02 + 1e-12:
+            raise OutOfEnvelopeError(
+                f"OUT_OF_ENVELOPE: fractionation overlap delta[{idx}]={d:+.4f} exceeds +/-0.02 (2 wt%)"
+            )
+    # Derive adjacent-cut overlap fluxes f[0..5] where d[0]=-f[0], d[i]=f[i-1]-f[i], d[6]=f[5]
+    fluxes: list[float] = []
+    running = 0.0
+    for idx in range(6):
+        running -= deltas[idx]
+        if abs(running) > 0.02 + 1e-12:
+            raise OutOfEnvelopeError(
+                f"OUT_OF_ENVELOPE: cumulative adjacent cut overlap flux[{idx}]={running:+.4f} exceeds +/-0.02 (2 wt%)"
+            )
+        fluxes.append(running)
 
     cut_mass = {name: 0.0 for name in cut_names}
     cut_sulfur_mass = {name: 0.0 for name in cut_names}
@@ -401,14 +416,25 @@ def cdu_vdu_cut_split(
         loss_t = feed_t * column_loss_wt_frac
         total_loss_t += loss_t
         loss_sulfur_t += loss_t * crude_avg_s
+        # True base crude feed sulfur BEFORE any overlap redistribution
+        total_in_sulfur_t += feed_t * crude_avg_s
+
+        # Base cut sulfur before overlap, plus exact donor-cut sulfur transport across adjacent boundaries
+        per_crude_s = [feed_t * (1.0 - column_loss_wt_frac) * base_y[i] * s_wt_fracs[i] for i in range(7)]
+        for i, f_ij in enumerate(fluxes):
+            if f_ij >= 0.0:
+                s_moved = feed_t * f_ij * s_wt_fracs[i]
+            else:
+                s_moved = feed_t * f_ij * s_wt_fracs[i + 1]
+            per_crude_s[i] -= s_moved
+            per_crude_s[i + 1] += s_moved
 
         for idx, cname in enumerate(cut_names):
             m_j = feed_t * y_cuts[idx]
-            s_j = m_j * s_wt_fracs[idx]
+            s_j = per_crude_s[idx]
             cut_mass[cname] += m_j
             cut_sulfur_mass[cname] += s_j
             cut_vol_bbl[cname] += mass_kg_to_volume_bbl(m_j * 1000.0, sgs[idx])
-        total_in_sulfur_t += sum(feed_t * y_cuts[i] * s_wt_fracs[i] for i in range(7)) + loss_t * crude_avg_s
 
     out_cuts: dict[str, dict[str, float]] = {}
     for cname in cut_names:
@@ -464,9 +490,11 @@ def hcu_polytropic_head_j_kg(
 def hcu_evaluate(
     requested_feed_bbl_per_day: float,
     feed_sg_60_60: float = 0.910,
+    feed_sulfur_wt_frac: float = 0.015,
     mech_cap_bbl_per_day: float = 40000.0,
     compressor_circ_fraction: float = 1.0,
     r_min_vol_scf_per_bbl: float = 4000.0,
+    recycle_h2_purity_y_h2: float = 0.85,
     h2_allocable_t_per_day: float = 125.0,
     feed_available_t_per_day: float | None = None,
     downstream_cap_t_per_day: float | None = None,
@@ -477,7 +505,7 @@ def hcu_evaluate(
     fixture_mode: bool = True,
     purge_dissolved_wt_frac: float = 0.001,
 ) -> dict[str, Any]:
-    """Evaluate EQ-05 HCU unified SI mass-rate feed cap, H2 uptake, and exact mass slate."""
+    """Evaluate EQ-05 HCU unified SI mass-rate feed cap, H2 uptake, heat release, and sulfur/mass slate."""
     if not (80.0 <= p_h2_bar <= 180.0):
         raise OutOfEnvelopeError(f"OUT_OF_ENVELOPE: P_H2 {p_h2_bar} bar outside [80, 180]")
     if not (360.0 <= t_rxr_c <= 430.0):
@@ -486,11 +514,16 @@ def hcu_evaluate(
         raise OutOfEnvelopeError(f"OUT_OF_ENVELOPE: conversion xi {conversion_xi} outside [0.40, 0.95]")
     if not (3000.0 <= r_min_vol_scf_per_bbl <= 6000.0):
         raise OutOfEnvelopeError(f"OUT_OF_ENVELOPE: R_min {r_min_vol_scf_per_bbl} outside [3000, 6000]")
+    if not (0.70 <= recycle_h2_purity_y_h2 <= 0.98):
+        raise OutOfEnvelopeError(f"OUT_OF_ENVELOPE: y_h2_rec {recycle_h2_purity_y_h2} outside [0.70, 0.98]")
+    if not (0.0 <= feed_sulfur_wt_frac <= 0.06):
+        raise OutOfEnvelopeError(f"OUT_OF_ENVELOPE: feed_sulfur_wt_frac {feed_sulfur_wt_frac} outside [0, 0.06]")
 
     r_min_m = hcu_r_min_mass(r_min_vol_scf_per_bbl, feed_sg_60_60)
     mech_cap_t = volume_bbl_to_mass_kg(mech_cap_bbl_per_day, feed_sg_60_60) / 1000.0
     nominal_pure_h2_rec_t = mech_cap_t * r_min_m
     active_pure_h2_rec_t = nominal_pure_h2_rec_t * compressor_circ_fraction
+    active_total_recycle_gas_t = active_pure_h2_rec_t / recycle_h2_purity_y_h2
     circ_cap_t = active_pure_h2_rec_t / r_min_m
 
     c_h2_chem = 0.020 * (conversion_xi / 0.90)
@@ -525,18 +558,55 @@ def hcu_evaluate(
     h2_chem_t = actual_feed_t * c_h2_chem
     h2_net_t = actual_feed_t * c_h2_net
     total_in_t = actual_feed_t + h2_chem_t
+    # Locked ADR-0056 G3-c hydrocracking heat release: 30 MJ/kg H2 consumed
+    quench_heat_release_kw = (h2_chem_t * 1000.0 / 86400.0) * 30000.0
+
+    # Stoichiometric HDS sulfur closure (MW_H2S / AW_S = 34.08088 / 32.065)
+    feed_sulfur_t = actual_feed_t * feed_sulfur_wt_frac
+    hydrotreated_liquid_s_t = actual_feed_t * 10e-6  # ~10 ppmw residual S across hydrotreated liquids
+    s_to_h2s_t = max(0.0, feed_sulfur_t - hydrotreated_liquid_s_t)
+    stoich_h2s_t = s_to_h2s_t * (34.08088 / 32.065)
 
     outputs: dict[str, dict[str, float | str | None]] = {}
-    for pname, sel in HCU_SELECTIVITIES.items():
-        m_t = sel * conversion_xi * total_in_t
-        sg = HCU_LIQUID_SG.get(pname)
-        vol = mass_kg_to_volume_bbl(m_t * 1000.0, sg) if sg is not None else None
-        outputs[pname] = {
-            "phase": "gas" if sg is None else "liquid",
-            "mass_t_per_day": m_t,
-            "sg_60_60": sg,
-            "volume_bbl_per_day": vol,
+    converted_total_t = conversion_xi * total_in_t
+    if fixture_mode:
+        # Exact PPC-REVIEW-002 §3 hand-fixture selectivities
+        for pname, sel in HCU_SELECTIVITIES.items():
+            m_t = sel * converted_total_t
+            sg = HCU_LIQUID_SG.get(pname)
+            vol = mass_kg_to_volume_bbl(m_t * 1000.0, sg) if sg is not None else None
+            outputs[pname] = {
+                "phase": "gas" if sg is None else "liquid",
+                "mass_t_per_day": m_t,
+                "sg_60_60": sg,
+                "volume_bbl_per_day": vol,
+            }
+    else:
+        # Runtime mode: acid_gas carries full stoichiometric H2S (+0.15% feed NH3/trace),
+        # remaining converted hydrocarbon mass closes strictly to converted_total_t.
+        acid_gas_t = stoich_h2s_t + actual_feed_t * 0.0015
+        if acid_gas_t > converted_total_t:
+            raise OutOfEnvelopeError("Stoichiometric H2S exceeds total converted HCU mass")
+        hc_converted_t = converted_total_t - acid_gas_t
+        hc_sel_sum = sum(v for k, v in HCU_SELECTIVITIES.items() if k != "acid_gas")
+        outputs["acid_gas"] = {
+            "phase": "gas",
+            "mass_t_per_day": acid_gas_t,
+            "sg_60_60": None,
+            "volume_bbl_per_day": None,
         }
+        for pname, sel in HCU_SELECTIVITIES.items():
+            if pname == "acid_gas":
+                continue
+            m_t = (sel / hc_sel_sum) * hc_converted_t
+            sg = HCU_LIQUID_SG.get(pname)
+            vol = mass_kg_to_volume_bbl(m_t * 1000.0, sg) if sg is not None else None
+            outputs[pname] = {
+                "phase": "gas" if sg is None else "liquid",
+                "mass_t_per_day": m_t,
+                "sg_60_60": sg,
+                "volume_bbl_per_day": vol,
+            }
 
     uco_t = (1.0 - conversion_xi) * total_in_t
     uco_sg = HCU_LIQUID_SG["uco"]
@@ -555,10 +625,15 @@ def hcu_evaluate(
     c3_plus_bbl = c5_plus_bbl + float(outputs["lpg"]["volume_bbl_per_day"])
     liq_gain_c5_pct = (100.0 * (c5_plus_bbl / actual_feed_bbl - 1.0)) if actual_feed_bbl > 0.0 else 0.0
 
+    acid_gas_mass = float(outputs["acid_gas"]["mass_t_per_day"])
+    sulfur_out_t = s_to_h2s_t + hydrotreated_liquid_s_t
     return {
         "feasible": feasible,
         "status": "FEASIBLE" if feasible else "INFEASIBLE",
         "r_min_mass": r_min_m,
+        "recycle_h2_purity_y_h2": recycle_h2_purity_y_h2,
+        "active_total_recycle_gas_t_per_day": active_total_recycle_gas_t,
+        "quench_heat_release_kw": quench_heat_release_kw,
         "binding_constraint": binding_name,
         "bounds_t_per_day": bounds_t,
         "max_feed_t_per_day": max_feed_t,
@@ -570,6 +645,14 @@ def hcu_evaluate(
         "total_input_mass_t_per_day": total_in_t,
         "total_output_mass_t_per_day": total_out_t,
         "mass_residual_t_per_day": total_out_t - total_in_t,
+        "sulfur_balance": {
+            "feed_sulfur_t_per_day": feed_sulfur_t,
+            "s_to_h2s_t_per_day": s_to_h2s_t,
+            "stoichiometric_h2s_t_per_day": stoich_h2s_t,
+            "liquid_product_sulfur_t_per_day": hydrotreated_liquid_s_t,
+            "sulfur_residual_t_per_day": sulfur_out_t - feed_sulfur_t,
+            "acid_gas_covers_stoichiometric_h2s": acid_gas_mass >= stoich_h2s_t - 1e-9,
+        },
         "c5_plus_bbl_per_day": c5_plus_bbl,
         "c3_plus_bbl_per_day": c3_plus_bbl,
         "liquid_vol_gain_c5_pct": liq_gain_c5_pct,
@@ -647,12 +730,22 @@ def fcc_evaluate(
     if kinetics:
         kin.update(kinetics)
 
+    # Arrhenius temperature coupling and catalyst-to-oil contact scaling around (525 C, 6.5)
+    t_ref_k = 525.0 + 273.15
+    t_rxr_k = t_rxr_c + 273.15
+    inv_dt = (1.0 / t_ref_k) - (1.0 / t_rxr_k)
+    cto_scale = (cat_to_oil / 6.5) ** 0.45
+    k1_eff = kin["k1"] * math.exp((42000.0 / R_GAS_J_MOL_K) * inv_dt) * cto_scale
+    k2_eff = kin["k2"] * math.exp((52000.0 / R_GAS_J_MOL_K) * inv_dt) * cto_scale
+    k3_eff = kin["k3"] * math.exp((65000.0 / R_GAS_J_MOL_K) * inv_dt) * cto_scale
+    k4_eff = kin["k4"] * math.exp((48000.0 / R_GAS_J_MOL_K) * inv_dt) * cto_scale
+
     ya, yb, yc, yd = fcc_4lump_integrate(
         w_ccr_feed=w_ccr_feed,
-        k1=kin["k1"],
-        k2=kin["k2"],
-        k3=kin["k3"],
-        k4=kin["k4"],
+        k1=k1_eff,
+        k2=k2_eff,
+        k3=k3_eff,
+        k4=k4_eff,
         beta_bc=kin["beta_bc"],
         alpha_d=kin["alpha_d"],
         f_add=kin["f_add"],
@@ -662,7 +755,6 @@ def fcc_evaluate(
     max_feed_t = volume_bbl_to_mass_kg(max_feed_bbl_per_day, feed_sg_60_60) / 1000.0
     coke_burn_ceiling_t = 0.070 * max_feed_t
     coke_t = feed_t_per_day * yd
-    feasible = (feed_t_per_day <= max_feed_t + 1e-9) and (coke_t <= coke_burn_ceiling_t + 1e-9)
 
     # Stream splits (ADR-0056 G3-c)
     lco_t = feed_t_per_day * ya * FCC_LCO_OF_UNCONVERTED
@@ -671,8 +763,9 @@ def fcc_evaluate(
     dry_gas_t = feed_t_per_day * yc * FCC_DRYGAS_OF_GAS
     lpg_t = feed_t_per_day * yc * FCC_LPG_OF_GAS
 
-    # Reactor-regenerator macroscopic energy closure (kJ/s)
-    # Coke combustion heat release ~34,500 kJ/kg (CO/CO2 partial/full mix)
+    # Reactor-regenerator macroscopic energy balance (kJ/s)
+    # Coke combustion heat release (~34,500 kJ/kg) must cover catalyst circulation enthalpy;
+    # negative flue-gas/loss surplus means the corner is thermally INFEASIBLE.
     m_feed_kg_s = feed_t_per_day * 1000.0 / 86400.0
     m_coke_kg_s = coke_t * 1000.0 / 86400.0
     m_cat_kg_s = cat_to_oil * m_feed_kg_s
@@ -680,10 +773,17 @@ def fcc_evaluate(
     dh_comb_coke = 34500.0  # kJ/kg
     q_rxr_needed_kw = m_cat_kg_s * cp_cat * (t_regen_c - t_rxr_c)
     q_coke_release_kw = m_coke_kg_s * dh_comb_coke
-    # Flue gas + regenerator loss absorb remainder
     q_flue_and_loss_kw = q_coke_release_kw - q_rxr_needed_kw
+    heat_balance_feasible = q_flue_and_loss_kw >= -1e-6
     energy_residual_rel = (
-        abs((q_rxr_needed_kw + q_flue_and_loss_kw) - q_coke_release_kw) / max(1.0, q_coke_release_kw)
+        abs((q_rxr_needed_kw + max(0.0, q_flue_and_loss_kw)) - q_coke_release_kw)
+        / max(1.0, q_coke_release_kw)
+    )
+
+    feasible = (
+        (feed_t_per_day <= max_feed_t + 1e-9)
+        and (coke_t <= coke_burn_ceiling_t + 1e-9)
+        and heat_balance_feasible
     )
 
     total_s_in_t = feed_t_per_day * feed_sulfur_wt_frac
@@ -693,6 +793,10 @@ def fcc_evaluate(
     return {
         "feasible": feasible,
         "status": "FEASIBLE" if feasible else "INFEASIBLE",
+        "heat_balance_feasible": heat_balance_feasible,
+        "q_rxr_needed_kw": q_rxr_needed_kw,
+        "q_coke_release_kw": q_coke_release_kw,
+        "q_flue_and_loss_kw": q_flue_and_loss_kw,
         "lumps": {"y_A": ya, "y_B": yb, "y_C": yc, "y_D": yd, "sum": sum_y},
         "conversion_wt_pct": 100.0 * (1.0 - ya),
         "yields_wt_pct": {
@@ -732,18 +836,37 @@ def h2_header_balance(
     header_loss_t_per_day: float,
     dht_committed_t_per_day: float,
     hcu_requested_t_per_day: float = 0.0,
+    prev_smr_h2_t_per_day: float | None = None,
+    dt_minutes: float | None = None,
+    smr_nameplate_t_per_day: float = 120.0,
+    smr_ramp_pct_per_min: float = 2.0,
 ) -> dict[str, Any]:
-    """Evaluate EQ-07 single H2 header identity (G1-3) preventing double allocation (PO-04)."""
-    net_supply = smr_h2_t_per_day + reformer_h2_t_per_day - nht_draw_t_per_day - fcc_hds_draw_t_per_day
+    """Evaluate EQ-07 single H2 header identity (G1-3), SMR 2%/min ramp limit, and zero double allocation (PO-04)."""
+    smr_ramp_feasible = True
+    smr_effective_t = smr_h2_t_per_day
+    if prev_smr_h2_t_per_day is not None and dt_minutes is not None:
+        max_delta = smr_nameplate_t_per_day * (smr_ramp_pct_per_min / 100.0) * max(0.0, dt_minutes)
+        delta = smr_h2_t_per_day - prev_smr_h2_t_per_day
+        if abs(delta) > max_delta + 1e-9:
+            smr_ramp_feasible = False
+            smr_effective_t = prev_smr_h2_t_per_day + math.copysign(max_delta, delta)
+
+    net_supply = smr_effective_t + reformer_h2_t_per_day - nht_draw_t_per_day - fcc_hds_draw_t_per_day
     allocable_after_loss = max(0.0, net_supply - header_loss_t_per_day)
-    hcu_headroom = max(0.0, allocable_after_loss - dht_committed_t_per_day)
+    dht_allocated = min(dht_committed_t_per_day, allocable_after_loss)
+    dht_shortfall = max(0.0, dht_committed_t_per_day - dht_allocated)
+    hcu_headroom = max(0.0, allocable_after_loss - dht_allocated)
     hcu_allocated = min(hcu_requested_t_per_day, hcu_headroom)
-    total_allocated = dht_committed_t_per_day + hcu_allocated + header_loss_t_per_day
-    no_double_alloc = total_allocated <= net_supply + 1e-9
+    total_allocated = dht_allocated + hcu_allocated + min(header_loss_t_per_day, max(0.0, net_supply))
+    no_double_alloc = total_allocated <= max(0.0, net_supply) + 1e-9
     return {
+        "smr_effective_t_per_day": smr_effective_t,
+        "smr_ramp_feasible": smr_ramp_feasible,
         "net_plant_h2_supply_t_per_day": net_supply,
         "allocable_after_loss_t_per_day": allocable_after_loss,
         "dht_committed_t_per_day": dht_committed_t_per_day,
+        "dht_allocated_t_per_day": dht_allocated,
+        "dht_shortfall_t_per_day": dht_shortfall,
         "hcu_headroom_t_per_day": hcu_headroom,
         "hcu_allocated_t_per_day": hcu_allocated,
         "no_double_allocation": no_double_alloc,
@@ -918,13 +1041,19 @@ def evaluate_bob_and_e10_release(
     sulfur_ppmw: float | None,
     contains_untreated_lsr: bool = False,
     ethanol_vol_frac: float = 0.10,
+    premium_pool_vol_frac: float | None = None,
+    annual_avg_sulfur_ppmw: float | None = None,
 ) -> dict[str, Any]:
-    """Refinery-gate BOB release check + terminal 10 vol% ethanol E10 calculation (ADR-0054)."""
+    """Refinery-gate BOB release check + terminal 10 vol% ethanol E10 calculation (ADR-0054, ADR-0056 G3-c)."""
     min_bob_aki = 88.6 if grade == "PREMIUM" else 84.2
     min_e10_aki = 91.0 if grade == "PREMIUM" else 87.0
     reasons: list[str] = []
     if contains_untreated_lsr:
         reasons.append("UNTREATED_LSR_FORBIDDEN")
+    if premium_pool_vol_frac is not None and premium_pool_vol_frac > 0.10 + 1e-9:
+        reasons.append(f"PREMIUM_POOL_SHARE_EXCEEDS_10PCT ({100.0 * premium_pool_vol_frac:.2f}%)")
+    if annual_avg_sulfur_ppmw is not None and annual_avg_sulfur_ppmw > 10.0 + 1e-9:
+        reasons.append(f"TIER3_ANNUAL_AVG_SULFUR_EXCEEDS_10_PPMW ({annual_avg_sulfur_ppmw:.4f})")
     if any(v is None for v in (bob_aki, bob_rvp_psi, sulfur_ppmw)):
         reasons.append("MISSING_ASSAY")
         return {"disposition": "QUALITY_HOLD", "passed": False, "reasons": reasons, "terminal_e10_aki": None}

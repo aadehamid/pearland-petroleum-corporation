@@ -270,3 +270,262 @@ class RefineryWorldKernel:
             ev = self._scheduled.pop(0)
             event_outcomes.append(self._apply_event(ev))
         return event_outcomes
+
+
+def evaluate_refinery_plant_snapshot(
+    design_basis: Mapping[str, Any],
+    crude_feeds_bbl_per_day: Mapping[str, float] | None = None,
+    hcu_compressor_circ_fraction: float = 1.0,
+    smr_h2_t_per_day: float = 107.0,
+    fcc_t_rxr_c: float = 525.0,
+    fcc_cat_to_oil: float = 6.5,
+    hcu_fixture_mode: bool = False,
+) -> dict[str, Any]:
+    """Evaluate a full coupled Refinery A v1 plant snapshot across EQ-01 through EQ-08.
+
+    Steps CDU/VDU (EQ-04), Reformer (EQ-07), DHT (EQ-07), FCC (EQ-06), shared H2 header
+    (EQ-07), HCU (EQ-05), hydraulic transfer checks (EQ-03), and ULSD/BOB blending (EQ-08).
+    Reports BOTH HCU C5+ liquid gain and refinery-wide C5+/C3+ liquid volume balances so
+    PO-12a reviewers have transparent unit-vs-plant evidence.
+    """
+    assays_by_id = {a["id"]: a for a in design_basis["crude_assays"]}
+    if crude_feeds_bbl_per_day is None:
+        # Nominal 180,000 bbl/day design blend (30% Light Sweet / 50% Medium Sour / 20% Heavy Sour)
+        crude_feeds_bbl_per_day = {
+            "ASSAY-LIGHT-SWEET": 54000.0,
+            "ASSAY-MEDIUM-SOUR": 90000.0,
+            "ASSAY-HEAVY-SOUR": 36000.0,
+        }
+
+    crude_feeds_t: dict[str, float] = {}
+    total_crude_bbl = 0.0
+    for aid, bbl in crude_feeds_bbl_per_day.items():
+        sg = eq.api_to_sg_60_60(float(assays_by_id[aid]["target_api_gravity"]))
+        crude_feeds_t[aid] = eq.volume_bbl_to_mass_kg(bbl, sg) / 1000.0
+        total_crude_bbl += bbl
+
+    cdu = eq.cdu_vdu_cut_split(crude_feeds_t, assays_by_id)
+    cuts = cdu["cuts"]
+
+    # Bounded interfaces (EQ-07): NHT, Reformer (RON 98), DHT (SR AGO + <=20% FCC LCO), FCC HDS
+    heavy_naphtha_t = cuts["HEAVY_NAPHTHA"]["mass_t_per_day"]
+    nht_h2_t = heavy_naphtha_t * 0.0015  # ~5.0 t/day
+    reformer = eq.reformer_interface_step(heavy_naphtha_t, ron_target=98.0)
+
+    # Split VGO between FCC (30 kbbl/d cap) and HCU (40 kbbl/d cap)
+    vgo_bbl = cuts["VGO"]["volume_bbl_per_day"]
+    vgo_sg = cuts["VGO"]["sg_60_60"]
+    vgo_s_frac = cuts["VGO"]["sulfur_wt_pct"] / 100.0
+    fcc_feed_bbl = min(23000.0, vgo_bbl * 0.40)
+    fcc_feed_t = eq.volume_bbl_to_mass_kg(fcc_feed_bbl, vgo_sg) / 1000.0
+    fcc = eq.fcc_evaluate(
+        feed_t_per_day=fcc_feed_t,
+        feed_sulfur_wt_frac=vgo_s_frac,
+        w_ccr_feed=0.012,
+        t_rxr_c=fcc_t_rxr_c,
+        cat_to_oil=fcc_cat_to_oil,
+        feed_sg_60_60=vgo_sg,
+    )
+    fcc_hds_h2_t = fcc["streams_t_per_day"]["fcc_naphtha"] * 0.0038
+
+    # DHT processes SR AGO + <= 20 wt% FCC LCO
+    ago_t = cuts["AGO"]["mass_t_per_day"]
+    lco_to_dht_t = min(fcc["streams_t_per_day"]["lco"], 0.20 * ago_t / 0.80)
+    dht = eq.dht_interface_step(ago_t, lco_to_dht_t)
+
+    # Shared H2 header (EQ-07)
+    h2 = eq.h2_header_balance(
+        smr_h2_t_per_day=smr_h2_t_per_day,
+        reformer_h2_t_per_day=reformer["h2_byproduct_t_per_day"],
+        nht_draw_t_per_day=nht_h2_t,
+        fcc_hds_draw_t_per_day=fcc_hds_h2_t,
+        header_loss_t_per_day=5.0,
+        dht_committed_t_per_day=dht["h2_uptake_t_per_day"],
+    )
+
+    hcu_req_bbl = max(0.0, vgo_bbl - fcc_feed_bbl)
+    hcu = eq.hcu_evaluate(
+        requested_feed_bbl_per_day=hcu_req_bbl,
+        feed_sg_60_60=vgo_sg,
+        feed_sulfur_wt_frac=vgo_s_frac,
+        compressor_circ_fraction=hcu_compressor_circ_fraction,
+        h2_allocable_t_per_day=h2["hcu_headroom_t_per_day"],
+        fixture_mode=hcu_fixture_mode,
+    )
+
+    # Hydraulic checks on every EQ-03 transfer line in design basis (applying ANSI/HI 9.6.7 viscous derate C_H)
+    primary_pumps = {
+        p["line_id"]: p for p in design_basis.get("pumps", []) if p.get("role") == "primary"
+    }
+    hydraulics_ok = True
+    for line in design_basis.get("transfer_lines", []):
+        pump = primary_pumps[line["id"]]
+        c_h = 0.88 if pump.get("viscous_service") else 1.0
+        hres = eq.check_transfer_hydraulics(
+            flow_bbl_per_day=float(line["nominal_flow_bbl_per_day"]),
+            diameter_m=float(line["diameter_m"]),
+            length_m=float(line["length_m"]),
+            roughness_m=float(line["roughness_m"]),
+            k_fittings=float(line["k_fittings"]),
+            delta_z_m=float(line["delta_z_m"]),
+            delta_p_pa=float(line["delta_p_pa"]),
+            sg_60_60=float(line["fluid_sg"]),
+            viscosity_pa_s=float(line["fluid_viscosity_pa_s"]),
+            pump_h0_m=float(pump["h0_m"]),
+            pump_cp_s2_m5=float(pump["cp_s2_per_m5"]),
+            viscous_derate_c_h=c_h,
+        )
+        hydraulics_ok = hydraulics_ok and bool(hres["feasible"])
+
+    # Representative ULSD and Regular BOB release gates (EQ-08)
+    ulsd_gate = eq.evaluate_ulsd_release(
+        sulfur_ppmw=10.0,
+        flash_c=60.0,
+        cetane_number=46.0,
+        cetane_index=46.0,
+        aromatics_vol_pct=26.0,
+        cloud_c=-10.0,
+        seasonal_cloud_max_c=-5.0,
+    )
+    rt70 = eq.ethyl_rt70_octane(
+        vol_fracs=[0.40, 0.40, 0.15, 0.05],
+        rons=[98.0, 90.0, 68.0, 94.0],
+        mons=[87.0, 79.0, 66.0, 90.0],
+        olefins_vol_pct=[1.0, 28.0, 1.0, 0.0],
+        aromatics_vol_pct=[62.0, 25.0, 3.0, 0.0],
+    )
+    bob_rvp = eq.chevron_rvp_psi([0.97, 0.03], [5.8, 52.0])
+    bob_gate = eq.evaluate_bob_and_e10_release(
+        grade="REGULAR",
+        bob_aki=rt70["aki"],
+        bob_rvp_psi=bob_rvp,
+        bob_rvp_max_psi=6.4,
+        sulfur_ppmw=8.5,
+        premium_pool_vol_frac=0.096,
+        annual_avg_sulfur_ppmw=8.5,
+    )
+
+    # Plant-wide liquid volume accounting (transparently reported alongside HCU C5+ gain)
+    ref_bbl = eq.mass_kg_to_volume_bbl(reformer["reformate_t_per_day"] * 1000.0, 0.785)
+    fcc_naph_bbl = eq.mass_kg_to_volume_bbl(fcc["streams_t_per_day"]["fcc_naphtha"] * 1000.0, 0.745)
+    fcc_slurry_bbl = eq.mass_kg_to_volume_bbl(fcc["streams_t_per_day"]["slurry"] * 1000.0, 1.020)
+    fcc_lco_rem_bbl = eq.mass_kg_to_volume_bbl(
+        max(0.0, fcc["streams_t_per_day"]["lco"] - lco_to_dht_t) * 1000.0, 0.925
+    )
+    dht_ulsd_bbl = eq.mass_kg_to_volume_bbl((ago_t + lco_to_dht_t) * 1000.0, 0.840)
+    plant_c5_plus_bbl = (
+        cuts["LSR"]["volume_bbl_per_day"]
+        + ref_bbl
+        + cuts["KEROSENE"]["volume_bbl_per_day"]
+        + dht_ulsd_bbl
+        + fcc_naph_bbl
+        + fcc_lco_rem_bbl
+        + fcc_slurry_bbl
+        + hcu["c5_plus_bbl_per_day"]
+        + cuts["VACUUM_RESIDUE"]["volume_bbl_per_day"]
+    )
+    plant_lpg_bbl = (
+        cuts["LPG"]["volume_bbl_per_day"]
+        + eq.mass_kg_to_volume_bbl((reformer["lpg_t_per_day"] + fcc["streams_t_per_day"]["lpg"]) * 1000.0, 0.540)
+        + float(hcu["outputs"]["lpg"]["volume_bbl_per_day"])
+    )
+    plant_c5_gain_pct = 100.0 * (plant_c5_plus_bbl / total_crude_bbl - 1.0)
+    plant_c3_gain_pct = 100.0 * ((plant_c5_plus_bbl + plant_lpg_bbl) / total_crude_bbl - 1.0)
+
+    return {
+        "provenance_class": "SYNTHETIC",
+        "total_crude_bbl_per_day": total_crude_bbl,
+        "cdu": cdu,
+        "reformer": reformer,
+        "dht": dht,
+        "fcc": fcc,
+        "h2_header": h2,
+        "hcu": hcu,
+        "hydraulics_all_feasible": hydraulics_ok,
+        "ulsd_gate": ulsd_gate,
+        "bob_gate": bob_gate,
+        "volume_gain_summary": {
+            "hcu_c5_plus_gain_pct": hcu["liquid_vol_gain_c5_pct"],
+            "plant_c5_plus_gain_pct": plant_c5_gain_pct,
+            "plant_c3_plus_gain_pct": plant_c3_gain_pct,
+        },
+    }
+
+
+def run_eng_v07_mode_benchmark(design_basis: Mapping[str, Any]) -> dict[str, Any]:
+    """Run ENG-V07 training-vs-holdout operating-mode benchmark with explicit residuals."""
+    training_modes = {
+        "train_nominal_design_blend": evaluate_refinery_plant_snapshot(
+            design_basis,
+            crude_feeds_bbl_per_day={"ASSAY-LIGHT-SWEET": 54000.0, "ASSAY-MEDIUM-SOUR": 90000.0, "ASSAY-HEAVY-SOUR": 36000.0},
+            hcu_compressor_circ_fraction=1.0,
+            smr_h2_t_per_day=107.0,
+        ),
+        "train_uc1_compressor_derate_75pct": evaluate_refinery_plant_snapshot(
+            design_basis,
+            crude_feeds_bbl_per_day={"ASSAY-LIGHT-SWEET": 54000.0, "ASSAY-MEDIUM-SOUR": 90000.0, "ASSAY-HEAVY-SOUR": 36000.0},
+            hcu_compressor_circ_fraction=0.75,
+            smr_h2_t_per_day=107.0,
+        ),
+    }
+    holdout_modes = {
+        "holdout_uc4_heavy_sour_swing": evaluate_refinery_plant_snapshot(
+            design_basis,
+            crude_feeds_bbl_per_day={"ASSAY-LIGHT-SWEET": 36000.0, "ASSAY-MEDIUM-SOUR": 72000.0, "ASSAY-HEAVY-SOUR": 72000.0},
+            hcu_compressor_circ_fraction=1.0,
+            smr_h2_t_per_day=115.0,
+        ),
+        "holdout_light_sweet_high_severity_fcc": evaluate_refinery_plant_snapshot(
+            design_basis,
+            crude_feeds_bbl_per_day={"ASSAY-LIGHT-SWEET": 90000.0, "ASSAY-MEDIUM-SOUR": 72000.0, "ASSAY-HEAVY-SOUR": 18000.0},
+            hcu_compressor_circ_fraction=1.0,
+            smr_h2_t_per_day=107.0,
+            fcc_t_rxr_c=532.0,
+            fcc_cat_to_oil=7.0,
+        ),
+        "holdout_uc2_smr_h2_constrained": evaluate_refinery_plant_snapshot(
+            design_basis,
+            crude_feeds_bbl_per_day={"ASSAY-LIGHT-SWEET": 54000.0, "ASSAY-MEDIUM-SOUR": 90000.0, "ASSAY-HEAVY-SOUR": 36000.0},
+            hcu_compressor_circ_fraction=0.75,
+            smr_h2_t_per_day=60.0,
+        ),
+    }
+
+    def _summarize(mode_dict: Mapping[str, Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for name, snap in mode_dict.items():
+            out[name] = {
+                "cdu_mass_residual_t": abs(snap["cdu"]["mass_residual_t_per_day"]),
+                "cdu_sulfur_residual_t": abs(snap["cdu"]["sulfur_residual_t_per_day"]),
+                "fcc_mass_residual_t": abs(snap["fcc"]["mass_residual_t_per_day"]),
+                "fcc_sulfur_residual_t": abs(snap["fcc"]["sulfur_residual_t_per_day"]),
+                "fcc_heat_feasible": snap["fcc"]["heat_balance_feasible"],
+                "hcu_mass_residual_t": abs(snap["hcu"]["mass_residual_t_per_day"]),
+                "hcu_sulfur_residual_t": abs(snap["hcu"]["sulfur_balance"]["sulfur_residual_t_per_day"]),
+                "hcu_acid_gas_covers_h2s": snap["hcu"]["sulfur_balance"]["acid_gas_covers_stoichiometric_h2s"],
+                "h2_no_double_alloc": snap["h2_header"]["no_double_allocation"],
+                "hydraulics_all_feasible": snap["hydraulics_all_feasible"],
+                "hcu_binding_constraint": snap["hcu"]["binding_constraint"],
+            }
+        return out
+
+    train_res = _summarize(training_modes)
+    holdout_res = _summarize(holdout_modes)
+    max_rel_residual = max(
+        max(v["cdu_mass_residual_t"], v["cdu_sulfur_residual_t"], v["fcc_mass_residual_t"],
+            v["fcc_sulfur_residual_t"], v["hcu_mass_residual_t"], v["hcu_sulfur_residual_t"])
+        for v in (*train_res.values(), *holdout_res.values())
+    )
+    return {
+        "provenance_class": "SYNTHETIC",
+        "training_modes": train_res,
+        "holdout_modes": holdout_res,
+        "max_absolute_residual_t_per_day": max_rel_residual,
+        "all_holdout_gates_pass": all(
+            v["fcc_heat_feasible"]
+            and v["hcu_acid_gas_covers_h2s"]
+            and v["h2_no_double_alloc"]
+            and v["hydraulics_all_feasible"]
+            for v in holdout_res.values()
+        ),
+    }

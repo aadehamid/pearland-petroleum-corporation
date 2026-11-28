@@ -270,6 +270,79 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         self.assertEqual(s1, s2)
         self.assertNotEqual(s1, s3)
 
+    def test_po12a_hardening_cdu_overlap_hcu_sulfur_fcc_heat_smr_ramp_and_bob_caps(self):
+        # 1. EQ-04: overlap > 2 wt% rejected; valid <= 2 wt% conserves true feed sulfur to <= 1e-12
+        dummy_assay = {
+            "A1": {
+                "tbp_points_vol_pct_c": [[0, 0], [10, 85], [30, 175], [45, 240], [65, 360], [85, 565], [100, 700]],
+                "cuts": [
+                    {"sg_60_60": 0.54, "sulfur_wt_pct": 0.01},
+                    {"sg_60_60": 0.67, "sulfur_wt_pct": 0.05},
+                    {"sg_60_60": 0.75, "sulfur_wt_pct": 0.15},
+                    {"sg_60_60": 0.81, "sulfur_wt_pct": 0.40},
+                    {"sg_60_60": 0.85, "sulfur_wt_pct": 1.20},
+                    {"sg_60_60": 0.91, "sulfur_wt_pct": 2.20},
+                    {"sg_60_60": 1.01, "sulfur_wt_pct": 3.80},
+                ],
+            }
+        }
+        with self.assertRaises(eq.OutOfEnvelopeError):
+            eq.cdu_vdu_cut_split({"A1": 10000.0}, dummy_assay, overlap_shifts=[0.0, 0.0, 0.0, 0.0, 0.05, -0.05, 0.0])
+        ok_ov = eq.cdu_vdu_cut_split({"A1": 10000.0}, dummy_assay, overlap_shifts=[0.0, 0.0, 0.0, 0.0, 0.02, -0.02, 0.0])
+        self.assertLessEqual(abs(ok_ov["mass_residual_t_per_day"]), 1e-9)
+        self.assertLessEqual(abs(ok_ov["sulfur_residual_t_per_day"]), 1e-9)
+
+        # 2. EQ-05 runtime mode closes stoichiometric H2S, 30 MJ/kg H2 quench heat, and y_h2_rec
+        hcu_rt = eq.hcu_evaluate(
+            requested_feed_bbl_per_day=30000.0,
+            feed_sulfur_wt_frac=0.022,
+            compressor_circ_fraction=0.75,
+            fixture_mode=False,
+        )
+        self.assertTrue(hcu_rt["sulfur_balance"]["acid_gas_covers_stoichiometric_h2s"])
+        self.assertLessEqual(abs(hcu_rt["sulfur_balance"]["sulfur_residual_t_per_day"]), 1e-9)
+        self.assertLessEqual(abs(hcu_rt["mass_residual_t_per_day"]), 1e-9)
+        self.assertGreater(hcu_rt["quench_heat_release_kw"], 25000.0)
+        self.assertAlmostEqual(hcu_rt["recycle_h2_purity_y_h2"], 0.85, places=6)
+
+        # 3. EQ-06 Arrhenius T_rxr / CTO genuinely change yields, and heat-deficient corner is INFEASIBLE
+        fcc_base = eq.fcc_evaluate(feed_t_per_day=3100.0, t_rxr_c=525.0, cat_to_oil=6.5)
+        fcc_hot = eq.fcc_evaluate(feed_t_per_day=3100.0, t_rxr_c=540.0, cat_to_oil=7.5)
+        self.assertGreater(fcc_hot["conversion_wt_pct"], fcc_base["conversion_wt_pct"])
+        fcc_cold_corner = eq.fcc_evaluate(
+            feed_t_per_day=3100.0, w_ccr_feed=0.0, t_rxr_c=495.0, t_regen_c=740.0, cat_to_oil=9.0
+        )
+        self.assertFalse(fcc_cold_corner["heat_balance_feasible"])
+        self.assertFalse(fcc_cold_corner["feasible"])
+
+        # 4. EQ-07 SMR 2%/min ramp limit + DHT shortfall prevents double allocation
+        h2_ramp = eq.h2_header_balance(
+            smr_h2_t_per_day=60.0,
+            reformer_h2_t_per_day=73.0,
+            nht_draw_t_per_day=5.0,
+            fcc_hds_draw_t_per_day=5.0,
+            header_loss_t_per_day=5.0,
+            dht_committed_t_per_day=40.0,
+            prev_smr_h2_t_per_day=107.0,
+            dt_minutes=1.0,
+        )
+        self.assertFalse(h2_ramp["smr_ramp_feasible"])
+        self.assertAlmostEqual(h2_ramp["smr_effective_t_per_day"], 104.6, places=6)
+        h2_short = eq.h2_header_balance(20.0, 10.0, 5.0, 5.0, 5.0, 40.0, hcu_requested_t_per_day=25.0)
+        self.assertTrue(h2_short["no_double_allocation"])
+        self.assertAlmostEqual(h2_short["dht_shortfall_t_per_day"], 25.0, places=6)
+        self.assertAlmostEqual(h2_short["hcu_allocated_t_per_day"], 0.0, places=6)
+
+        # 5. EQ-08 enforces <=10% premium pool share and <=10 ppmw Tier 3 annual average sulfur
+        self.assertEqual(
+            eq.evaluate_bob_and_e10_release("PREMIUM", 89.0, 6.2, 6.4, 8.0, premium_pool_vol_frac=0.12)["disposition"],
+            "QUALITY_HOLD",
+        )
+        self.assertEqual(
+            eq.evaluate_bob_and_e10_release("REGULAR", 86.0, 6.2, 6.4, 15.0, annual_avg_sulfur_ppmw=11.0)["disposition"],
+            "QUALITY_HOLD",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
