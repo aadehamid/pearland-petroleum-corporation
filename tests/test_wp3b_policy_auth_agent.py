@@ -223,18 +223,37 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(ex_double["status"], "DENIED")
                 self.assertEqual(ex_double["reason"], "PROPOSAL_ALREADY_EXECUTED")
 
-                # 9. AUTO_EXECUTE zero-effect limit enforcement: non-zero volume/margin MUST escalate out of AUTO_EXECUTE!
-                p_auto_nonzero = gate.submit_proposal(
-                    proposal_id="AUTO-NONZERO",
-                    branch_id="baseline",
-                    action_type="raise_alert",
-                    proposer_id="usr-agent-1",
-                    proposer_is_agent=True,
-                    payload={"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
-                    metrics={"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
-                    now_utc=t0 + timedelta(minutes=9),
-                )
-                self.assertNotEqual(p_auto_nonzero["authority_class"], "AUTO_EXECUTE")
+                # 9. AUTO_EXECUTE zero-effect limit enforcement across ALL 7 effect magnitudes + NaN rejection!
+                for idx, bad_eff in enumerate(
+                    (
+                        {"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
+                        {"cut_point_shift_c": 42.0},
+                        {"delivery_reschedule_hours": 500.0},
+                        {"rate_change_pct": 90.0},
+                    )
+                ):
+                    p_auto_nonzero = gate.submit_proposal(
+                        proposal_id=f"AUTO-NONZERO-{idx}",
+                        branch_id="baseline",
+                        action_type="raise_alert",
+                        proposer_id="usr-agent-1",
+                        proposer_is_agent=True,
+                        payload=bad_eff,
+                        metrics=bad_eff,
+                        now_utc=t0 + timedelta(minutes=9),
+                    )
+                    self.assertNotEqual(p_auto_nonzero["authority_class"], "AUTO_EXECUTE")
+                with self.assertRaises(ValueError):
+                    gate.submit_proposal(
+                        proposal_id="AUTO-NAN",
+                        branch_id="baseline",
+                        action_type="raise_alert",
+                        proposer_id="usr-agent-1",
+                        proposer_is_agent=True,
+                        payload={"margin_effect_usd": float("nan")},
+                        metrics={"margin_effect_usd": float("nan")},
+                        now_utc=t0 + timedelta(minutes=9),
+                    )
 
                 # 10. AUTO_EXECUTE hourly rate cap (20/agent/hour) enforced BOTH at classification AND on bulk-submit execution!
                 for i in range(25):

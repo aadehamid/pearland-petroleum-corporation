@@ -3,20 +3,23 @@
 
 Reads schemas/policy_thresholds.yaml directly and enforces server-side:
 - PROHIBITED actions always resolve to DENIED (never approvable or executable).
-- AUTO_EXECUTE enforces zero physical/commercial/financial effect limits AND the 20/agent/logical-hour
-  rate cap at BOTH classification and execution time.
+- AUTO_EXECUTE enforces zero physical/commercial/financial effect limits across all 7 effect
+  magnitudes (and rejects non-finite NaN/Inf estimates) plus the 20/agent/logical-hour rate cap
+  at BOTH classification and execution time.
 - Required numeric estimates per action class: missing estimate counts as exceeded and escalates tier.
 - Payload-to-metrics cross-check (_effective_metrics) prevents smuggling large payloads under small metrics;
-  payload_digest binds the canonical payload, while metrics, decision_id, expected_source_revision, and
-  policy_version are persisted and verified as bound columns on action_proposals/action_authorizations.
+  payload_digest binds the canonical payload and is verified at authorization and execution;
+  expected_source_revision and policy_version are persisted and verified at authorization/execution;
+  metrics and decision_id are persisted on action_proposals (metrics conservatively merged at submission).
 - proposer != approver and agents can never approve; supports session-bound authorization via AuthRBACStore.
-- Clean single-use ActionReceipt execution with transaction rollback on error, mandatory current_source_revision
-  freshness check (fails closed if omitted), and policy_version verification.
+- Clean single-use ActionReceipt execution with transaction rollback on error and mandatory
+  current_source_revision freshness check (fails closed if omitted).
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import math
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -60,6 +63,14 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
     ):
         p_val = payload.get(field)
         m_val = merged.get(field)
+        if p_val is not None:
+            pf = float(p_val)
+            if not math.isfinite(pf):
+                raise ValueError(f"Non-finite payload metric {field}={p_val!r}")
+        if m_val is not None:
+            mf = float(m_val)
+            if not math.isfinite(mf):
+                raise ValueError(f"Non-finite metric {field}={m_val!r}")
         if p_val is not None and m_val is not None:
             if abs(float(p_val)) > abs(float(m_val)):
                 merged[field] = float(p_val)
@@ -185,6 +196,9 @@ class PolicyGateService:
                 or abs(float(eff_metrics.get("margin_effect_usd") or 0.0)) > float(auto_lim["max_margin_effect_usd"])
                 or abs(float(eff_metrics.get("notional_usd") or 0.0)) > float(auto_lim["max_notional_usd"])
                 or abs(float(eff_metrics.get("rate_change_bbl_per_day") or 0.0)) > 0.0
+                or abs(float(eff_metrics.get("rate_change_pct") or 0.0)) > 0.0
+                or abs(float(eff_metrics.get("cut_point_shift_c") or 0.0)) > 0.0
+                or abs(float(eff_metrics.get("delivery_reschedule_hours") or 0.0)) > 0.0
             )
             rate_exceeded = bool(
                 proposer_id and now_utc and self._auto_execute_count_last_hour(proposer_id, now_utc) >= max_hr
@@ -543,6 +557,9 @@ class PolicyGateService:
                 if auth["payload_digest"] != digest:
                     cur.execute("ROLLBACK")
                     return {"status": "DENIED", "reason": "AUTHORIZATION_DIGEST_MISMATCH"}
+                if auth["policy_version"] != self.policy_version:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "POLICY_VERSION_MISMATCH"}
                 exp = datetime.fromisoformat(auth["expires_at_utc"].replace("Z", "+00:00"))
                 if now_utc > exp:
                     cur.execute("ROLLBACK")
