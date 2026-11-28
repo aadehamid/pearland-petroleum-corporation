@@ -15,10 +15,10 @@ base64, and hex encodings for declared hidden-truth markers (ADR-0053, B13).
 from __future__ import annotations
 
 import base64
-import gzip
 import hashlib
 import json
 import re
+import unicodedata
 import zlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -150,28 +150,42 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
 
 
 def _is_printable_text(text: str) -> bool:
-    for ch in text:
-        code = ord(ch)
-        if code < 32 and ch not in ("\t", "\n", "\r"):
-            return False
-        if 0xD800 <= code <= 0xDFFF:
+    for idx, ch in enumerate(text):
+        if ch in ("\t", "\n", "\r"):
+            continue
+        if idx == 0 and ch == "\ufeff":
+            continue
+        cat = unicodedata.category(ch)
+        if cat in ("Cc", "Cf", "Cs", "Co", "Cn"):
             return False
     return True
 
 
 def _is_clean_text(buf: bytes) -> bool:
-    """Return True iff buf is clean printable UTF-8, UTF-16LE/BE, or UTF-32LE/BE text."""
+    """Return True iff buf is clean printable UTF-8, UTF-16LE/BE (incl. BOM/Unicode), or UTF-32LE/BE text."""
     try:
         if _is_printable_text(buf.decode("utf-8", errors="strict")):
             return True
     except UnicodeDecodeError:
         pass
-    # UTF-16LE/BE (even length, ASCII-dominant or printable Unicode, never starting with gzip/zlib magic)
+    # UTF-16LE/BE (even length, never starting with gzip/zlib magic); require BOM or coherent Unicode text
+    # (rejecting arbitrary binary noise that accidentally decodes into mixed unrelated Unicode scripts).
     if len(buf) >= 2 and len(buf) % 2 == 0 and not buf.startswith(_COMPRESSED_MAGIC_PREFIXES):
+        has_bom = buf.startswith((b"\xff\xfe", b"\xfe\xff"))
         for enc in ("utf-16-le", "utf-16-be"):
             try:
                 text = buf.decode(enc, errors="strict")
-                if text and _is_printable_text(text) and all(ord(c) < 0x0250 for c in text):
+                if not text or not _is_printable_text(text):
+                    continue
+                if has_bom:
+                    return True
+                # Without a BOM, require either null-interleaved ASCII or coherent letter/punctuation/symbol text
+                # with low script dispersion so random compressed/corrupt binary bytes cannot masquerade as UTF-16.
+                non_ascii = [c for c in text if ord(c) >= 0x80]
+                if not non_ascii:
+                    return True
+                scripts = {unicodedata.name(c, "UNKNOWN").split()[0] for c in non_ascii}
+                if "UNKNOWN" not in scripts and len(scripts) <= 3:
                     return True
             except UnicodeDecodeError:
                 pass
@@ -185,16 +199,6 @@ def _is_clean_text(buf: bytes) -> bool:
             except UnicodeDecodeError:
                 pass
     return False
-
-
-def _looks_like_base64_blob(token: bytes) -> bool:
-    """Distinguish real full-payload base64 (mixed case or padding/symbols, len % 4 == 0) from plain lowercase words."""
-    if len(token) < 16 or len(token) % 4 != 0:
-        return False
-    has_marker_char = any(b in token for b in b"=+/_-")
-    has_upper = any(65 <= b <= 90 for b in token)
-    has_lower = any(97 <= b <= 122 for b in token)
-    return has_marker_char or (has_upper and has_lower)
 
 
 def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool, bool]:
@@ -287,8 +291,12 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
     """Decode one layer of gzip/zlib/raw-deflate, base64 (offsets 0..3), and hex (offsets 0..1).
 
     Returns ([(child_bytes, child_is_speculative), ...], budget_exceeded, corrupt_unscanned).
-    Non-speculative binary buffers (including full-payload base64/hex wrappers) that are neither clean
-    UTF-8/16/32 text nor cleanly decompressed to EOF emit `corrupt_unscanned` so corrupt archives fail closed.
+    Direct observable payloads and cleanly decompressed archive members (`speculative=False`) must be
+    either clean UTF-8/16/32 text or cleanly decompressed to EOF, otherwise they fail closed with
+    `DECOMPRESSION_ERROR_UNSCANNED`. Base64 and hex decodings of text are marked `speculative=True`:
+    they are still scanned recursively for hidden-truth markers and decompression bombs, but do not
+    raise `DECOMPRESSION_ERROR_UNSCANNED` (because plain ASCII identifiers such as CamelCase or
+    snake_case tokens are syntactically indistinguishable from unpadded base64 of random binary bytes).
     """
     decompressed, budget_exceeded, cleanly_decompressed = _decompress_all_members(raw_bytes)
     out: list[tuple[bytes, bool]] = [(buf, speculative or child_spec) for buf, child_spec in decompressed]
@@ -301,7 +309,7 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
     )
 
     stripped = re.sub(rb"\s+", b"", raw_bytes)
-    for is_full, token in [(True, stripped)] + [(False, t) for t in _B64_TOKEN_RE.findall(raw_bytes)]:
+    for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
         for offset in (0, 1, 2, 3):
             sub = token[offset:]
             if len(sub) < 16:
@@ -313,12 +321,11 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
             try:
                 decoded = base64.b64decode(padded, validate=True)
                 if decoded:
-                    is_direct_b64 = (not speculative) and is_full and offset == 0 and _looks_like_base64_blob(token)
-                    out.append((decoded, not is_direct_b64))
+                    out.append((decoded, True))
             except Exception:
                 pass
 
-    for is_full, token in [(True, stripped)] + [(False, t) for t in _HEX_TOKEN_RE.findall(raw_bytes)]:
+    for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
         for offset in (0, 1):
             sub = token[offset:]
             even_len = len(sub) - (len(sub) % 2)
@@ -326,8 +333,7 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
                 try:
                     decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
                     if decoded:
-                        is_direct_hex = (not speculative) and is_full and offset == 0 and (len(sub) % 2 == 0)
-                        out.append((decoded, not is_direct_hex))
+                        out.append((decoded, True))
                 except Exception:
                     pass
     return out, budget_exceeded, corrupt_unscanned
