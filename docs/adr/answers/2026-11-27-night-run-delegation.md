@@ -8,9 +8,13 @@ This file records, in chronological order, the agent questions, the exact draft 
 
 ## 2. Agent question at 23:36 CST and owner reply at 23:37 CST
 
-**Agent question (verbatim, referring to ADR consistency Q1–Q4 saved in `docs/adr/answers/2026-11-27-adr-consistency-rulings.md`):**
+**Agent follow-up message at 23:36 CST (verbatim, sent after the owner's 23:36 CST prompt above; "questions 1 through 4 above" refers to the separate earlier Q1–Q4 message recorded in `docs/adr/answers/2026-11-27-adr-consistency-rulings.md`):**
 
+> Before I change the ADR files, I still need your explicit ruling on questions 1 through 4 above because our working rules forbid choosing between two disagreeing records without your recorded words.
+>
 > Please confirm two things in one reply so I can move straight through the work. First, do you accept all four recommendations for questions 1 through 4, and for question 4 should the `adr_graph.py check` gate go in a separate follow-up PR or the same PR? Second, after the ADR cleanup lands, should I rebase, review, and open the PR for WP-0 (`feat/wp0-schemas-pins-probes`), then send you the physical-model consistency graph design before writing WP-1 code, and continue through the plan while stopping at the gates reserved for you (`PO-12a` sign-off at WP-1 exit and live LLM endpoint choice before WP-3B)?
+>
+> If you want me to keep running through the multi-PR plan hands-off after you confirm, you can also trigger `/goal`.
 
 **Owner verbatim reply (23:37 CST):**
 
