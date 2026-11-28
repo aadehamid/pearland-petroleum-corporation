@@ -367,8 +367,8 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
     return out, budget_exceeded, corrupt_unscanned
 
 
-def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[list[str], bool, bool]:
-    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget/corrupt flags."""
+def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 8) -> tuple[list[str], bool, bool, bool]:
+    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget/corrupt/depth flags."""
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
     # Track best (least-speculative) state seen per byte buffer so a non-speculative path is never shadowed
     seen: dict[bytes, bool] = {raw_bytes: False}
@@ -376,7 +376,8 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[lis
     frontier: list[tuple[bytes, bool]] = [(raw_bytes, False)]
     budget_exceeded = False
     corrupt_unscanned = False
-    for _ in range(max_depth):
+    depth_exceeded = False
+    for depth in range(max_depth + 1):
         next_frontier: list[tuple[bytes, bool]] = []
         for buf, is_spec in frontier:
             children, exceeded, corrupt = _decode_one_layer(buf, speculative=is_spec)
@@ -385,10 +386,17 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[lis
             for child, child_spec in children:
                 prev_spec = seen.get(child)
                 if prev_spec is None:
+                    if depth == max_depth:
+                        # An additional decodable layer exists beyond max_depth: fail closed instead of certifying PASSED
+                        depth_exceeded = True
+                        continue
                     seen[child] = child_spec
                     byte_candidates.append(child)
                     next_frontier.append((child, child_spec))
                 elif prev_spec and not child_spec:
+                    if depth == max_depth:
+                        depth_exceeded = True
+                        continue
                     seen[child] = False
                     next_frontier.append((child, False))
         if not next_frontier:
@@ -400,15 +408,20 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[lis
         views.append(raw.lower())
     for cand in byte_candidates:
         views.extend(_text_views_from_bytes(cand))
-    return views, budget_exceeded, corrupt_unscanned
+    return views, budget_exceeded, corrupt_unscanned, depth_exceeded
 
 
 def audit_observable_for_hidden_leaks(
     observable_payloads: Mapping[str, bytes | str],
     checked_at_utc: str | None = None,
     manifest_json: str | None = None,
+    observable_refs: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Scan observable manifest metadata and supplied observable payloads for hidden-truth markers."""
+    """Scan observable manifest metadata and supplied observable payloads for hidden-truth markers.
+
+    When `observable_refs` is supplied, every declared observable artifact must have a matching
+    payload body (keyed by `path` or `name`) whose byte length and SHA-256 digest match the manifest.
+    """
     ts = checked_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     items: list[tuple[str, bytes | str]] = []
     if manifest_json is not None:
@@ -417,12 +430,35 @@ def audit_observable_for_hidden_leaks(
         items.append((f"payload:{name}", raw))
 
     findings: list[dict[str, str]] = []
+    if observable_refs is not None:
+        for ref in observable_refs:
+            ref_path = str(ref.get("path", ""))
+            ref_name = str(ref.get("name", ""))
+            raw_val: bytes | str | None = None
+            if ref_path and ref_path in observable_payloads:
+                raw_val = observable_payloads[ref_path]
+            elif ref_name and ref_name in observable_payloads:
+                raw_val = observable_payloads[ref_name]
+            label = f"ref:{ref_path or ref_name}"
+            if raw_val is None:
+                findings.append({"artifact": label, "marker": "MISSING_OBSERVABLE_PAYLOAD_UNSCANNED"})
+                continue
+            raw_b = raw_val.encode("utf-8") if isinstance(raw_val, str) else raw_val
+            expected_size = int(ref["size_bytes"])
+            expected_sha = str(ref["sha256"]).lower()
+            if len(raw_b) != expected_size:
+                findings.append({"artifact": label, "marker": "OBSERVABLE_SIZE_MISMATCH_UNSCANNED"})
+            if hashlib.sha256(raw_b).hexdigest() != expected_sha:
+                findings.append({"artifact": label, "marker": "OBSERVABLE_SHA256_MISMATCH_UNSCANNED"})
+
     for name, raw in items:
-        views, budget_exceeded, corrupt_unscanned = _decode_variants_for_scan(raw)
+        views, budget_exceeded, corrupt_unscanned, depth_exceeded = _decode_variants_for_scan(raw)
         if budget_exceeded:
             findings.append({"artifact": name, "marker": "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED"})
         if corrupt_unscanned:
             findings.append({"artifact": name, "marker": "DECOMPRESSION_ERROR_UNSCANNED"})
+        if depth_exceeded:
+            findings.append({"artifact": name, "marker": "DECODING_DEPTH_EXCEEDED_UNSCANNED"})
         for marker in FORBIDDEN_OBSERVABLE_MARKERS:
             if any(marker in v for v in views):
                 findings.append({"artifact": name, "marker": marker})
@@ -450,6 +486,7 @@ def assemble_world_export_bundle_v1(
     observable_payloads_for_audit: Mapping[str, bytes | str],
     schema_path: str | Path,
     created_at_utc: str | None = None,
+    prng_version: str = "numpy==2.2.6",
 ) -> dict[str, Any]:
     """Assemble, leak-audit, and schema-validate WorldExportBundle v1."""
     if not adapter_pins:
@@ -464,11 +501,20 @@ def assemble_world_export_bundle_v1(
         "epm_kpi_fixtures": [dict(x) for x in observable_artifacts["epm_kpi_fixtures"]],
         "ece_evidence_dossiers": [dict(x) for x in observable_artifacts["ece_evidence_dossiers"]],
     }
-    # Always audit BOTH the observable manifest section itself (unshadowable) AND caller-supplied payloads
+    all_observable_refs = [
+        *observable_section["delta_tables"],
+        *observable_section["ice_ot_l0"],
+        *observable_section["edi_topology"],
+        *observable_section["epm_kpi_fixtures"],
+        *observable_section["ece_evidence_dossiers"],
+    ]
+    # Always audit BOTH the observable manifest section itself (unshadowable) AND every declared observable payload
+    # (requiring body presence plus exact size_bytes and sha256 verification before any PASSED / QUALIFIED verdict).
     audit = audit_observable_for_hidden_leaks(
         observable_payloads_for_audit,
         checked_at_utc=now_utc,
         manifest_json=json.dumps(observable_section, sort_keys=True),
+        observable_refs=all_observable_refs,
     )
     all_approved = all(p.get("maturity_status") == "APPROVED_UPSTREAM_RELEASE" for p in adapter_pins)
     # Provisional commit-pinned adapters cap verdict strictly at QUALIFIED_PROVISIONAL (VERIFY-001 §3)
@@ -486,7 +532,7 @@ def assemble_world_export_bundle_v1(
         "branch_id": branch_id,
         "seed_policy": {
             "prng_algorithm": "numpy.random.PCG64",
-            "prng_version": "1.0",
+            "prng_version": prng_version,
             "root_seed": int(root_seed),
         },
         "created_at": now_utc,

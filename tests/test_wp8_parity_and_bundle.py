@@ -66,6 +66,21 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertEqual(no_val_res["status"], "PARITY_FAILED")
         self.assertEqual(no_val_res["drift_count"], 2)
 
+        # Time-series rows differing only in effective_at_utc MUST pass parity (not fail as duplicate keys)
+        ts_rows = [
+            {"release_id": "REL-1", "branch_id": "baseline", "kpi_name": "Inventory Days of Cover", "measure_class": "KPI", "effective_at_utc": "2026-06-15T09:40:00Z", "unit": "days", "value": 0.0, "threshold_status": "GREEN"},
+            {"release_id": "REL-1", "branch_id": "baseline", "kpi_name": "Inventory Days of Cover", "measure_class": "KPI", "effective_at_utc": "2026-06-15T13:05:00Z", "unit": "days", "value": 1.5, "threshold_status": "GREEN"},
+        ]
+        ts_ok = diff_duckdb_vs_databricks_kpis(ts_rows, ts_rows)
+        self.assertEqual(ts_ok["status"], "PARITY_PASSED")
+        self.assertEqual(ts_ok["drift_count"], 0)
+
+        # Unit change (`days` vs `bbl`) with identical value MUST fail parity with UNIT_MISMATCH
+        unit_bad_dbx = [ts_rows[0], {**ts_rows[1], "unit": "bbl"}]
+        unit_bad = diff_duckdb_vs_databricks_kpis(ts_rows, unit_bad_dbx)
+        self.assertEqual(unit_bad["status"], "PARITY_FAILED")
+        self.assertEqual(unit_bad["drifts"][0]["kind"], "UNIT_MISMATCH")
+
     def test_wp8b_certified_world_export_bundle_schema_and_leak_audit(self):
         pins = [
             {"upstream_repo": "aadehamid/enterprise-performance-model", "pinned_commit": "511a9e8", "adapter_version": "0.1.0", "maturity_status": "PROVISIONAL_COMMIT_PIN"},
@@ -86,6 +101,14 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             "evaluation_scoring_keys": [_ref("score_key", "evaluation/hidden/world_bundle/B1/keys.json", clean_bytes)],
         }
 
+        full_clean_payloads = {
+            "kpi_store": clean_bytes,
+            "ot_tags": clean_bytes,
+            "cfg0": clean_bytes,
+            "epm_kpis": clean_bytes,
+            "dossiers": clean_bytes,
+        }
+
         bundle = assemble_world_export_bundle_v1(
             bundle_id="PPC-BUNDLE-V1-20261128",
             world_version="world-v1.0.0",
@@ -94,23 +117,60 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             adapter_pins=pins,
             observable_artifacts=obs_artifacts,
             hidden_artifacts=hid_artifacts,
-            observable_payloads_for_audit={"dossiers.json": clean_bytes},
+            observable_payloads_for_audit=full_clean_payloads,
             schema_path=BUNDLE_SCHEMA,
         )
         self.assertEqual(bundle["qualification_verdict"], "QUALIFIED_PROVISIONAL")
         self.assertEqual(bundle["leak_audit"]["status"], "PASSED")
         self.assertEqual(bundle["leak_audit"]["hidden_fields_found_in_observable"], 0)
+        self.assertEqual(bundle["seed_policy"]["prng_version"], "numpy==2.2.6")
 
-        # Leaking hidden truth marker into observable/ MUST fail audit and drop verdict to DRAFT
-        leaked = assemble_world_export_bundle_v1(
-            bundle_id="PPC-BUNDLE-V1-LEAK",
+        # Missing observable artifact bodies MUST fail audit and drop verdict to DRAFT
+        missing_bodies = assemble_world_export_bundle_v1(
+            bundle_id="PPC-BUNDLE-V1-MISSING-BODIES",
             world_version="world-v1.0.0",
             branch_id="baseline",
             root_seed=42,
             adapter_pins=pins,
             observable_artifacts=obs_artifacts,
             hidden_artifacts=hid_artifacts,
-            observable_payloads_for_audit={"dossiers.json": b'{"ref":"evaluation/hidden/scoring_keys"}'},
+            observable_payloads_for_audit={"dossiers": clean_bytes},
+            schema_path=BUNDLE_SCHEMA,
+        )
+        self.assertEqual(missing_bodies["leak_audit"]["status"], "FAILED")
+        self.assertEqual(missing_bodies["qualification_verdict"], "DRAFT")
+        self.assertEqual(missing_bodies["leak_audit"]["hidden_fields_found_in_observable"], 4)
+
+        # Mismatched sha256/size_bytes on a supplied observable artifact MUST fail audit and drop verdict to DRAFT
+        tampered_body = assemble_world_export_bundle_v1(
+            bundle_id="PPC-BUNDLE-V1-TAMPERED-BODY",
+            world_version="world-v1.0.0",
+            branch_id="baseline",
+            root_seed=42,
+            adapter_pins=pins,
+            observable_artifacts=obs_artifacts,
+            hidden_artifacts=hid_artifacts,
+            observable_payloads_for_audit={**full_clean_payloads, "dossiers": b'{"provenance_class":"SYNTHETIC"}'},
+            schema_path=BUNDLE_SCHEMA,
+        )
+        self.assertEqual(tampered_body["leak_audit"]["status"], "FAILED")
+        self.assertEqual(tampered_body["qualification_verdict"], "DRAFT")
+
+        # Leaking hidden truth marker into observable/ MUST fail audit and drop verdict to DRAFT
+        leaked_bytes = b'{"ref":"evaluation/hidden/scoring_keys"}'
+        leaked_obs = {
+            **obs_artifacts,
+            "ece_evidence_dossiers": [_ref("dossiers", "exports/world_bundle/observable/B1/dossiers.json", leaked_bytes)],
+        }
+        leaked = assemble_world_export_bundle_v1(
+            bundle_id="PPC-BUNDLE-V1-LEAK",
+            world_version="world-v1.0.0",
+            branch_id="baseline",
+            root_seed=42,
+            adapter_pins=pins,
+            observable_artifacts=leaked_obs,
+            hidden_artifacts=hid_artifacts,
+            observable_payloads_for_audit={**full_clean_payloads, "dossiers": leaked_bytes},
             schema_path=BUNDLE_SCHEMA,
         )
         self.assertEqual(leaked["leak_audit"]["status"], "FAILED")
@@ -210,12 +270,25 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("base64_unpadded", base64.b64encode(b"hidden_truth!").rstrip(b"=")),
             ("base64_offset1", b"x" + base64.b64encode(b"evaluation/hidden/keys.json")),
             ("layered_b64_gzip", base64.b64encode(gzip.compress(b"evaluation/hidden/keys.json"))),
+            (
+                "four_nested_base64",
+                base64.b64encode(
+                    base64.b64encode(base64.b64encode(base64.b64encode(b"evaluation/hidden/keys.json")))
+                ),
+            ),
+            (
+                "four_layer_gzip_b64_alternating",
+                gzip.compress(base64.b64encode(gzip.compress(base64.b64encode(b"evaluation/hidden/keys.json")))),
+            ),
             ("layered_hex_gzip", gzip.compress(b"evaluation/hidden/keys.json").hex().encode("ascii")),
             ("layered_gzip_b64", gzip.compress(base64.b64encode(b"evaluation/hidden/keys.json"))),
             ("hex_leak", b"evaluation/hidden/score.key".hex().encode("ascii")),
             ("hex_odd_nibble", b"A" + b"evaluation/hidden/score.key".hex().encode("ascii")),
             ("split_invalid_byte", b"evaluation/\x94hidden/keys.json"),
         ):
+            # Verify the leak scanner itself catches the evasion payload (independent of missing-ref checks)
+            direct_evasion = audit_observable_for_hidden_leaks({case_name: bad_payload})
+            self.assertEqual(direct_evasion["leak_audit"]["status"], "FAILED", case_name)
             evasion = assemble_world_export_bundle_v1(
                 bundle_id=f"PPC-BUNDLE-{case_name}",
                 world_version="world-v1.0.0",
@@ -224,7 +297,7 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                 adapter_pins=pins,
                 observable_artifacts=obs_artifacts,
                 hidden_artifacts=hid_artifacts,
-                observable_payloads_for_audit={case_name: bad_payload},
+                observable_payloads_for_audit={**full_clean_payloads, case_name: bad_payload},
                 schema_path=BUNDLE_SCHEMA,
             )
             self.assertEqual(evasion["leak_audit"]["status"], "FAILED", case_name)
@@ -244,6 +317,17 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertEqual(bomb_audit["leak_audit"]["status"], "FAILED")
         self.assertTrue(
             any(f["marker"] == "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED" for f in bomb_audit["findings"])
+        )
+
+        # Depth-cap exhaustion (e.g. 10 nested base64 wraps) MUST fail closed with DECODING_DEPTH_EXCEEDED_UNSCANNED
+        deep_clean = b"all clean content"
+        for _ in range(10):
+            deep_clean = base64.b64encode(deep_clean)
+        deep_audit = audit_observable_for_hidden_leaks({"deep10.b64": deep_clean})
+        self.assertEqual(deep_audit["leak_audit"]["status"], "FAILED")
+        self.assertTrue(
+            any(f["marker"] == "DECODING_DEPTH_EXCEEDED_UNSCANNED" for f in deep_audit["findings"]),
+            deep_audit["findings"],
         )
 
         # Explicitly pin DECOMPRESSION_ERROR_UNSCANNED as the sole failure signal on a corrupt clean stream

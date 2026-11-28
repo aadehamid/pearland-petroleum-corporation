@@ -23,23 +23,24 @@ def diff_duckdb_vs_databricks_kpis(
     abs_tol: float = 1e-9,
 ) -> dict[str, Any]:
     """Perform strict row-level cross-engine KPI parity diff (SEM-10, EA03C-11)."""
-    def _key(r: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    def _key(r: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
         return (
             str(r["release_id"]),
             str(r["branch_id"]),
             str(r["kpi_name"]),
             str(r["measure_class"]),
+            str(r.get("effective_at_utc", "")),
         )
 
     drifts: list[dict[str, Any]] = []
-    duck_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    duck_map: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     for r in duckdb_rows:
         k = _key(r)
         if k in duck_map:
             drifts.append({"key": list(k), "kind": "DUPLICATE_KEY_IN_DUCKDB"})
         duck_map[k] = dict(r)
 
-    dbx_map: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    dbx_map: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
     for r in databricks_rows:
         k = _key(r)
         if k in dbx_map:
@@ -55,6 +56,15 @@ def diff_duckdb_vs_databricks_kpis(
             continue
         d_row = duck_map[k]
         b_row = dbx_map[k]
+        if d_row.get("unit") != b_row.get("unit"):
+            drifts.append(
+                {
+                    "key": list(k),
+                    "kind": "UNIT_MISMATCH",
+                    "duckdb": d_row.get("unit"),
+                    "databricks": b_row.get("unit"),
+                }
+            )
         if d_row.get("threshold_status") != b_row.get("threshold_status"):
             drifts.append(
                 {
