@@ -90,6 +90,11 @@ echo "== WP-5B Relate WASM server-filtered graph package =="
 python3 -m unittest tests/test_wp5b_relate_wasm.py
 
 echo
+echo "== WP-3A reduced Pyomo+HiGHS Planning LP, UC-3 backcasting (PO-12b), and closed-loop WP-1 checks =="
+uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
+  python3 -m unittest tests/test_wp3a_planning_lp.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
