@@ -10,7 +10,7 @@
     "start_date": "2024-01-01",
     "end_date": "2025-12-31"
   },
-  "captured_at_utc": "2026-11-28T07:21:19Z",
+  "captured_at_utc": "2026-11-28T07:25:57Z",
   "governing_adrs": [
     "ADR-0051",
     "ADR-0057"
@@ -28,6 +28,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 9464.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 7526.0,
           "max_value": 9546.0
         },
@@ -38,6 +39,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 9579.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 7648.0,
           "max_value": 9688.0
         },
@@ -48,6 +50,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 238177.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 227521.0,
           "max_value": 266673.0
         },
@@ -58,6 +61,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 41982.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 31346.0,
           "max_value": 42458.0
         },
@@ -68,6 +72,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 91029.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 76242.0,
           "max_value": 91617.0
         },
@@ -78,6 +83,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 37470.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 31310.0,
           "max_value": 42191.0
         },
@@ -88,6 +94,7 @@
           "date_min": "2024-01-05",
           "date_max": "2025-12-26",
           "latest_value": 12292.0,
+          "latest_value_period": "2025-12-26",
           "min_value": 8071.0,
           "max_value": 13320.0
         },
@@ -98,6 +105,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 57.26,
+          "latest_value_period": "2025-12-31",
           "min_value": 55.44,
           "max_value": 87.69
         },
@@ -108,6 +116,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 61.35,
+          "latest_value_period": "2025-12-31",
           "min_value": 59.93,
           "max_value": 93.12
         },
@@ -118,6 +127,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 1.999,
+          "latest_value_period": "2025-12-31",
           "min_value": 1.907,
           "max_value": 2.906
         },
@@ -128,6 +138,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 1.737,
+          "latest_value_period": "2025-12-31",
           "min_value": 1.649,
           "max_value": 2.659
         },
@@ -138,6 +149,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 1.911,
+          "latest_value_period": "2025-12-31",
           "min_value": 1.819,
           "max_value": 2.869
         },
@@ -148,6 +160,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 0.61,
+          "latest_value_period": "2025-12-31",
           "min_value": 0.58,
           "max_value": 0.99
         },
@@ -158,6 +171,7 @@
           "date_min": "2024-01-02",
           "date_max": "2025-12-31",
           "latest_value": 4.0,
+          "latest_value_period": "2025-12-31",
           "min_value": 1.21,
           "max_value": 13.2
         }
@@ -413,5 +427,5 @@
       "provenance_class": "OBSERVED"
     }
   ],
-  "manifest_sha256": "f0224da8c0b3747fce9bfb06b10e6dfa6940929ff4b1816b5888505d27a1a20c"
+  "manifest_sha256": "f12c46c09726231d0518e599a296a77070a5d2c33382a18ba9d9e46895b633a2"
 }

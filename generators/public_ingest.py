@@ -3,11 +3,13 @@
 
 Ingests verified primary public observations (EIA Open Data API v2 PADD 3 stocks
 and inputs, USGC refined-product spot prices, WTI Cushing, Europe Brent, and
-Henry Hub natural gas; NOAA NHC HURDAT2 Atlantic best-track archive; EPA
+Henry Hub natural gas; NOAA NHC HURDAT2 Atlantic best-track archive; and EPA
 Envirofacts GHGRP facility registry PUB_DIM_FACILITY NAICS 324110 TX/LA subset
-of PADD 3; and PHMSA hazardous liquid accident ZIP archives) into the operational
-R2 bucket under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` and writes a
-secret-free `OBSERVED` vintage manifest.
+of PADD 3) into the operational R2 bucket under
+`raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` and writes a secret-free
+`OBSERVED` vintage manifest. PHMSA hazardous liquid incident ZIP archives are
+ingested only when explicitly supplied via `--phmsa-zip`; otherwise the manifest
+records `DEFERRED_MANUAL_ARCHIVE`.
 
 Governing authorities: PPC-WORLD-001 §4, PPC-PLAN-001 WP-1, PPC-013, ADR-0051, ADR-0057.
 Never commits or prints API keys or R2 credentials.
@@ -232,8 +234,18 @@ def fetch_eia_series(
             raise ValueError(f"Unexpected EIA payload structure for {entry['series_id']}")
         if "total" not in resp:
             raise ValueError(f"EIA response missing required 'total' field for {entry['series_id']}")
-        rows.extend(batch)
         total = int(resp["total"])
+        if total <= 0:
+            raise ValueError(
+                f"EIA series {entry['series_id']} reported non-positive total={total} for window {start_date}..{end_date}"
+            )
+        for row in batch:
+            row_series = row.get("series")
+            if row_series is not None and str(row_series) != entry["series_id"]:
+                raise ValueError(
+                    f"EIA series filter mismatch: requested {entry['series_id']}, got {row_series!r}"
+                )
+        rows.extend(batch)
         offset += len(batch)
         if offset >= total:
             break
@@ -243,12 +255,15 @@ def fetch_eia_series(
             )
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
-    if not rows:
+    if not rows or len(rows) != total:
         raise ValueError(
-            f"EIA series {entry['series_id']} returned 0 rows for window {start_date}..{end_date}"
+            f"EIA series {entry['series_id']} returned {len(rows)} rows, expected total={total}"
         )
-    if len(rows) < total:
-        raise ValueError(f"EIA series {entry['series_id']} returned {len(rows)} rows, fewer than total={total}")
+    periods_seen = [str(r.get("period", "")) for r in rows]
+    if len(set(periods_seen)) != len(periods_seen):
+        raise ValueError(
+            f"EIA series {entry['series_id']} contains duplicate periods ({len(periods_seen)} rows, {len(set(periods_seen))} unique)"
+        )
     return rows
 
 
@@ -268,6 +283,13 @@ def fetch_epa_ghgrp_state(
         parsed = json.loads(epa_raw.decode("utf-8"))
         if not isinstance(parsed, list):
             raise ValueError(f"Unexpected EPA Envirofacts response structure for state {state}")
+        for rec in parsed:
+            rec_state = rec.get("state") if rec.get("state") is not None else rec.get("STATE")
+            if rec_state is not None and str(rec_state).strip().upper() != state.upper():
+                raise ValueError(f"EPA state filter mismatch: requested {state}, got {rec_state!r}")
+            rec_naics = rec.get("naics_code") if rec.get("naics_code") is not None else rec.get("NAICS_CODE")
+            if rec_naics is not None and str(rec_naics).strip() != "324110":
+                raise ValueError(f"EPA NAICS filter mismatch: requested 324110, got {rec_naics!r}")
         records.extend(parsed)
         if len(parsed) < page_size:
             return records
@@ -483,14 +505,20 @@ def run_public_ingest(
             date_min=periods[0] if periods else None,
             date_max=periods[-1] if periods else None,
         )
-        numeric_vals = [float(r["value"]) for r in rows if r.get("value") not in (None, "")]
+        numeric_pairs = [
+            (str(r.get("period", "")), float(r["value"]))
+            for r in rows
+            if r.get("value") not in (None, "")
+        ]
+        numeric_vals = [v for _, v in numeric_pairs]
         eia_summary[entry["series_id"]] = {
             "unit": entry["unit"],
             "frequency": entry["frequency"],
             "row_count": len(rows),
             "date_min": periods[0] if periods else None,
             "date_max": periods[-1] if periods else None,
-            "latest_value": numeric_vals[-1] if numeric_vals else None,
+            "latest_value": numeric_pairs[-1][1] if numeric_pairs else None,
+            "latest_value_period": numeric_pairs[-1][0] if numeric_pairs else None,
             "min_value": min(numeric_vals) if numeric_vals else None,
             "max_value": max(numeric_vals) if numeric_vals else None,
         }
@@ -541,7 +569,7 @@ def run_public_ingest(
         unit="facility_year_rows",
     )
 
-    # 4. PHMSA hazardous liquid archive (ingested when supplied or reachable; never bypasses anti-bot gates)
+    # 4. PHMSA hazardous liquid archive (ingested only when --phmsa-zip is explicitly supplied; never bypasses anti-bot gates)
     phmsa_status = "DEFERRED_MANUAL_ARCHIVE"
     if phmsa_zip_bytes is not None:
         phmsa_rows = parse_phmsa_liquid_zip(phmsa_zip_bytes)
@@ -610,11 +638,15 @@ def run_public_ingest(
     digest = sha256_bytes(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     manifest["manifest_sha256"] = digest
     if upload_fn is not None:
-        upload_fn(
-            f"manifests/ingestion/public_vintage_{vintage}.json",
-            (json.dumps(manifest, indent=2) + "\n").encode("utf-8"),
-            "application/json",
-        )
+        manifest_bytes = (json.dumps(manifest, indent=2) + "\n").encode("utf-8")
+        expected_manifest_md5 = hashlib.md5(manifest_bytes).hexdigest()
+        manifest_key = f"manifests/ingestion/public_vintage_{vintage}.json"
+        raw_etag = upload_fn(manifest_key, manifest_bytes, "application/json")
+        etag = str(raw_etag).strip('"') if raw_etag else None
+        if not etag or etag != expected_manifest_md5:
+            raise RuntimeError(
+                f"R2 upload ETag verification failed for {manifest_key}: expected md5={expected_manifest_md5}, got {etag!r}"
+            )
     return manifest
 
 

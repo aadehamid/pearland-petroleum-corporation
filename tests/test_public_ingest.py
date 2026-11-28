@@ -68,6 +68,21 @@ class TestPublicIngest(unittest.TestCase):
         # Malformed HURDAT2 row (<8 cols) must fail closed
         with self.assertRaises(ValueError):
             public_ingest.parse_hurdat2_storms("AL092017, HARVEY, 1,\n20170825, 1800, , HU, 27.3N\n", min_year=0)
+        # Duplicate EIA period or series filter mismatch must fail closed
+        dup_periods = json.dumps(
+            {"response": {"total": "2", "data": [{"period": "2025-01-02", "value": "70.0"}, {"period": "2025-01-02", "value": "71.0"}]}}
+        ).encode("utf-8")
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: dup_periods)
+        wrong_series = json.dumps(
+            {"response": {"total": "1", "data": [{"period": "2025-01-02", "series": "WRONG_ID", "value": "70.0"}]}}
+        ).encode("utf-8")
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: wrong_series)
+        # EPA NAICS/state filter mismatch must fail closed
+        wrong_epa = json.dumps([{"FACILITY_ID": 1, "NAICS_CODE": "221100", "STATE": "OK"}]).encode("utf-8")
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_epa_ghgrp_state("TX", http_get=lambda _u: wrong_epa)
         sanitized = public_ingest.sanitize_url_for_logs("https://api.eia.gov/v2/x?api_key=SUPERSECRET123&length=5000")
         self.assertNotIn("SUPERSECRET123", sanitized)
         self.assertIn("api_key=REDACTED", sanitized)

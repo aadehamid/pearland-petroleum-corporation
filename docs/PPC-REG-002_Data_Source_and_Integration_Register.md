@@ -43,3 +43,13 @@ Latency: A seconds, B minutes, C scheduled, D on-demand.
 
 Every productionized interface must add schema/version, semantic
 mapping, SLA, retry, failure behavior, DQ and owner.
+
+### WP-1 Public Raw External Interfaces (`generators/public_ingest.py`)
+
+- **Schema/version:** `PPC-WP1-PUBLIC-DATA-VINTAGE` v`1.0.0` (`fixtures/golden/public_data_vintage_manifest.json`), `provenance_class: OBSERVED`.
+- **Semantic mapping:** Raw `OBSERVED` external context landed under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` per `PPC-013` and `ADR-0057` (never written to the hidden-truth bucket); conditions fictional distributions without redefining EPM KPIs (`PPC-WORLD-001 §4`).
+- **SLA:** On-demand vintage pin per release window (daily/weekly historical series pinned by explicit date range).
+- **Retry:** Single 2-second backoff retry on HTTP 429; 60-second request timeout.
+- **Failure behavior:** Fail-closed on HTTP 4xx/5xx (with `api_key` redacted), missing/zero/truncated EIA `total`, duplicate EIA periods, filter mismatches (EIA series ID, EPA NAICS `324110`/state), malformed HURDAT2 rows, missing PHMSA `REPORT_NUMBER` data, or R2 ETag-vs-MD5 mismatch.
+- **DQ:** Recomputable SHA-256 and MD5/ETag per object, non-empty rows, unique EIA periods, filter conformance, and secret-free manifest verification (`tests/test_public_ingest.py`).
+- **Owner:** Refinery World & Public Data Engineer (`WP-1` accountable role in `PPC-PLAN-001`).
