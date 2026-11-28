@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""WP-5B Server-Side Permission-Filtered Relate WASM Graph Package Serializer (ADR-0052, PO-08).
+"""WP-5B Server-Side Permission-Filtered Relate WASM Graph Package Serializer (ADR-0052).
 
 Builds authorized browser-side graph packages for the Relate WASM Interactive
 Enterprise Context Explorer strictly BEFORE serialization so zero unauthorized
-nodes, edges, or property bytes ever enter the browser payload. Enforces:
-- Role-based filtering on every node, edge, and KPI card before serialization
-- Timezone-aware UTC temporal publication cutoff filtering (published_at_utc <= reader_cutoff_utc),
-  failing closed when published_at_utc is missing or unparseable, plus cutoff-scoped retraction
+nodes, edges, or property bytes enter the browser payload. Enforces:
+- Fail-closed role-based filtering on every node, display name, property, edge, and KPI card
+  (non-collection role fields such as bare strings fail closed; denial wins)
+- Timezone-aware UTC temporal publication cutoff filtering with sub-second precision
+  (published_at_utc <= reader_cutoff_utc), failing closed on missing/unparseable timestamps,
+  plus cutoff-scoped retraction
 - Explicit badge separation: POTENTIAL_EXPOSURE (graph path) vs MODEL_QUANTIFIED (LP/KPI)
-- Non-finite value rejection on KPI cards and deterministic Cypher reachability parity
+- Non-finite value rejection on KPI cards and deterministic directed reachability over
+  filtered edges (live Neo4j Cypher parity runs separately once Neo4j Community is wired)
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 
@@ -29,6 +33,20 @@ def _parse_utc(ts: Any) -> datetime | None:
     if dt.tzinfo is None:
         return None
     return dt.astimezone(timezone.utc)
+
+
+def _format_utc(dt: datetime) -> str:
+    """Format UTC datetime preserving sub-second precision so cutoff replay is exact."""
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _role_allowed(reader_role: str, allowed_roles: Any) -> bool:
+    """Fail-closed RBAC membership check: bare strings or non-iterables NEVER match."""
+    if not isinstance(reader_role, str) or not reader_role:
+        return False
+    if isinstance(allowed_roles, (str, bytes, bytearray)) or not isinstance(allowed_roles, Iterable):
+        return False
+    return any(isinstance(r, str) and r == reader_role for r in allowed_roles)
 
 
 def _is_visible_at_cutoff(item: Mapping[str, Any], cutoff_dt: datetime) -> bool:
@@ -64,26 +82,34 @@ def build_filtered_graph_package(
             continue
         if not _is_visible_at_cutoff(n, cutoff_dt):
             continue
-        if reader_role not in n.get("allowed_roles", ()):
+        if not _role_allowed(reader_role, n.get("allowed_roles")):
             continue
         raw_props = dict(n.get("properties", {}))
-        prop_roles: Mapping[str, Sequence[str]] = n.get("property_allowed_roles", {})
+        prop_roles_raw = n.get("property_allowed_roles", {})
+        prop_roles: Mapping[str, Any] = prop_roles_raw if isinstance(prop_roles_raw, Mapping) else {}
         clean_props = {
             str(k): v
             for k, v in raw_props.items()
             if not str(k).startswith("_")
-            and (str(k) not in prop_roles or reader_role in prop_roles[str(k)])
+            and (str(k) not in prop_roles or _role_allowed(reader_role, prop_roles[str(k)]))
         }
+        node_id = str(n["id"])
+        raw_name = str(n.get("name", node_id))
+        safe_name = (
+            raw_name
+            if ("name" not in prop_roles or _role_allowed(reader_role, prop_roles["name"]))
+            else node_id
+        )
         clean_node = {
-            "id": str(n["id"]),
+            "id": node_id,
             "label": str(n["label"]),
-            "name": str(n.get("name", n["id"])),
+            "name": safe_name,
             "badge": str(n.get("badge", "POTENTIAL_EXPOSURE")),
             "provenance_class": str(n.get("provenance_class", "SYNTHETIC")),
             "properties": clean_props,
         }
         visible_nodes.append(clean_node)
-        visible_ids.add(clean_node["id"])
+        visible_ids.add(node_id)
 
     visible_edges: list[dict[str, Any]] = []
     for e in edges:
@@ -91,11 +117,11 @@ def build_filtered_graph_package(
             continue
         if not _is_visible_at_cutoff(e, cutoff_dt):
             continue
-        if reader_role not in e.get("allowed_roles", ()):
+        if not _role_allowed(reader_role, e.get("allowed_roles")):
             continue
         src = str(e["source"])
         dst = str(e["target"])
-        # Edge only visible if BOTH endpoints are authorized and visible (PO-08 non-interference)
+        # Edge only visible if BOTH endpoints are authorized and visible
         if src not in visible_ids or dst not in visible_ids:
             continue
         visible_edges.append(
@@ -114,7 +140,7 @@ def build_filtered_graph_package(
             continue
         if not _is_visible_at_cutoff(c, cutoff_dt):
             continue
-        if reader_role not in c.get("allowed_roles", ()):
+        if not _role_allowed(reader_role, c.get("allowed_roles")):
             continue
         val = float(c["value"])
         if not math.isfinite(val):
@@ -140,7 +166,7 @@ def build_filtered_graph_package(
         "explorer_runtime": "relate-wasm",
         "branch_id": branch_id,
         "reader_role": reader_role,
-        "reader_cutoff_utc": cutoff_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "reader_cutoff_utc": _format_utc(cutoff_dt),
         "nodes": visible_nodes,
         "edges": visible_edges,
         "model_quantified_cards": visible_cards,
@@ -153,7 +179,7 @@ def build_filtered_graph_package(
 
 
 def reachable_exposure_ids(pkg: Mapping[str, Any], start_node_id: str) -> list[str]:
-    """Evaluate directed exposure reachability inside a Relate WASM package (Cypher parity check)."""
+    """Evaluate directed exposure reachability inside a filtered Relate WASM graph package."""
     visible_node_ids = {str(n["id"]) for n in pkg.get("nodes", [])}
     if start_node_id not in visible_node_ids:
         return []
