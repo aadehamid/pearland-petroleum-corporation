@@ -78,6 +78,11 @@ uv run --no-project --with pyyaml --with numpy --with z3-solver --with hypothesi
   python3 -m unittest tests/test_world_kernel.py verification/z3/test_proof_obligations.py
 
 echo
+echo "== WP-3A reduced Pyomo+HiGHS Planning LP, UC-3 backcasting (PO-12b), and closed-loop WP-1 checks =="
+uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
+  python3 -m unittest tests/test_wp3a_planning_lp.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
