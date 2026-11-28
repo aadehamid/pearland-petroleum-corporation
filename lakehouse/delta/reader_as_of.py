@@ -207,20 +207,7 @@ def select_reader_as_of(
             "payload": None,
         }
 
-    # Check scope-level supersession chain integrity (reject cycles/forks rather than guessing)
-    chain_err = _validate_supersession_chain(branch_pubs)
-    if chain_err is not None:
-        return {
-            "status": "NON_UNIQUE" if chain_err == "NON_UNIQUE" else "REJECTED_CHAIN",
-            "reason": chain_err,
-            "subject_key": subject_key,
-            "branch_id": branch_id,
-            "reader_cutoff_utc": reader_cutoff_utc,
-            "publication_id": None,
-            "payload": None,
-        }
-
-    # Check grant eligibility at cutoff (INFO-001 §3)
+    # Check grant eligibility at cutoff FIRST so unauthorized readers never learn chain/fork metadata (PO-08)
     if not _grant_allows(grants, reader_role, channel, purpose, cutoff):
         return {
             "status": "UNRESOLVED",
@@ -260,6 +247,19 @@ def select_reader_as_of(
     if not eligible:
         return {
             "status": "UNRESOLVED",
+            "subject_key": subject_key,
+            "branch_id": branch_id,
+            "reader_cutoff_utc": reader_cutoff_utc,
+            "publication_id": None,
+            "payload": None,
+        }
+
+    # Check supersession chain integrity strictly over ELIGIBLE publications so future/ineligible forks never leak (PO-08)
+    chain_err = _validate_supersession_chain(eligible)
+    if chain_err is not None:
+        return {
+            "status": "NON_UNIQUE" if chain_err == "NON_UNIQUE" else "REJECTED_CHAIN",
+            "reason": chain_err,
             "subject_key": subject_key,
             "branch_id": branch_id,
             "reader_cutoff_utc": reader_cutoff_utc,

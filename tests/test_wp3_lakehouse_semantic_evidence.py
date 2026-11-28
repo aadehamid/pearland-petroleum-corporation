@@ -301,7 +301,8 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
         )
         self.assertEqual(unmapped_rel["status"], "UNRESOLVED")
 
-        # 5. Forked successor (two publications superseding S2-P1) MUST be rejected rather than guessed
+        # 5. Forked successor: future fork MUST NOT interfere at 10:00 or leak to unauthorized readers (PO-08),
+        # while at 12:00 with receipts for both forked successors it MUST reject with FORKED_SUCCESSOR!
         forked_pubs = [
             pubs[0],
             pubs[1],
@@ -319,6 +320,33 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
                 payload={"sulfur_wt_pct": 2.99},
             ),
         ]
+        forked_receipts = receipts + [DeliveryReceipt("S2-P2-FORK", "PLANNER", "portal", "2026-06-15T11:36:00Z")]
+        # Earlier cutoff (10:00) resolves S2-P1 cleanly (future fork cannot interfere!)
+        before_fork = select_reader_as_of(
+            subject_key="LOT:CRUDE-2026-009",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T10:00:00Z",
+            publications=forked_pubs,
+            release_events=release_events,
+            receipts=forked_receipts,
+            grants=grants,
+        )
+        self.assertEqual(before_fork["status"], "RESOLVED")
+        self.assertEqual(before_fork["publication_id"], "S2-P1")
+        # Unauthorized reader (grants=[]) gets opaque UNRESOLVED (never leaks FORKED_SUCCESSOR!)
+        unauth_fork = select_reader_as_of(
+            subject_key="LOT:CRUDE-2026-009",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T12:00:00Z",
+            publications=forked_pubs,
+            release_events=release_events,
+            receipts=forked_receipts,
+            grants=[],
+        )
+        self.assertEqual(unauth_fork["status"], "UNRESOLVED")
+        # Authorized reader at 12:00 with receipts for both eligible successors rejects the fork
         forked = select_reader_as_of(
             subject_key="LOT:CRUDE-2026-009",
             branch_id="baseline",
@@ -326,7 +354,7 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
             reader_cutoff_utc="2026-06-15T12:00:00Z",
             publications=forked_pubs,
             release_events=release_events,
-            receipts=receipts,
+            receipts=forked_receipts,
             grants=grants,
         )
         self.assertEqual(forked["status"], "REJECTED_CHAIN")
@@ -436,6 +464,11 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
         self.assertGreater(res1["lpg_node_count"], 5)
         self.assertEqual(res1["cypher_sha256"], res2["cypher_sha256"])
         self.assertIn("MERGE (snap:GraphSnapshot", res1["cypher_statements"][0])
+        # Verify OpenCypher map keys use backtick identifiers (not JSON double-quoted keys!)
+        set_stmts = [s for s in res1["cypher_statements"] if "SET n +=" in s]
+        self.assertGreater(len(set_stmts), 0)
+        self.assertIn("SET n += {`branch_id`:", set_stmts[0])
+        self.assertNotIn('SET n += {"', set_stmts[0])
 
         # Missing shacl_path MUST raise FileNotFoundError (never silently skip validation)
         with self.assertRaises(FileNotFoundError):

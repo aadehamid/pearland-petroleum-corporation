@@ -17,6 +17,15 @@ from pyshacl import validate
 from rdflib import BNode, Graph, Literal, RDF, RDFS, URIRef
 
 
+def _cypher_ident(name: str) -> str:
+    return "`" + name.replace("`", "``") + "`"
+
+
+def _cypher_map(props: dict[str, Any]) -> str:
+    pairs = [f"{_cypher_ident(k)}: {json.dumps(v)}" for k, v in sorted(props.items())]
+    return "{" + ", ".join(pairs) + "}"
+
+
 def _local_name(uri: URIRef) -> str:
     s = str(uri)
     if "#" in s:
@@ -80,14 +89,14 @@ def validate_and_project_rdf_to_cypher(
         f"MERGE (snap:GraphSnapshot {{snapshot_id: {json.dumps(snapshot_id)}, branch_id: {json.dumps(branch_id)}}});"
     )
     for uri, info in sorted(projected_nodes.items()):
-        lbls = ":".join(sorted(info["labels"]) or ["RDFResource"])
+        lbls = ":".join(_cypher_ident(lbl) for lbl in (sorted(info["labels"]) or ["RDFResource"]))
         props = dict(sorted(info["props"].items()))
         props["uri"] = uri
         props["branch_id"] = branch_id
         props["snapshot_id"] = snapshot_id
         cypher_statements.append(
             f"MERGE (n:{lbls} {{uri: {json.dumps(uri)}, branch_id: {json.dumps(branch_id)}}}) "
-            f"SET n += {json.dumps(props, sort_keys=True)};"
+            f"SET n += {_cypher_map(props)};"
         )
     for src, rel, dst in sorted(set(projected_edges)):
         cypher_statements.append(
