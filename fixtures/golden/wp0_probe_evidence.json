@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0.0",
   "probe_suite": "PPC-WP0-STORAGE-AND-PORTABILITY-PROBES",
-  "executed_at_utc": "2026-11-27T16:28:57Z",
+  "executed_at_utc": "2026-11-28T06:23:28Z",
   "provenance_class": "OBSERVED",
   "governing_adrs": [
     "ADR-0045",
@@ -12,7 +12,7 @@
   ],
   "environment": {
     "python_version": "3.12.13",
-    "platform": "macOS-27.2-arm64-i386-64bit"
+    "platform": "macOS-27.2.1-arm64-i386-64bit"
   },
   "r2_two_bucket_isolation": {
     "status": "PASSED",
@@ -62,7 +62,7 @@
   "delta_rs_r2_and_duckdb": {
     "table_uri_pattern": "s3://pearland-petroleum-corp/_probe/wp0_delta_<run_tag>/kpi_probe",
     "aws_conditional_put": "etag",
-    "dagster_concurrency_pool_key": "delta_table_single_writer",
+    "dagster_concurrency_pool_key": "ppc/delta_table",
     "dagster_concurrency_pool_limit": 1,
     "initial_version": 0,
     "txn_app_id": "ppc-wp0-probe",
@@ -71,7 +71,7 @@
     "etag_if_none_match_conflict": {
       "http_status": 412,
       "error_code": "PreconditionFailed",
-      "target_key": "_probe/wp0_delta_b13d2236ddbf/kpi_probe/_delta_log/00000000000000000000.json"
+      "target_key": "_probe/wp0_delta_e233d82d481a/kpi_probe/_delta_log/00000000000000000000.json"
     },
     "concurrent_overwrite_race": {
       "max_commit_retries": 0,
@@ -108,5 +108,5 @@
     "duckdb_to_databricks_row_parity": true,
     "cleanup_completed": true
   },
-  "evidence_sha256": "844e2883ff0d32415fe9c67a7cbbe340a274f5bb16a95156997dbcfe3c2c1096"
+  "evidence_sha256": "db7e0ef4bac279b71753813f6956142be6bcd700c86d8ff3119075c9b57e0ce9"
 }

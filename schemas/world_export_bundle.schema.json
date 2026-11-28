@@ -96,7 +96,7 @@
         "evaluation_scoring_keys"
       ],
       "properties": {
-        "r2_bucket": { "type": "string", "minLength": 1 },
+        "r2_bucket": { "type": "string", "const": "pearland-petroleum-hidden" },
         "r2_prefix": { "type": "string", "pattern": "^evaluation/hidden/.+" },
         "separate_credential_boundary": { "const": true },
         "canonical_world_snapshots": { "$ref": "#/$defs/artifactRefList" },
@@ -112,9 +112,52 @@
         "checked_at": { "type": ["string", "null"], "format": "date-time" },
         "hidden_fields_found_in_observable": { "type": "integer", "minimum": 0 },
         "audit_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "PASSED" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "hidden_fields_found_in_observable": { "const": 0 },
+              "checked_at": { "type": "string", "format": "date-time" },
+              "audit_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "hidden_fields_found_in_observable": { "minimum": 1 } },
+            "required": ["hidden_fields_found_in_observable"]
+          },
+          "then": {
+            "properties": { "status": { "const": "FAILED" } }
+          }
+        }
+      ]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "qualification_verdict": { "const": "QUALIFIED" } },
+        "required": ["qualification_verdict"]
+      },
+      "then": {
+        "properties": {
+          "upstream_adapter_pins": {
+            "items": {
+              "properties": {
+                "maturity_status": { "const": "APPROVED_UPSTREAM_RELEASE" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "artifactRefList": {
       "type": "array",

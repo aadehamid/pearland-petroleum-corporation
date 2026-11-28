@@ -469,6 +469,31 @@ class TestWP0Schemas(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             validate_payload("world_export_bundle.schema.json", bad_bundle2)
 
+        # WorldExportBundle must pin hidden_truth to pearland-petroleum-hidden (ADR-0057)
+        bad_bundle3 = copy.deepcopy(payloads["world_export_bundle.schema.json"])
+        bad_bundle3["hidden_truth"]["r2_bucket"] = "pearland-petroleum-corp"
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("world_export_bundle.schema.json", bad_bundle3)
+
+        # WorldExportBundle cannot claim QUALIFIED while any upstream pin is provisional (ADR-0042)
+        bad_bundle4 = copy.deepcopy(payloads["world_export_bundle.schema.json"])
+        bad_bundle4["qualification_verdict"] = "QUALIFIED"
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("world_export_bundle.schema.json", bad_bundle4)
+
+        # WorldExportBundle leak_audit cannot pass (or stay NOT_RUN) when hidden fields are found
+        bad_bundle5 = copy.deepcopy(payloads["world_export_bundle.schema.json"])
+        bad_bundle5["leak_audit"]["status"] = "PASSED"
+        bad_bundle5["leak_audit"]["hidden_fields_found_in_observable"] = 1
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("world_export_bundle.schema.json", bad_bundle5)
+
+        bad_bundle6 = copy.deepcopy(payloads["world_export_bundle.schema.json"])
+        bad_bundle6["leak_audit"]["status"] = "NOT_RUN"
+        bad_bundle6["leak_audit"]["hidden_fields_found_in_observable"] = 2
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("world_export_bundle.schema.json", bad_bundle6)
+
         # Provisional adapter cannot claim an approved release or QUALIFIED cap
         bad_adapter = copy.deepcopy(payloads["provisional_adapter_manifest.schema.json"])
         bad_adapter["approved_upstream_release"] = "1.0.0"
@@ -623,8 +648,26 @@ class TestWP0SemanticAndInfra(unittest.TestCase):
         computed_sha = hashlib.sha256(json.dumps(ev, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         self.assertEqual(recorded_sha, computed_sha)
         self.assertEqual(ev["r2_two_bucket_isolation"]["status"], "PASSED")
+        denied_checks = [
+            c for c in ev["r2_two_bucket_isolation"]["checks"] if c["result"] == "PASS_DENIED"
+        ]
+        self.assertGreaterEqual(len(denied_checks), 5)
+        for check in denied_checks:
+            self.assertEqual(check["http_status"], 403)
+            self.assertEqual(check["error_code"], "AccessDenied")
+
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("wp0_probes_ev", REPO_ROOT / "lakehouse" / "delta" / "wp0_probes.py")
+        probe_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(probe_mod)
+        self.assertEqual(
+            ev["delta_rs_r2_and_duckdb"]["dagster_concurrency_pool_key"],
+            probe_mod.DELTA_CONCURRENCY_POOL_KEY,
+        )
         self.assertEqual(ev["delta_rs_r2_and_duckdb"]["aws_conditional_put"], "etag")
         self.assertEqual(ev["delta_rs_r2_and_duckdb"]["etag_if_none_match_conflict"]["http_status"], 412)
+        self.assertEqual(ev["delta_rs_r2_and_duckdb"]["etag_if_none_match_conflict"]["error_code"], "PreconditionFailed")
         self.assertTrue(ev["delta_rs_r2_and_duckdb"]["duckdb_readonly_initial_parity"])
         self.assertEqual(ev["databricks_free_edition_sync"]["status"], "PASSED")
         self.assertTrue(ev["databricks_free_edition_sync"]["duckdb_to_databricks_row_parity"])
@@ -691,6 +734,24 @@ class TestWP0SemanticAndInfra(unittest.TestCase):
         probe_src = (REPO_ROOT / "lakehouse" / "delta" / "wp0_probes.py").read_text(encoding="utf-8")
         self.assertNotIn('op_tags={"dagster/concurrency_key"', probe_src)
         self.assertIn("tags=delta_table_run_tags(", probe_src)
+
+        # Negative probe assertions must reject non-403/AccessDenied and non-412/PreconditionFailed errors
+        class _FakeClientError(Exception):
+            def __init__(self, status: int, code: str):
+                super().__init__(f"{status} {code}")
+                self.response = {"ResponseMetadata": {"HTTPStatusCode": status}, "Error": {"Code": code}}
+
+        ok_denied = mod._assert_access_denied(_FakeClientError(403, "AccessDenied"), "test_op")
+        self.assertEqual(ok_denied["result"], "PASS_DENIED")
+        for bad_status, bad_code in ((404, "NoSuchKey"), (400, "BadRequest"), (403, "SignatureDoesNotMatch")):
+            with self.assertRaises(AssertionError):
+                mod._assert_access_denied(_FakeClientError(bad_status, bad_code), "test_op")
+
+        ok_precond = mod._assert_precondition_failed(_FakeClientError(412, "PreconditionFailed"), "k")
+        self.assertEqual(ok_precond["http_status"], 412)
+        for bad_status, bad_code in ((403, "AccessDenied"), (400, "InvalidArgument"), (412, "OtherError")):
+            with self.assertRaises(AssertionError):
+                mod._assert_precondition_failed(_FakeClientError(bad_status, bad_code), "k")
 
 
 if __name__ == "__main__":

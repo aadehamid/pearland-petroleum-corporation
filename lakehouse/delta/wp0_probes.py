@@ -86,6 +86,39 @@ def delete_r2_prefix(client, bucket: str, prefix: str) -> int:
     return deleted
 
 
+def _assert_access_denied(exc: Exception, op_name: str) -> dict[str, Any]:
+    """Require HTTP 403 AccessDenied for R2 bucket isolation negative checks."""
+    response = getattr(exc, "response", {})
+    http_status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    error_code = response.get("Error", {}).get("Code")
+    if http_status != 403 or error_code != "AccessDenied":
+        raise AssertionError(
+            f"Expected HTTP 403 AccessDenied for {op_name}, got HTTP {http_status} {error_code}"
+        ) from exc
+    return {
+        "check": op_name,
+        "result": "PASS_DENIED",
+        "http_status": http_status,
+        "error_code": error_code,
+    }
+
+
+def _assert_precondition_failed(exc: Exception, target_key: str) -> dict[str, Any]:
+    """Require HTTP 412 PreconditionFailed for R2 IfNoneMatch='*' conditional-PUT conflict checks."""
+    response = getattr(exc, "response", {})
+    http_status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    error_code = response.get("Error", {}).get("Code")
+    if http_status != 412 or error_code != "PreconditionFailed":
+        raise AssertionError(
+            f"Expected HTTP 412 PreconditionFailed on IfNoneMatch='*' for {target_key}, got HTTP {http_status} {error_code}"
+        ) from exc
+    return {
+        "http_status": http_status,
+        "error_code": error_code,
+        "target_key": target_key,
+    }
+
+
 def run_r2_isolation_probe(std_env: dict[str, str], hid_env: dict[str, str]) -> dict[str, Any]:
     """Verify bidirectional HTTP 403 AccessDenied between operational and hidden R2 buckets."""
     from botocore.exceptions import ClientError
@@ -121,14 +154,7 @@ def run_r2_isolation_probe(std_env: dict[str, str], hid_env: dict[str, str]) -> 
                 fn()
                 raise AssertionError(f"Expected AccessDenied for {op_name}")
             except ClientError as exc:
-                checks.append(
-                    {
-                        "check": op_name,
-                        "result": "PASS_DENIED",
-                        "http_status": exc.response["ResponseMetadata"]["HTTPStatusCode"],
-                        "error_code": exc.response["Error"]["Code"],
-                    }
-                )
+                checks.append(_assert_access_denied(exc, op_name))
 
         std.put_object(Bucket=std_bucket, Key=std_key, Body=b"ppc-wp0-standard-canary")
         got_std = std.get_object(Bucket=std_bucket, Key=std_key)["Body"].read()
@@ -147,14 +173,7 @@ def run_r2_isolation_probe(std_env: dict[str, str], hid_env: dict[str, str]) -> 
                 fn()
                 raise AssertionError(f"Expected AccessDenied for {op_name}")
             except ClientError as exc:
-                checks.append(
-                    {
-                        "check": op_name,
-                        "result": "PASS_DENIED",
-                        "http_status": exc.response["ResponseMetadata"]["HTTPStatusCode"],
-                        "error_code": exc.response["Error"]["Code"],
-                    }
-                )
+                checks.append(_assert_access_denied(exc, op_name))
     finally:
         try:
             hid.delete_object(Bucket=hid_bucket, Key=canary_key)
@@ -276,11 +295,7 @@ def run_delta_r2_and_databricks_probes(
             )
             raise AssertionError("R2 failed to reject conditional PUT IfNoneMatch='*' on existing _delta_log")
         except ClientError as exc:
-            etag_conflict = {
-                "http_status": exc.response["ResponseMetadata"]["HTTPStatusCode"],
-                "error_code": exc.response["Error"]["Code"],
-                "target_key": log0_key,
-            }
+            etag_conflict = _assert_precondition_failed(exc, log0_key)
 
         #    (b) Two concurrent delta-rs overwrite writers racing on the same R2 table with
         #        max_commit_retries=0 (no retry masking): one writer commits and the competing
