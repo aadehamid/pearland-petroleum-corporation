@@ -22,8 +22,13 @@ class TestWP5ScenarioA(unittest.TestCase):
 
         ev = run_scenario_a_walkthrough()
         self.assertEqual(ev["scenario_id"], "SCN-A-T125")
-        self.assertEqual(ev["qualification_verdict"], "QUALIFIED_PROVISIONAL")
-        self.assertEqual(ev["provenance_class"], "SYNTHETIC")
+        self.assertEqual(ev["execution_mode"], "IN_PROCESS_VERTICAL_SLICE")
+        # In-process vertical slice MUST remain DRAFT (never self-certify QUALIFIED_PROVISIONAL per VERIFY-001)
+        self.assertEqual(ev["qualification_verdict"], "DRAFT")
+        self.assertEqual(ev["world_kernel"]["provenance_class"], "SYNTHETIC")
+        self.assertEqual(ev["lakehouse_and_reader"]["provenance_class"], "DERIVED")
+        self.assertEqual(ev["planning_lp_and_backcast"]["provenance_class"], "ESTIMATED")
+        self.assertEqual(ev["relate_wasm_explorer"]["provenance_class"], "DERIVED")
 
         # 1. WP-1c canonical world kernel matches frozen external oracle
         wk = ev["world_kernel"]
@@ -68,13 +73,18 @@ class TestWP5ScenarioA(unittest.TestCase):
         self.assertEqual(lr["reader_0816_status"], "RESOLVED")
         self.assertEqual(lr["reader_0816_publication_id"], "SCN-A-P1")
 
-        # 4. WP-3A Planning LP + UC-3 PO-12b backcasting
+        # 4. WP-3A Planning LP + UC-3 PO-12b backcasting (two-sided bounds pinning actual LP setpoints & H2 usage)
         lp = ev["planning_lp_and_backcast"]
         self.assertEqual(lp["t125_status"], "FEASIBLE")
-        self.assertLessEqual(lp["t125_hcu_feed_bpd"], 30000.0 + 1e-6)
+        self.assertAlmostEqual(lp["t125_hcu_feed_bpd"], t125["expected_max_hcu_feed_bbl_per_day"], places=3)
         self.assertEqual(lp["probe_30001_status"], "INFEASIBLE")
         self.assertEqual(lp["h2cont_status"], "FEASIBLE")
-        self.assertLessEqual(lp["h2cont_hcu_feed_bpd"], 25950.0)
+        self.assertAlmostEqual(
+            lp["h2cont_hcu_feed_bpd"], h2cont["expected_max_hcu_feed_bbl_per_day_approx"], delta=1.0
+        )
+        self.assertAlmostEqual(
+            lp["h2cont_h2_used_t_per_day"], h2cont["expected_hcu_headroom_t_per_day"], places=4
+        )
         self.assertTrue(lp["po12b_proven"])
         self.assertAlmostEqual(lp["backcast_identity_residual"], 0.0, places=6)
 

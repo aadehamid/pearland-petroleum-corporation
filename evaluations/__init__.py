@@ -1,3 +1,1 @@
-""",
-PPC scenario evaluations package.
-"""
+"""PPC scenario evaluations package."""

@@ -83,8 +83,10 @@ def _load_module(mod_name: str, rel_path: str) -> Any:
 
 
 def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, Any]:
-    """Execute deterministic Scenario A (SCN-A-T125 & SCN-A-H2CONT) end-to-end and return RunEvidence."""
-    oracle = json.loads(ORACLE_PATH.read_text(encoding="utf-8"))
+    """Execute deterministic Scenario A (SCN-A-T125 & SCN-A-H2CONT) in-process vertical slice and return evidence summary."""
+    oracle_bytes = ORACLE_PATH.read_bytes()
+    oracle_sha256 = hashlib.sha256(oracle_bytes).hexdigest()
+    oracle = json.loads(oracle_bytes.decode("utf-8"))
     t125_oracle = oracle["scenarios"]["SCN-A-T125"]
     h2cont_oracle = oracle["scenarios"]["SCN-A-H2CONT"]
     ot_schedule = yaml.safe_load(OT_TAGS_PATH.read_text(encoding="utf-8"))
@@ -495,11 +497,19 @@ def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
             )
 
             evidence = {
+                "case_id": "SCN-A-T125",
+                "branch_id": "scn-a-baseline",
                 "scenario_id": "SCN-A-T125",
                 "oracle_id": oracle["oracle_id"],
-                "qualification_verdict": "QUALIFIED_PROVISIONAL",
-                "provenance_class": "SYNTHETIC",
+                "oracle_sha256": oracle_sha256,
+                "execution_mode": "IN_PROCESS_VERTICAL_SLICE",
+                "qualification_verdict": "DRAFT",
+                "qualification_note": (
+                    "In-process vertical slice verification summary; promotion to QUALIFIED_PROVISIONAL "
+                    "requires live exe.dev + R2 run, upstream adapter pins, and owner-approved PR per VERIFY-001."
+                ),
                 "world_kernel": {
+                    "provenance_class": "SYNTHETIC",
                     "baseline_processed_bbl": base.state.hcu_cumulative_processed_bbl,
                     "child_24k_processed_bbl": child.state.hcu_cumulative_processed_bbl,
                     "branch_delta_bbl": base.state.hcu_cumulative_processed_bbl - child.state.hcu_cumulative_processed_bbl,
@@ -515,6 +525,7 @@ def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                     "h2cont_max_feed_bbl_per_day": hcu_h2cont["max_feed_bbl_per_day"],
                 },
                 "ot_and_integration": {
+                    "provenance_class": "SYNTHETIC",
                     "birth_event_count": len(birth_events),
                     "ot_tag_id": derate_ot_ev.tag_name,
                     "ot_visible_at_0815_count": len(ot_visible_0815),
@@ -524,6 +535,7 @@ def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                     "delta_publish": pub_events["status"],
                 },
                 "lakehouse_and_reader": {
+                    "provenance_class": "DERIVED",
                     "kpi_rows": kpi_readback,
                     "release_manifest_sha256": manifest["manifest_sha256"],
                     "reader_0815_status": reader_0815["status"],
@@ -531,16 +543,19 @@ def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                     "reader_0816_publication_id": reader_0816["publication_id"],
                 },
                 "planning_lp_and_backcast": {
+                    "provenance_class": "ESTIMATED",
                     "t125_status": lp_t125["feasibility_status"],
                     "t125_hcu_feed_bpd": lp_t125["setpoints"]["hcu_feed_bpd"],
                     "t125_margin_usd_per_day": lp_t125["margin_usd_per_day"],
                     "probe_30001_status": lp_30001["feasibility_status"],
                     "h2cont_status": lp_h2cont["feasibility_status"],
                     "h2cont_hcu_feed_bpd": lp_h2cont["setpoints"]["hcu_feed_bpd"],
+                    "h2cont_h2_used_t_per_day": lp_h2cont["setpoints"]["h2_used_hcu_t_per_day"],
                     "po12b_proven": backcast["po12b_nonzero_calibration_proven"],
                     "backcast_identity_residual": backcast["identity_residual_usd_per_day"],
                 },
                 "agent_and_policy": {
+                    "provenance_class": "SYNTHETIC",
                     "agent_adapter_mode": agent.mode,
                     "otel_restricted_redacted": agent_out["otel_span"]["restricted_payload"] == "[REDACTED]",
                     "proposal_authority_class": proposal["authority_class"],
@@ -552,6 +567,7 @@ def run_scenario_a_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                     "replay_denied_reason": exec_replay_denied.get("reason"),
                 },
                 "relate_wasm_explorer": {
+                    "provenance_class": "DERIVED",
                     "planner_node_badges": [n["badge"] for n in wasm_planner["nodes"]],
                     "planner_edge_badges": [e["badge"] for e in wasm_planner["edges"]],
                     "planner_card_badges": [c["badge"] for c in wasm_planner["model_quantified_cards"]],
