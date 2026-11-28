@@ -144,8 +144,12 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("utf16_odd_offset", b"\x9c" + "evaluation/hidden/keys.json".encode("utf-16-le")),
             ("utf32_leak", "evaluation/hidden/keys.json".encode("utf-32-le")),
             ("gzip_leak", gzip.compress(b"ref: evaluation/hidden/scoring_keys.json")),
+            ("gzip_trailing_pad", gzip.compress(b"evaluation/hidden/keys.json") + b"\x00pad"),
             ("base64_leak", base64.b64encode(b"evaluation/hidden/score.key")),
+            ("base64_urlsafe", base64.urlsafe_b64encode(b"\x01\x9c" + b"hidden_truth" + b"\xff")),
+            ("base64_unpadded", base64.b64encode(b"hidden_truth!").rstrip(b"=")),
             ("hex_leak", b"evaluation/hidden/score.key".hex().encode("ascii")),
+            ("hex_odd_nibble", b"A" + b"evaluation/hidden/score.key".hex().encode("ascii")),
             ("split_invalid_byte", b"evaluation/\x94hidden/keys.json"),
         ):
             evasion = assemble_world_export_bundle_v1(

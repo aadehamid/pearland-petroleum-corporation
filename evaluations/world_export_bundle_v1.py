@@ -38,7 +38,7 @@ FORBIDDEN_OBSERVABLE_MARKERS: tuple[str, ...] = (
     "root_seed_secret",
 )
 
-_B64_TOKEN_RE = re.compile(rb"[A-Za-z0-9+/=]{16,}")
+_B64_TOKEN_RE = re.compile(rb"[A-Za-z0-9+/=_-]{16,}")
 _HEX_TOKEN_RE = re.compile(rb"[0-9a-fA-F]{16,}")
 
 
@@ -69,7 +69,15 @@ def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
     byte_candidates: list[bytes] = [raw_bytes]
 
-    # Try gzip / zlib decompression when wrapper bytes are present
+    # Try tolerant gzip / zlib decompression (ignores trailing non-member padding bytes)
+    for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
+        try:
+            dobj = zlib.decompressobj(wbits)
+            unpacked = dobj.decompress(raw_bytes) + dobj.flush()
+            if unpacked:
+                byte_candidates.append(unpacked)
+        except Exception:
+            pass
     for decompressor in (gzip.decompress, zlib.decompress):
         try:
             unpacked = decompressor(raw_bytes)
@@ -78,24 +86,32 @@ def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
         except Exception:
             pass
 
-    # Try base64 and hex decoding over full buffer and embedded ASCII tokens
+    # Try standard & URL-safe base64 (including stripped padding) over full buffer and embedded ASCII tokens
     stripped = re.sub(rb"\s+", b"", raw_bytes)
     for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
-        if len(token) >= 16 and len(token) % 4 == 0:
-            try:
-                decoded = base64.b64decode(token, validate=True)
-                if decoded:
-                    byte_candidates.append(decoded)
-            except Exception:
-                pass
+        if len(token) >= 16:
+            norm = token.replace(b"-", b"+").replace(b"_", b"/").rstrip(b"=")
+            if len(norm) % 4 != 1:
+                padded = norm + b"=" * ((-len(norm)) % 4)
+                try:
+                    decoded = base64.b64decode(padded, validate=True)
+                    if decoded:
+                        byte_candidates.append(decoded)
+                except Exception:
+                    pass
+
+    # Try hex decoding at both nibble alignments (offset 0 and offset 1)
     for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
-        if len(token) >= 16 and len(token) % 2 == 0:
-            try:
-                decoded = bytes.fromhex(token.decode("ascii"))
-                if decoded:
-                    byte_candidates.append(decoded)
-            except Exception:
-                pass
+        for offset in (0, 1):
+            sub = token[offset:]
+            even_len = len(sub) - (len(sub) % 2)
+            if even_len >= 16:
+                try:
+                    decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
+                    if decoded:
+                        byte_candidates.append(decoded)
+                except Exception:
+                    pass
 
     views: list[str] = []
     if isinstance(raw, str):
