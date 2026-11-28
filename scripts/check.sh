@@ -68,6 +68,11 @@ echo "== WP-1b design basis, CFG-0 topology, and OT tags =="
 uv run --no-project --with pyyaml python3 -m unittest tests/test_wp1b_design_basis.py
 
 echo
+echo "== WP-3 Delta Lake KPI store, EPM bindings, Neo4j RDF projection, and INFO-001 reader-as-of =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml --with rdflib --with pyshacl \
+  python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
