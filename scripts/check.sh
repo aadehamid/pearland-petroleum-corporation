@@ -73,7 +73,12 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
 
 echo
-echo "== WP-5B Relate WASM server-filtered graph package and PO-08 zero-byte redaction =="
+echo "== WP-1c/1d Refinery A world kernel, EQ-01..EQ-08, Z3/Hypothesis proof obligations =="
+uv run --no-project --with pyyaml --with numpy --with z3-solver --with hypothesis \
+  python3 -m unittest tests/test_world_kernel.py verification/z3/test_proof_obligations.py
+
+echo
+echo "== WP-5B Relate WASM server-filtered graph package =="
 python3 -m unittest tests/test_wp5b_relate_wasm.py
 
 echo
