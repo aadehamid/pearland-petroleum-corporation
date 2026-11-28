@@ -24,10 +24,10 @@ and replaces DuckLake with Delta Lake on Cloudflare R2 (`ADR-0045`, single-write
 
   SQLite       refinery edge unit status/production/events       micro-batch→R2        B           R2
 
-  EIA          public        prices/stocks/runs/trade            Worker/API→R2         C           R2 raw
+  EIA          public        prices/stocks/runs/trade            API→R2                C           R2 raw
                petroleum                                                                           
 
-  NOAA/NHC     weather       advisories/tracks                   Worker/API→R2/event   B           R2 raw
+  NOAA/NHC     weather       advisories/tracks                   API→R2/event          B           R2 raw
 
   EPA          regulatory    GHGRP facility registry; RFS/RIN    API/file→R2           C           R2 raw
 
@@ -46,7 +46,7 @@ mapping, SLA, retry, failure behavior, DQ and owner.
 
 ### WP-1 Public Raw External Interfaces (`generators/public_ingest.py`)
 
-- **Schema/version:** `PPC-WP1-PUBLIC-DATA-VINTAGE` v`1.0.0` (`fixtures/golden/public_data_vintage_manifest.json`), `provenance_class: OBSERVED`.
+- **Schema/version:** `generators/schemas/public_data_vintage_manifest.schema.json` (`PPC-WP1-PUBLIC-DATA-VINTAGE` v`1.0.0`, instantiated in `fixtures/golden/public_data_vintage_manifest.json`), `provenance_class: OBSERVED`.
 - **Semantic mapping:** Raw `OBSERVED` external context landed under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` per `PPC-013` and `ADR-0057` (never written to the hidden-truth bucket); conditions fictional distributions without redefining EPM KPIs (`PPC-WORLD-001 §4`).
 - **SLA:** On-demand vintage pin per release window (daily/weekly historical series pinned by explicit date range).
 - **Retry:** Single 2-second backoff retry on HTTP 429; 60-second request timeout.

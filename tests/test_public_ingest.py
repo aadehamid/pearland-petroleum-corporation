@@ -9,10 +9,13 @@ import unittest
 import zipfile
 from pathlib import Path
 
+import jsonschema
+
 from generators import public_ingest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = REPO_ROOT / "fixtures" / "golden" / "public_data_vintage_manifest.json"
+MANIFEST_SCHEMA_PATH = REPO_ROOT / "generators" / "schemas" / "public_data_vintage_manifest.schema.json"
 
 SAMPLE_HURDAT2 = """AL092017, HARVEY, 3,
 20170825, 1800, , HU, 27.3N, 96.6W, 110, 943, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -132,7 +135,7 @@ class TestPublicIngest(unittest.TestCase):
         self.assertEqual(len(phmsa_rows), 2)
         self.assertEqual(phmsa_rows[0]["provenance_class"], "OBSERVED")
 
-        # Zero data rows OR row missing REPORT_NUMBER must fail closed
+        # Zero data rows, missing REPORT_NUMBER, OR duplicate REPORT_NUMBER across members must fail closed
         with self.assertRaises(ValueError):
             public_ingest.parse_phmsa_liquid_zip(_make_phmsa_zip(include_readme=True, empty_rows=True))
         buf = io.BytesIO()
@@ -145,6 +148,12 @@ class TestPublicIngest(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             public_ingest.parse_phmsa_liquid_zip(buf.getvalue())
+        buf_dup = io.BytesIO()
+        with zipfile.ZipFile(buf_dup, "w") as zf:
+            zf.writestr("a.csv", "REPORT_NUMBER,I_YEAR\n20240001,2024\n")
+            zf.writestr("b.csv", "REPORT_NUMBER,I_YEAR\n20240001,2024\n")
+        with self.assertRaises(ValueError):
+            public_ingest.parse_phmsa_liquid_zip(buf_dup.getvalue())
 
     def test_run_public_ingest_offline_upload_and_dry_run_modes(self):
         uploaded: dict[str, bytes] = {}
@@ -194,6 +203,8 @@ class TestPublicIngest(unittest.TestCase):
             phmsa_zip_bytes=_make_phmsa_zip(),
         )
         self.assertEqual(manifest["provenance_class"], "OBSERVED")
+        schema = json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))
+        jsonschema.validate(instance=manifest, schema=schema)
         self.assertEqual(manifest["upload_status"], "UPLOADED_TO_R2")
         self.assertEqual(manifest["r2_bucket"], "pearland-petroleum-corp")
         self.assertTrue(all(o["uploaded"] for o in manifest["objects"]))
@@ -244,6 +255,8 @@ class TestPublicIngest(unittest.TestCase):
         self.assertNotIn("EIA_API_KEY", raw)
         self.assertNotIn("SECRET_ACCESS_KEY", raw)
         data = json.loads(raw)
+        schema = json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))
+        jsonschema.validate(instance=data, schema=schema)
         self.assertEqual(data["provenance_class"], "OBSERVED")
         self.assertEqual(data["upload_status"], "UPLOADED_TO_R2")
         self.assertTrue(data.get("generator_version"))

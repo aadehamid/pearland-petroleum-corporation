@@ -280,6 +280,7 @@ def fetch_epa_ghgrp_state(
 ) -> list[dict[str, Any]]:
     """Fetch all paginated EPA Envirofacts GHGRP NAICS 324110 records for one state."""
     records: list[dict[str, Any]] = []
+    seen_row_keys: set[tuple[str, str]] = set()
     start = 0
     for _ in range(max_pages):
         end = start + page_size - 1  # Envirofacts ROWS/start:end is inclusive
@@ -298,6 +299,12 @@ def fetch_epa_ghgrp_state(
             rec_fac = rec.get("facility_id") if rec.get("facility_id") is not None else rec.get("FACILITY_ID")
             if rec_fac is None or not str(rec_fac).strip():
                 raise ValueError(f"EPA record missing non-blank facility_id / FACILITY_ID for state {state}")
+            rec_year = rec.get("year") if rec.get("year") is not None else rec.get("YEAR")
+            if rec_year is not None:
+                rkey = (str(rec_fac).strip(), str(rec_year).strip())
+                if rkey in seen_row_keys:
+                    raise ValueError(f"Duplicate EPA (facility_id, year) row detected across pages: {rkey}")
+                seen_row_keys.add(rkey)
         records.extend(parsed)
         if len(parsed) < page_size:
             return records
@@ -359,6 +366,7 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
         if not csv_names:
             raise ValueError("PHMSA ZIP archive contains no CSV/TXT data file")
         matched_members: list[str] = []
+        seen_reports: set[str] = set()
         for member in csv_names:
             with zf.open(member) as fh:
                 text = io.TextIOWrapper(fh, encoding="utf-8-sig", errors="replace")
@@ -375,11 +383,15 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
                 for row_num, row in enumerate(reader, start=2):
                     if not any((v or "").strip() for v in row.values()):
                         continue
-                    if not (row.get("REPORT_NUMBER") or "").strip():
+                    rep_no = (row.get("REPORT_NUMBER") or "").strip()
+                    if not rep_no:
                         raise ValueError(f"PHMSA archive member {member} row {row_num} missing REPORT_NUMBER")
+                    if rep_no in seen_reports:
+                        raise ValueError(f"PHMSA archive contains duplicate REPORT_NUMBER {rep_no!r} (member {member})")
+                    seen_reports.add(rep_no)
                     rows.append(
                         {
-                            "report_number": row.get("REPORT_NUMBER", "").strip(),
+                            "report_number": rep_no,
                             "year": row.get("I_YEAR", "").strip(),
                             "state": row.get("ACCIDENT_STATE_ABBREVIATION", "").strip(),
                             "commodity": row.get("COMMODITY_RELEASED_TYPE", "").strip(),

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/public_data_vintage_manifest.schema.json",
+  "title": "PPC WP-1 Public Data Vintage Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generator_version",
+    "code_file",
+    "manifest_kind",
+    "provenance_class",
+    "upload_status",
+    "vintage",
+    "window",
+    "captured_at_utc",
+    "governing_adrs",
+    "r2_bucket",
+    "target_r2_bucket",
+    "sources",
+    "objects",
+    "manifest_sha256"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "generator_version": { "type": "string", "minLength": 1 },
+    "code_file": { "type": "string", "const": "generators/public_ingest.py" },
+    "manifest_kind": { "type": "string", "const": "PPC-WP1-PUBLIC-DATA-VINTAGE" },
+    "provenance_class": { "type": "string", "const": "OBSERVED" },
+    "upload_status": { "type": "string", "enum": ["UPLOADED_TO_R2", "LOCAL_DRY_RUN_NOT_UPLOADED"] },
+    "vintage": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "end_date"],
+      "properties": {
+        "start_date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+        "end_date": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+      }
+    },
+    "captured_at_utc": { "type": "string", "minLength": 20 },
+    "governing_adrs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "r2_bucket": { "type": ["string", "null"] },
+    "target_r2_bucket": { "type": "string", "minLength": 1, "not": { "pattern": "hidden" } },
+    "sources": {
+      "type": "object",
+      "required": ["eia", "noaa", "epa", "phmsa"],
+      "properties": {
+        "eia": { "type": "object", "required": ["series_count", "series"] },
+        "noaa": {
+          "type": "object",
+          "required": ["archive_url", "total_storms_in_archive", "archive_year_min", "archive_year_max", "storms_since_2010", "hurricanes_since_2010"]
+        },
+        "epa": {
+          "type": "object",
+          "required": ["table", "naics", "states", "row_count", "unique_facilities", "rfs_rin_status"]
+        },
+        "phmsa": {
+          "type": "object",
+          "required": ["status", "archive_url"],
+          "properties": {
+            "status": { "type": "string", "enum": ["INGESTED", "PARSED_LOCAL_DRY_RUN", "DEFERRED_MANUAL_ARCHIVE"] },
+            "archive_url": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "minItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source", "name", "r2_key", "sha256", "size_bytes", "row_count",
+          "unit", "date_min", "date_max", "uploaded", "r2_etag", "provenance_class"
+        ],
+        "properties": {
+          "source": { "type": "string", "enum": ["eia", "noaa", "epa", "phmsa"] },
+          "name": { "type": "string", "minLength": 1 },
+          "r2_key": { "type": "string", "pattern": "^raw/external/(eia|noaa|epa|phmsa)/vintage=.+" },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size_bytes": { "type": "integer", "minimum": 1 },
+          "row_count": { "type": "integer", "minimum": 1 },
+          "unit": { "type": ["string", "null"] },
+          "date_min": { "type": ["string", "null"] },
+          "date_max": { "type": ["string", "null"] },
+          "uploaded": { "type": "boolean" },
+          "r2_etag": { "type": ["string", "null"] },
+          "provenance_class": { "type": "string", "const": "OBSERVED" }
+        }
+      }
+    },
+    "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}
