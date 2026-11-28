@@ -42,30 +42,42 @@ class TestWP6ScenarioB(unittest.TestCase):
         for row in ev["kpi_rows"]:
             self.assertIn((row["kpi_name"], row["measure_class"], row["epm_artifact"]), registered_kpis)
 
-        # Sharp SCENARIO-001 §3 boundary probes:
-        # 09:25 (S2-P1 published 09:20, delivered 09:30) -> UNRESOLVED
+        # Sharp SCENARIO-001 §3 boundary probes with independent assay vs analytical-release clocks:
+        # 09:25 (S2-P1 published 09:20, delivered 09:30; S2-L1 delivered 09:50) -> both UNRESOLVED
         self.assertEqual(ev["pre_receipt_0925"]["status"], "UNRESOLVED")
         self.assertIsNone(ev["pre_receipt_0925"]["payload"])
-        # 09:47 (S2-L1 published 09:45, delivered 09:50) -> UNRESOLVED
-        self.assertEqual(ev["pre_release_delivery_0947"]["status"], "UNRESOLVED")
-        self.assertIsNone(ev["pre_release_delivery_0947"]["payload"])
+        self.assertEqual(ev["pre_receipt_0925"]["release_status"], "UNRESOLVED")
+        self.assertIsNone(ev["pre_receipt_0925"]["release_id"])
+
+        # 09:47 (S2-P1 delivered 09:30 <= 09:47; S2-L1 published 09:45, delivered 09:50 > 09:47):
+        # assay MUST resolve as S2-P1 / QUALITY_HOLD while analytical release stays UNRESOLVED
+        self.assertEqual(ev["pre_release_delivery_0947"]["status"], "RESOLVED")
+        self.assertEqual(ev["pre_release_delivery_0947"]["publication_id"], "S2-P1")
+        self.assertEqual(ev["pre_release_delivery_0947"]["payload"]["disposition"], "QUALITY_HOLD")
+        self.assertEqual(ev["pre_release_delivery_0947"]["release_status"], "UNRESOLVED")
+        self.assertIsNone(ev["pre_release_delivery_0947"]["release_id"])
 
         # 10:00 decision S2-D1 sees failed S2-P1 + S2-L1 with exact canonical effective/published times
         self.assertEqual(ev["decision_s2_d1_1000"]["status"], "RESOLVED")
         self.assertEqual(ev["decision_s2_d1_1000"]["publication_id"], "S2-P1")
+        self.assertEqual(ev["decision_s2_d1_1000"]["release_status"], "RESOLVED")
         self.assertEqual(ev["decision_s2_d1_1000"]["release_id"], "S2-L1")
         self.assertEqual(ev["decision_s2_d1_1000"]["effective_at_utc"], "2026-06-15T08:00:00Z")
         self.assertEqual(ev["decision_s2_d1_1000"]["published_at_utc"], "2026-06-15T09:20:00Z")
         self.assertEqual(ev["decision_s2_d1_1000"]["payload"]["disposition"], "QUALITY_HOLD")
 
-        # 13:12 (S2-P2 delivered 13:00, S2-L2 published 13:10, delivered 13:15) STILL resolves S2-P1 + S2-L1
+        # 13:12 (S2-P2 delivered 13:00 <= 13:12; S2-L2 published 13:10, delivered 13:15 > 13:12):
+        # assay MUST resolve as S2-P2 / RELEASE while analytical release stays S2-L1
         self.assertEqual(ev["pre_release_1312"]["status"], "RESOLVED")
-        self.assertEqual(ev["pre_release_1312"]["publication_id"], "S2-P1")
+        self.assertEqual(ev["pre_release_1312"]["publication_id"], "S2-P2")
+        self.assertEqual(ev["pre_release_1312"]["payload"]["disposition"], "RELEASE")
+        self.assertEqual(ev["pre_release_1312"]["release_status"], "RESOLVED")
         self.assertEqual(ev["pre_release_1312"]["release_id"], "S2-L1")
 
         # 13:15 sees restated passing S2-P2 + S2-L2
         self.assertEqual(ev["restated_1315"]["status"], "RESOLVED")
         self.assertEqual(ev["restated_1315"]["publication_id"], "S2-P2")
+        self.assertEqual(ev["restated_1315"]["release_status"], "RESOLVED")
         self.assertEqual(ev["restated_1315"]["release_id"], "S2-L2")
         self.assertEqual(ev["restated_1315"]["effective_at_utc"], "2026-06-15T08:00:00Z")
         self.assertEqual(ev["restated_1315"]["published_at_utc"], "2026-06-15T12:30:00Z")
@@ -77,6 +89,8 @@ class TestWP6ScenarioB(unittest.TestCase):
         # Unauthorized role sees opaque UNRESOLVED with zero payload disclosure
         self.assertEqual(ev["unauthorized_view"]["status"], "UNRESOLVED")
         self.assertIsNone(ev["unauthorized_view"]["payload"])
+        self.assertEqual(ev["unauthorized_view"]["release_status"], "UNRESOLVED")
+        self.assertIsNone(ev["unauthorized_view"]["release_id"])
 
         # Determinism check: second independent run produces identical evidence SHA-256
         ev2 = run_scenario_b_walkthrough()
