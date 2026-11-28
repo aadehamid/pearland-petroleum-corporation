@@ -73,6 +73,10 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
 
 echo
+echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO-03) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
