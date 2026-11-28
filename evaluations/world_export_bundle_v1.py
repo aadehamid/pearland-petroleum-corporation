@@ -8,14 +8,18 @@ schemas/world_export_bundle.schema.json, partitioning:
 - hidden_truth/ (evaluation/hidden/ in pearland-petroleum-hidden)
   under a separate credential boundary
 
-Runs automated field-level and path-level leak audits over BOTH the observable
-manifest section itself and all supplied observable payloads, proving zero
-canonical hidden-truth fields or restricted paths appear inside observable/.
+Scans both the observable manifest metadata and supplied observable payloads
+across UTF-8, UTF-16LE/BE (even and odd byte offsets), UTF-32LE/BE, gzip/zlib,
+base64, and hex encodings for declared hidden-truth markers (ADR-0053, B13).
 """
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import json
+import re
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -34,20 +38,70 @@ FORBIDDEN_OBSERVABLE_MARKERS: tuple[str, ...] = (
     "root_seed_secret",
 )
 
+_B64_TOKEN_RE = re.compile(rb"[A-Za-z0-9+/=]{16,}")
+_HEX_TOKEN_RE = re.compile(rb"[0-9a-fA-F]{16,}")
+
+
+def _text_views_from_bytes(buf: bytes) -> list[str]:
+    views = [
+        buf.decode("utf-8", errors="replace").lower(),
+        buf.decode("utf-8", errors="ignore").lower(),
+    ]
+    for offset in (0, 1):
+        sliced = buf[offset:]
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                views.append(sliced.decode(enc, errors="ignore").lower())
+            except UnicodeError:
+                pass
+    for offset in (0, 1, 2, 3):
+        sliced = buf[offset:]
+        for enc in ("utf-32-le", "utf-32-be"):
+            try:
+                views.append(sliced.decode(enc, errors="ignore").lower())
+            except UnicodeError:
+                pass
+    return views
+
 
 def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
-    """Produce decoded text views so UTF-8, invalid-byte-split, and UTF-16LE/BE markers are all scanned."""
-    if isinstance(raw, str):
-        return [raw.lower()]
-    views = [
-        raw.decode("utf-8", errors="replace").lower(),
-        raw.decode("utf-8", errors="ignore").lower(),
-    ]
-    for enc in ("utf-16-le", "utf-16-be"):
+    """Produce decoded text views across UTF-8, UTF-16/32 (with byte offsets), gzip/zlib, base64, and hex."""
+    raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
+    byte_candidates: list[bytes] = [raw_bytes]
+
+    # Try gzip / zlib decompression when wrapper bytes are present
+    for decompressor in (gzip.decompress, zlib.decompress):
         try:
-            views.append(raw.decode(enc, errors="ignore").lower())
-        except UnicodeError:
+            unpacked = decompressor(raw_bytes)
+            if unpacked:
+                byte_candidates.append(unpacked)
+        except Exception:
             pass
+
+    # Try base64 and hex decoding over full buffer and embedded ASCII tokens
+    stripped = re.sub(rb"\s+", b"", raw_bytes)
+    for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
+        if len(token) >= 16 and len(token) % 4 == 0:
+            try:
+                decoded = base64.b64decode(token, validate=True)
+                if decoded:
+                    byte_candidates.append(decoded)
+            except Exception:
+                pass
+    for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
+        if len(token) >= 16 and len(token) % 2 == 0:
+            try:
+                decoded = bytes.fromhex(token.decode("ascii"))
+                if decoded:
+                    byte_candidates.append(decoded)
+            except Exception:
+                pass
+
+    views: list[str] = []
+    if isinstance(raw, str):
+        views.append(raw.lower())
+    for cand in byte_candidates:
+        views.extend(_text_views_from_bytes(cand))
     return views
 
 
@@ -56,13 +110,13 @@ def audit_observable_for_hidden_leaks(
     checked_at_utc: str | None = None,
     manifest_json: str | None = None,
 ) -> dict[str, Any]:
-    """Scan every observable artifact payload and optional manifest JSON for hidden-truth markers (ADR-0053, B13)."""
+    """Scan observable manifest metadata and supplied observable payloads for hidden-truth markers."""
     ts = checked_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     items: list[tuple[str, bytes | str]] = []
     if manifest_json is not None:
-        items.append(("__observable_manifest__", manifest_json))
+        items.append(("manifest:__observable_manifest__", manifest_json))
     for name, raw in sorted(observable_payloads.items()):
-        items.append((str(name), raw))
+        items.append((f"payload:{name}", raw))
 
     findings: list[dict[str, str]] = []
     for name, raw in items:

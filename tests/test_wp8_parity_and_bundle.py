@@ -2,11 +2,16 @@
 """Tests for WP-8A DuckDB-vs-Databricks KPI parity and WP-8B Certified WorldExportBundle v1."""
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import unittest
 from pathlib import Path
 
-from evaluations.world_export_bundle_v1 import assemble_world_export_bundle_v1
+from evaluations.world_export_bundle_v1 import (
+    assemble_world_export_bundle_v1,
+    audit_observable_for_hidden_leaks,
+)
 from lakehouse.delta.databricks_parity import diff_duckdb_vs_databricks_kpis
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -131,10 +136,16 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertEqual(leaked_meta["leak_audit"]["status"], "FAILED")
         self.assertEqual(leaked_meta["qualification_verdict"], "DRAFT")
 
-        # Real schema hidden-truth field names, UTF-16LE bytes, and invalid-byte-split markers MUST ALL fail audit!
+        # Real schema hidden-truth field names, UTF-16/UTF-32 (incl. odd-offset), gzip, base64, hex,
+        # and invalid-byte-split markers MUST ALL fail audit!
         for case_name, bad_payload in (
             ("schema_field", b'{"canonical_world_snapshots":[{"name":"s0"}],"evaluation_scoring_keys":[]}'),
             ("utf16_leak", "evaluation/hidden/keys.json".encode("utf-16-le")),
+            ("utf16_odd_offset", b"\x9c" + "evaluation/hidden/keys.json".encode("utf-16-le")),
+            ("utf32_leak", "evaluation/hidden/keys.json".encode("utf-32-le")),
+            ("gzip_leak", gzip.compress(b"ref: evaluation/hidden/scoring_keys.json")),
+            ("base64_leak", base64.b64encode(b"evaluation/hidden/score.key")),
+            ("hex_leak", b"evaluation/hidden/score.key".hex().encode("ascii")),
             ("split_invalid_byte", b"evaluation/\x94hidden/keys.json"),
         ):
             evasion = assemble_world_export_bundle_v1(
@@ -150,6 +161,13 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             )
             self.assertEqual(evasion["leak_audit"]["status"], "FAILED", case_name)
             self.assertEqual(evasion["qualification_verdict"], "DRAFT", case_name)
+
+        # Finding provenance distinguishes manifest findings from caller payload keys named `__observable_manifest__`
+        attr = audit_observable_for_hidden_leaks(
+            {"__observable_manifest__": b"evaluation/hidden/x"},
+            manifest_json='{"r2_bucket":"pearland-petroleum-corp"}',
+        )
+        self.assertEqual(attr["findings"][0]["artifact"], "payload:__observable_manifest__")
 
         # Empty adapter_pins MUST be rejected
         with self.assertRaises(ValueError):
