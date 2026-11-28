@@ -415,6 +415,20 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         with self.assertRaises(ValueError):
             RefineryWorldKernel.from_checkpoint(ckpt_bad_loss)
 
+        for tamper_name, mutator in (
+            ("tank_max_bbl", lambda c: setattr(c["state"].tanks["TK-TEST"], "max_bbl", 11900.0)),
+            ("tank_min_bbl", lambda c: setattr(c["state"].tanks["TK-TEST"], "min_bbl", 500.0)),
+            ("tank_sg", lambda c: setattr(c["state"].tanks["TK-TEST"], "sg_60_60", 0.900)),
+            ("root_seed", lambda c: setattr(c["state"], "root_seed", 999)),
+            ("history", lambda c: c["state"].history.append({"tampered": True})),
+            ("fixture_mode", lambda c: c.__setitem__("fixture_mode", not c["fixture_mode"])),
+            ("step_seconds", lambda c: c.__setitem__("step_seconds", 120)),
+        ):
+            bad_ckpt = k.checkpoint()
+            mutator(bad_ckpt)
+            with self.assertRaises(ValueError, msg=f"from_checkpoint failed to reject tampered {tamper_name}"):
+                RefineryWorldKernel.from_checkpoint(bad_ckpt)
+
         k_sched = RefineryWorldKernel.from_checkpoint(ckpt)
         k_sched.schedule_event(WorldEvent("EVT-FUT", datetime(2026, 6, 15, 8, 30, tzinfo=timezone.utc), "SMR_TURNDOWN", {"smr_h2_t_per_day": 80.0}))
         ckpt_sched = k_sched.checkpoint()
@@ -484,6 +498,19 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         self.assertEqual(snap["bob_gate"]["disposition"], "RELEASE")
         self.assertGreater(snap["volume_gain_summary"]["hcu_c5_plus_gain_pct"], 4.0)
         self.assertTrue(1000.0 <= snap["volume_gain_summary"]["hcu_h2_uptake_scf_per_bbl"] <= 2500.0)
+        # Verify exact EQ-05 H2 SCF/kg factor matches PPC-REVIEW-002 §3 worked example (86.72 t/day / 30k bbl/d = 1,199.7 SCF/bbl)
+        expected_h2_scf_per_bbl = (
+            float(snap["hcu"]["h2_net_t_per_day"])
+            * 1000.0
+            * (eq.V_M_STD_SCF_LBMOL / eq.M_H2_LB_LBMOL / eq.LB_TO_KG)
+            / float(snap["hcu"]["actual_feed_bbl_per_day"])
+        )
+        self.assertAlmostEqual(snap["volume_gain_summary"]["hcu_h2_uptake_scf_per_bbl"], expected_h2_scf_per_bbl, places=9)
+        self.assertAlmostEqual(
+            86.72 * 1000.0 * (eq.V_M_STD_SCF_LBMOL / eq.M_H2_LB_LBMOL / eq.LB_TO_KG) / 30000.0,
+            1199.7,
+            delta=0.1,
+        )
         # Derated snapshot explicitly accounts for unprocessed VGO routed to TK-201
         derated = evaluate_refinery_plant_snapshot(design_basis, hcu_compressor_circ_fraction=0.75)
         self.assertGreater(derated["unprocessed_vgo_to_tk201_bbl_per_day"], 0.0)

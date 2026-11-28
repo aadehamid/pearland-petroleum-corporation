@@ -118,9 +118,10 @@ class WorldState:
             self.smr_target_h2_t_per_day = self.smr_h2_t_per_day
 
     def digest(self) -> str:
-        """Deterministic SHA-256 state digest covering ALL mutable physics fields (excluding branch_id)."""
+        """Deterministic SHA-256 state digest covering ALL mutable state fields (excluding branch_id)."""
         canonical = {
             "world_version": self.world_version,
+            "root_seed": self.root_seed,
             "current_time_utc": self.current_time_utc.isoformat(),
             "state_revision": self.state_revision,
             "hcu_planned_feed_bbl_per_day": round(self.hcu_planned_feed_bbl_per_day, 9),
@@ -139,6 +140,9 @@ class WorldState:
             "hcu_cumulative_processed_t": round(self.hcu_cumulative_processed_t, 9),
             "tanks": {
                 tid: {
+                    "min_bbl": round(t.min_bbl, 9),
+                    "max_bbl": round(t.max_bbl, 9),
+                    "sg_60_60": round(t.sg_60_60, 9),
                     "mass_kg": round(t.mass_kg, 6),
                     "inflow_kg_s": round(t.inflow_kg_s, 9),
                     "outflow_kg_s": round(t.outflow_kg_s, 9),
@@ -148,6 +152,7 @@ class WorldState:
             },
             "applied_events": dict(sorted(self.applied_events.items())),
             "rejected_events": dict(sorted(self.rejected_events.items())),
+            "history": self.history,
         }
         return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -183,15 +188,30 @@ class RefineryWorldKernel:
         ]
         return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def _checkpoint_digest(
+        state_digest: str, scheduled_digest: str, step_seconds: int, fixture_mode: bool
+    ) -> str:
+        envelope = {
+            "state_digest": state_digest,
+            "scheduled_digest": scheduled_digest,
+            "step_seconds": int(step_seconds),
+            "fixture_mode": bool(fixture_mode),
+        }
+        return hashlib.sha256(json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
     def checkpoint(self) -> dict[str, Any]:
-        """Return an immutable deep-copied checkpoint with SHA-256 state and schedule digests."""
+        """Return an immutable deep-copied checkpoint with SHA-256 state, schedule, and config digests."""
         snap = copy.deepcopy(self.state)
         sched = copy.deepcopy(self._scheduled)
+        s_dig = snap.digest()
+        sch_dig = self._scheduled_digest(sched)
         return {
             "state": snap,
             "scheduled": sched,
-            "state_digest": snap.digest(),
-            "scheduled_digest": self._scheduled_digest(sched),
+            "state_digest": s_dig,
+            "scheduled_digest": sch_dig,
+            "checkpoint_digest": self._checkpoint_digest(s_dig, sch_dig, self.step_seconds, self.fixture_mode),
             "step_seconds": self.step_seconds,
             "fixture_mode": self.fixture_mode,
             "provenance_class": "SYNTHETIC",
@@ -199,7 +219,7 @@ class RefineryWorldKernel:
 
     @classmethod
     def from_checkpoint(cls, ckpt: Mapping[str, Any], branch_id: str | None = None) -> "RefineryWorldKernel":
-        """Restore a kernel from checkpoint after verifying SHA-256 integrity of state and pending events (W2-07)."""
+        """Restore a kernel from checkpoint after verifying SHA-256 integrity of state, schedule, and config (W2-07)."""
         restored_state: WorldState = copy.deepcopy(ckpt["state"])
         actual_digest = restored_state.digest()
         if str(ckpt.get("state_digest", "")) != actual_digest:
@@ -212,12 +232,19 @@ class RefineryWorldKernel:
             raise ValueError(
                 f"Checkpoint schedule integrity violation (W2-07): recorded digest {ckpt.get('scheduled_digest')!r} != actual {actual_sched_digest!r}"
             )
+        step_s = int(ckpt["step_seconds"])
+        fix_mode = bool(ckpt["fixture_mode"])
+        actual_ckpt_digest = cls._checkpoint_digest(actual_digest, actual_sched_digest, step_s, fix_mode)
+        if str(ckpt.get("checkpoint_digest", "")) != actual_ckpt_digest:
+            raise ValueError(
+                f"Checkpoint envelope integrity violation (W2-07): recorded digest {ckpt.get('checkpoint_digest')!r} != actual {actual_ckpt_digest!r}"
+            )
         if branch_id is not None:
             restored_state.branch_id = branch_id
         kernel = cls(
             restored_state,
-            step_seconds=int(ckpt["step_seconds"]),
-            fixture_mode=bool(ckpt["fixture_mode"]),
+            step_seconds=step_s,
+            fixture_mode=fix_mode,
         )
         kernel._scheduled = restored_sched
         return kernel
@@ -535,8 +562,9 @@ def evaluate_refinery_plant_snapshot(
     )
     plant_c5_gain_pct = 100.0 * (plant_c5_plus_bbl / total_crude_bbl - 1.0)
     plant_c3_gain_pct = 100.0 * ((plant_c5_plus_bbl + plant_lpg_bbl) / total_crude_bbl - 1.0)
+    h2_scf_per_kg = eq.V_M_STD_SCF_LBMOL / eq.M_H2_LB_LBMOL / eq.LB_TO_KG
     hcu_h2_scf_per_bbl = (
-        (float(hcu["h2_net_t_per_day"]) * 1000.0 * 423.6) / float(hcu["actual_feed_bbl_per_day"])
+        (float(hcu["h2_net_t_per_day"]) * 1000.0 * h2_scf_per_kg) / float(hcu["actual_feed_bbl_per_day"])
         if float(hcu["actual_feed_bbl_per_day"]) > 0.0
         else 0.0
     )
