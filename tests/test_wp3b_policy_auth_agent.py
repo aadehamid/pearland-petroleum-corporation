@@ -345,9 +345,8 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(p_phys["required_approver_role"], "Refinery Operations Manager")
 
                 # 12. Derived rate_change_pct (10,000 -> 11,500 = 15% > 10% Tier 1 cap) MUST promote to Tier 2;
-                # baseline-free feed_bbl_per_day conservatively bounds rate_change_bbl_per_day by abs(feed)
-                # per ADR-0056 exceeding_any_limit_escalates_tier (45,000 > 4,000 Tier 1 cap -> Tier 2; >50k -> ESCALATE)
-                # without erasing attested metrics!
+                # omitting baseline_feed_bbl_per_day when feed_bbl_per_day is supplied leaves increases AND cuts
+                # unverifiable, triggering ADR-0056's recorded missing_estimate_counts_as_exceeded -> ESCALATE!
                 p_pct = gate.submit_proposal(
                     proposal_id="PROP-DERIVED-PCT",
                     branch_id="baseline",
@@ -361,7 +360,7 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(p_pct["tier"], 2)
                 self.assertEqual(p_pct["required_approver_role"], "Refinery Operations Manager")
 
-                p_nobase = gate.submit_proposal(
+                p_nobase_inc = gate.submit_proposal(
                     proposal_id="PROP-NO-BASELINE-45K",
                     branch_id="baseline",
                     action_type="feed_rate_change_inside_envelope",
@@ -371,12 +370,22 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                     metrics={"margin_effect_usd": 5.0, "rate_change_bbl_per_day": 100.0, "rate_change_pct": 0.5},
                     now_utc=t0 + timedelta(minutes=12),
                 )
-                self.assertEqual(p_nobase["authority_class"], "REQUIRE_APPROVAL")
-                self.assertEqual(p_nobase["tier"], 2)
-                self.assertEqual(p_nobase["required_approver_role"], "Refinery Operations Manager")
+                self.assertEqual(p_nobase_inc["authority_class"], "ESCALATE")
 
-                # Non-feed-rate action with attested high rate_change_pct and baseline-free feed_bbl_per_day
-                # preserves attested 30% > 10% Tier 1 cap -> Tier 2 (never demoted to Tier 1!)
+                # Unverifiable cut (feed_bbl_per_day=3000 without baseline) AND non-feed action with attested 30%
+                # both preserve attested metrics and trigger missing_estimate_counts_as_exceeded -> ESCALATE!
+                p_nobase_cut = gate.submit_proposal(
+                    proposal_id="PROP-NO-BASELINE-CUT-3K",
+                    branch_id="baseline",
+                    action_type="feed_rate_change_inside_envelope",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"feed_bbl_per_day": 3000.0},
+                    metrics={"margin_effect_usd": 5.0, "rate_change_bbl_per_day": 100.0, "rate_change_pct": 0.5},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_nobase_cut["authority_class"], "ESCALATE")
+
                 p_mode_nobase = gate.submit_proposal(
                     proposal_id="PROP-MODE-NO-BASELINE-3K",
                     branch_id="baseline",
@@ -387,9 +396,7 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                     metrics={"margin_effect_usd": 1000.0, "rate_change_pct": 30.0},
                     now_utc=t0 + timedelta(minutes=12),
                 )
-                self.assertEqual(p_mode_nobase["authority_class"], "REQUIRE_APPROVAL")
-                self.assertEqual(p_mode_nobase["tier"], 2)
-                self.assertEqual(p_mode_nobase["required_approver_role"], "Refinery Operations Manager")
+                self.assertEqual(p_mode_nobase["authority_class"], "ESCALATE")
 
                 # 13. Derived notional_usd = volume_bbl_60f * pinned_price_usd_per_bbl (40,000 * $200 = $8M > $5M cap)
                 # MUST escalate AND ESCALATED proposals MUST be terminal (never approvable or executable)!

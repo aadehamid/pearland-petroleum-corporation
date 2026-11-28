@@ -87,36 +87,28 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                 if not math.isfinite(af):
                     raise ValueError(f"Non-finite {container_name} field {aux_field}={aux_val!r}")
 
-    # Derive rate_change_bbl_per_day AND rate_change_pct from feed_bbl_per_day + baseline_feed_bbl_per_day.
-    # When baseline_feed_bbl_per_day is omitted, conservatively bound rate_change_bbl_per_day by abs(feed_bbl_per_day)
-    # (and volume_bbl_60f when > 50,000) while preserving all caller-attested metrics, so ADR-0056's recorded
-    # Tier 1 (>4,000 bbl/d) and Tier 2 (>50,000 bbl/d) limits escalate tiers directly without extra unrecorded rules.
+    # Derive rate_change_bbl_per_day AND rate_change_pct whenever BOTH feed_bbl_per_day and
+    # baseline_feed_bbl_per_day are provided. When feed_bbl_per_day is given without a baseline,
+    # neither increases nor cuts can be bounded from target feed alone, so all caller-attested
+    # metrics are preserved and classify_proposal treats the omitted baseline under ADR-0056's
+    # recorded `missing_estimate_counts_as_exceeded` rule.
     feed_val = payload.get("feed_bbl_per_day") if payload.get("feed_bbl_per_day") is not None else merged.get("feed_bbl_per_day")
     base_val = (
         payload.get("baseline_feed_bbl_per_day")
         if payload.get("baseline_feed_bbl_per_day") is not None
         else merged.get("baseline_feed_bbl_per_day")
     )
-    if feed_val is not None:
+    if feed_val is not None and base_val is not None:
         feed_f = float(feed_val)
-        if base_val is not None:
-            base_f = float(base_val)
-            if base_f <= 0.0:
-                raise ValueError(f"baseline_feed_bbl_per_day must be positive, got {base_val!r}")
-            implied_delta = abs(feed_f - base_f)
-            implied_pct = 100.0 * implied_delta / base_f
-            if merged.get("rate_change_bbl_per_day") is None or implied_delta > abs(float(merged["rate_change_bbl_per_day"])):
-                merged["rate_change_bbl_per_day"] = implied_delta
-            if merged.get("rate_change_pct") is None or implied_pct > abs(float(merged["rate_change_pct"])):
-                merged["rate_change_pct"] = implied_pct
-        else:
-            merged["rate_change_bbl_per_day"] = max(
-                abs(float(merged.get("rate_change_bbl_per_day") or 0.0)), abs(feed_f)
-            )
-            if abs(feed_f) > 50000.0:
-                merged["volume_bbl_60f"] = max(
-                    abs(float(merged.get("volume_bbl_60f") or 0.0)), abs(feed_f)
-                )
+        base_f = float(base_val)
+        if base_f <= 0.0:
+            raise ValueError(f"baseline_feed_bbl_per_day must be positive, got {base_val!r}")
+        implied_delta = abs(feed_f - base_f)
+        implied_pct = 100.0 * implied_delta / base_f
+        if merged.get("rate_change_bbl_per_day") is None or implied_delta > abs(float(merged["rate_change_bbl_per_day"])):
+            merged["rate_change_bbl_per_day"] = implied_delta
+        if merged.get("rate_change_pct") is None or implied_pct > abs(float(merged["rate_change_pct"])):
+            merged["rate_change_pct"] = implied_pct
 
     # Derive notional_usd per schemas/policy_thresholds.yaml formula: volume_bbl_60F * pinned_price_usd_per_bbl
     price_val = (
@@ -277,7 +269,16 @@ class PolicyGateService:
             # Exceeding AUTO_EXECUTE zero-effect limits falls through to higher-tier evaluation/escalation!
 
         required = REQUIRED_ACTION_METRICS.get(action_type, ("margin_effect_usd",))
-        missing_required = any(eff_metrics.get(k) is None for k in required)
+        has_feed_target = (payload or {}).get("feed_bbl_per_day") is not None or metrics.get("feed_bbl_per_day") is not None
+        has_baseline_feed = (
+            (payload or {}).get("baseline_feed_bbl_per_day") is not None
+            or metrics.get("baseline_feed_bbl_per_day") is not None
+        )
+        # Under ADR-0056 global_invariants.missing_estimate_counts_as_exceeded, omitting baseline_feed_bbl_per_day
+        # when feed_bbl_per_day is specified leaves the feed change magnitude (increase or cut) unverifiable.
+        missing_required = any(eff_metrics.get(k) is None for k in required) or (
+            has_feed_target and not has_baseline_feed
+        )
 
         margin_usd = eff_metrics.get("margin_effect_usd")
         vol_bbl = eff_metrics.get("volume_bbl_60f")
