@@ -11,6 +11,7 @@ Consumes `fixtures/golden/refinery_a_ot_tags.yaml` and enforces:
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 from dataclasses import dataclass
@@ -83,14 +84,24 @@ class SparkplugOTPublisher:
                 data = json.loads(self.buffer_path.read_text(encoding="utf-8"))
                 if not isinstance(data, dict):
                     raise TypeError(f"Expected JSON object in OT buffer, got {type(data).__name__}")
-                self.bd_seq = int(data.get("bd_seq", 0))
+                raw_bd = data.get("bd_seq", 0)
+                if isinstance(raw_bd, bool) or not isinstance(raw_bd, int) or raw_bd < 0:
+                    raise ValueError(f"Invalid bd_seq in OT buffer: {raw_bd!r}")
+                self.bd_seq = raw_bd
                 latest = data.get("latest_sample", {})
                 if not isinstance(latest, dict):
                     raise TypeError(f"Expected JSON object for latest_sample, got {type(latest).__name__}")
                 for k, v in latest.items():
-                    if not isinstance(v, (list, tuple)) or len(v) < 4:
+                    if not isinstance(v, (list, tuple)) or len(v) != 4:
                         raise ValueError(f"Malformed sample tuple for {k!r}")
-                    self._latest_sample[str(k)] = (float(v[0]), str(v[1]), str(v[2]), str(v[3]))
+                    val_raw, qual_raw, eff_raw, rec_raw = v
+                    if isinstance(val_raw, bool) or not isinstance(val_raw, (int, float)) or not math.isfinite(float(val_raw)):
+                        raise ValueError(f"Non-numeric or non-finite sample value for {k!r}: {val_raw!r}")
+                    if not isinstance(qual_raw, str) or qual_raw not in ("Good", "Uncertain", "Bad"):
+                        raise ValueError(f"Invalid OPC UA quality code in buffer for {k!r}: {qual_raw!r}")
+                    if not isinstance(eff_raw, str) or not isinstance(rec_raw, str):
+                        raise ValueError(f"Non-string timestamps in buffer for {k!r}")
+                    self._latest_sample[str(k)] = (float(val_raw), qual_raw, eff_raw, rec_raw)
             except (json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError, AttributeError) as exc:
                 # OT-001 §4 / OT-03: surface unrecoverable buffer corruption explicitly instead of crashing startup
                 self.unrecoverable_buffer_loss = True

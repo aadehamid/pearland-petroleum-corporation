@@ -279,12 +279,13 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:15:00Z")), 0)
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:16:00Z")), 1)
 
-            # OT-03 corrupt buffer recovery: truncated AND shape-corrupt JSON surface unrecoverable_buffer_loss cleanly
+            # OT-03 corrupt buffer recovery: truncated, shape-corrupt, AND non-canonical JSON surface unrecoverable_buffer_loss cleanly
             for idx, bad_json in enumerate(
                 (
                     '{"bd_seq": 3, "latest_sample": ',
                     '[1, 2, 3]',
                     '{"bd_seq": 1, "latest_sample": []}',
+                    '{"bd_seq": 5, "latest_sample": {"REFA.HCU.K201.SI_4110.PV": [true, "True", "2026-06-15T08:00:00Z", "x"]}}',
                 )
             ):
                 corrupt_file = Path(tmp) / f"corrupt_ot_buffer_{idx}.json"

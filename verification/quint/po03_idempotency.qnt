@@ -1,6 +1,7 @@
 // PO-03: Idempotency Across Crash Point 1 (before NATS ack) and Crash Point 2 (exclusive pre-pinned Delta batch retry)
 // Governing authorities: ADR-0046, PPC-INT-001 §2, PPC-REVIEW-004 PO-03
-// Non-vacuous properties verified by Apalache (`quint verify --invariant safety_all`):
+// Designed for Apalache bounded model checking (`quint verify --invariant safety_all`);
+// CI Quint execution gate remains planned per PPC-REVIEW-004 (PO-03) and ADR-0050:
 // - disjoint_pins: exclusive per-row batch claims prevent two transactions from pinning the same staging key
 // - no_silent_drop: delta_published is always a subset of sink_committed_keys (Crash Point 2 retry never marks
 //   rows arrived during the crash window as published without committing them to the sink)
