@@ -44,6 +44,21 @@ REQUIRED_ACTION_METRICS: dict[str, tuple[str, ...]] = {
 }
 
 
+# Server-side Tier 2 action_type -> domain mapping (ADR-0056 G3-b; never taken from caller metrics["domain"])
+TIER2_ACTION_DOMAIN: dict[str, str] = {
+    "feed_rate_change_inside_envelope": "physical",
+    "unit_mode_change_inside_envelope": "physical",
+    "cdu_vdu_cut_point_shift": "physical",
+    "in_refinery_tank_transfer": "physical",
+    "larger_feed_rate_change": "physical",
+    "max_distillate_or_max_gasoline_mode_swing": "physical",
+    "reroute_held_lot_to_another_hold": "physical",
+    "inter_terminal_transfer": "commercial",
+    "spot_purchase_or_sale": "commercial",
+    "delivery_reschedule": "commercial",
+}
+
+
 def canonical_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -51,7 +66,7 @@ def canonical_digest(payload: Mapping[str, Any]) -> str:
 
 
 def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -> dict[str, Any]:
-    """Cross-check payload numeric fields against caller-supplied metrics using conservative max magnitudes."""
+    """Cross-check and derive threshold magnitudes from payload + metrics using conservative max magnitudes."""
     merged = dict(metrics)
     for field in (
         "margin_effect_usd",
@@ -77,27 +92,58 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                 merged[field] = float(p_val)
         elif p_val is not None and m_val is None:
             merged[field] = float(p_val)
-    # Reject non-finite auxiliary numeric payload fields too (NaN/Inf smuggling guard)
+
+    # Reject non-finite auxiliary numeric fields in BOTH payload and metrics
     for aux_field in ("feed_bbl_per_day", "baseline_feed_bbl_per_day", "pinned_price_usd_per_bbl"):
-        aux_val = payload.get(aux_field)
-        if aux_val is not None:
-            af = float(aux_val)
-            if not math.isfinite(af):
-                raise ValueError(f"Non-finite payload field {aux_field}={aux_val!r}")
-    # Guard against smuggling a huge feed_bbl_per_day target inside payload while reporting a tiny delta
-    if payload.get("feed_bbl_per_day") is not None and merged.get("rate_change_bbl_per_day") is not None:
-        if payload.get("baseline_feed_bbl_per_day") is not None:
-            implied = abs(float(payload["feed_bbl_per_day"]) - float(payload["baseline_feed_bbl_per_day"]))
-            if implied > abs(float(merged["rate_change_bbl_per_day"])):
-                merged["rate_change_bbl_per_day"] = implied
-        elif float(payload["feed_bbl_per_day"]) > 50000.0:
+        for container_name, container in (("payload", payload), ("metrics", merged)):
+            aux_val = container.get(aux_field)
+            if aux_val is not None:
+                af = float(aux_val)
+                if not math.isfinite(af):
+                    raise ValueError(f"Non-finite {container_name} field {aux_field}={aux_val!r}")
+
+    # Derive rate_change_bbl_per_day AND rate_change_pct from feed_bbl_per_day + baseline_feed_bbl_per_day
+    feed_val = payload.get("feed_bbl_per_day") if payload.get("feed_bbl_per_day") is not None else merged.get("feed_bbl_per_day")
+    base_val = (
+        payload.get("baseline_feed_bbl_per_day")
+        if payload.get("baseline_feed_bbl_per_day") is not None
+        else merged.get("baseline_feed_bbl_per_day")
+    )
+    if feed_val is not None:
+        feed_f = float(feed_val)
+        if base_val is not None:
+            base_f = float(base_val)
+            if base_f <= 0.0:
+                raise ValueError(f"baseline_feed_bbl_per_day must be positive, got {base_val!r}")
+            implied_delta = abs(feed_f - base_f)
+            implied_pct = 100.0 * implied_delta / base_f
+            if merged.get("rate_change_bbl_per_day") is None or implied_delta > abs(float(merged["rate_change_bbl_per_day"])):
+                merged["rate_change_bbl_per_day"] = implied_delta
+            if merged.get("rate_change_pct") is None or implied_pct > abs(float(merged["rate_change_pct"])):
+                merged["rate_change_pct"] = implied_pct
+        elif abs(feed_f) > 50000.0:
             # Exceeds Tier 2 absolute volume envelope without baseline proof -> force conservative magnitude
             merged["rate_change_bbl_per_day"] = max(
-                abs(float(merged["rate_change_bbl_per_day"])), float(payload["feed_bbl_per_day"])
+                abs(float(merged.get("rate_change_bbl_per_day") or 0.0)), abs(feed_f)
             )
             merged["volume_bbl_60f"] = max(
-                abs(float(merged.get("volume_bbl_60f") or 0.0)), float(payload["feed_bbl_per_day"])
+                abs(float(merged.get("volume_bbl_60f") or 0.0)), abs(feed_f)
             )
+
+    # Derive notional_usd per schemas/policy_thresholds.yaml formula: volume_bbl_60F * pinned_price_usd_per_bbl
+    price_val = (
+        payload.get("pinned_price_usd_per_bbl")
+        if payload.get("pinned_price_usd_per_bbl") is not None
+        else merged.get("pinned_price_usd_per_bbl")
+    )
+    vol_val = merged.get("volume_bbl_60f")
+    if vol_val is not None and price_val is not None:
+        implied_notional = abs(float(vol_val)) * abs(float(price_val))
+        if not math.isfinite(implied_notional):
+            raise ValueError("Derived notional_usd overflowed to non-finite value")
+        if merged.get("notional_usd") is None or implied_notional > abs(float(merged["notional_usd"])):
+            merged["notional_usd"] = implied_notional
+
     return merged
 
 
@@ -278,9 +324,9 @@ class PolicyGateService:
                 and (cut_shift_c is None or abs(float(cut_shift_c)) <= lim["max_cut_point_shift_c"])
                 and (resched_h is None or abs(float(resched_h)) <= lim["max_delivery_reschedule_hours"])
             )
-            if within_t2:
-                domain = str(eff_metrics.get("domain", "physical"))
-                role = t2["approver_roles"].get(domain, t2["approver_roles"]["physical"])
+            if within_t2 and action_type in TIER2_ACTION_DOMAIN:
+                domain = TIER2_ACTION_DOMAIN[action_type]
+                role = t2["approver_roles"][domain]
                 return {
                     "authority_class": "REQUIRE_APPROVAL",
                     "policy_result": "PENDING_APPROVAL",
@@ -424,6 +470,8 @@ class PolicyGateService:
             return {"status": "DENIED", "reason": "UNKNOWN_PROPOSAL"}
         if row["authority_class"] == "PROHIBITED":
             return {"status": "DENIED", "reason": "PROHIBITED_ACTION_CANNOT_BE_APPROVED"}
+        if row["authority_class"] == "ESCALATE" or row["policy_result"] == "ESCALATED":
+            return {"status": "DENIED", "reason": "ESCALATED_PROPOSAL_IS_TERMINAL_REQUIRES_NEW_DECISION_ID"}
         if approver_is_agent:
             return {"status": "DENIED", "reason": "AGENT_CANNOT_APPROVE"}
         if approver_id == row["proposer_id"]:
@@ -514,6 +562,9 @@ class PolicyGateService:
             if prop["authority_class"] == "PROHIBITED":
                 cur.execute("ROLLBACK")
                 return {"status": "DENIED", "reason": "PROHIBITED_ACTION_DENIED"}
+            if prop["authority_class"] == "ESCALATE" or prop["policy_result"] == "ESCALATED":
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "ESCALATED_PROPOSAL_IS_TERMINAL_REQUIRES_NEW_DECISION_ID"}
             if prop["branch_id"] != branch_id:
                 cur.execute("ROLLBACK")
                 return {"status": "DENIED", "reason": "CROSS_BRANCH_EXECUTION_FORBIDDEN"}

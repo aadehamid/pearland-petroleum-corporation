@@ -223,10 +223,12 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 self.assertEqual(ex_double["status"], "DENIED")
                 self.assertEqual(ex_double["reason"], "PROPOSAL_ALREADY_EXECUTED")
 
-                # 9. AUTO_EXECUTE zero-effect limit enforcement across ALL 7 effect magnitudes + NaN rejection!
+                # 9. AUTO_EXECUTE zero-effect limit enforcement across ALL 7 effect magnitudes + NaN/Inf rejection!
                 for idx, bad_eff in enumerate(
                     (
                         {"volume_bbl_60f": 60000.0, "margin_effect_usd": 999999.0},
+                        {"notional_usd": 5000.0},
+                        {"rate_change_bbl_per_day": 500.0},
                         {"cut_point_shift_c": 42.0},
                         {"delivery_reschedule_hours": 500.0},
                         {"rate_change_pct": 90.0},
@@ -314,6 +316,91 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 )
                 self.assertEqual(p26["authority_class"], "REQUIRE_APPROVAL")
                 self.assertTrue(p26.get("rate_limit_escalated"))
+
+                # 11. Server-side Tier 2 approver role ignores caller metrics["domain"] (ADR-0056 / AGENT-001)
+                p_term = gate.submit_proposal(
+                    proposal_id="PROP-TERM-5K",
+                    branch_id="baseline",
+                    action_type="inter_terminal_transfer",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"volume_bbl_60f": 5000.0},
+                    metrics={"margin_effect_usd": 50000.0, "volume_bbl_60f": 5000.0, "domain": "physical"},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_term["tier"], 2)
+                self.assertEqual(p_term["required_approver_role"], "Commercial Manager")
+
+                p_phys = gate.submit_proposal(
+                    proposal_id="PROP-PHYS-BIG",
+                    branch_id="baseline",
+                    action_type="larger_feed_rate_change",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"volume_bbl_60f": 10000.0},
+                    metrics={"margin_effect_usd": 300000.0, "volume_bbl_60f": 10000.0, "domain": "commercial"},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_phys["tier"], 2)
+                self.assertEqual(p_phys["required_approver_role"], "Refinery Operations Manager")
+
+                # 12. Derived rate_change_pct (10,000 -> 11,500 = 15% > 10% Tier 1 cap) MUST promote to Tier 2
+                p_pct = gate.submit_proposal(
+                    proposal_id="PROP-DERIVED-PCT",
+                    branch_id="baseline",
+                    action_type="feed_rate_change_inside_envelope",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"baseline_feed_bbl_per_day": 10000.0, "feed_bbl_per_day": 11500.0},
+                    metrics={"margin_effect_usd": 100000.0, "rate_change_bbl_per_day": 1500.0, "rate_change_pct": 5.0},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_pct["tier"], 2)
+                self.assertEqual(p_pct["required_approver_role"], "Refinery Operations Manager")
+
+                # 13. Derived notional_usd = volume_bbl_60f * pinned_price_usd_per_bbl (40,000 * $200 = $8M > $5M cap)
+                # MUST escalate AND ESCALATED proposals MUST be terminal (never approvable or executable)!
+                p_notional = gate.submit_proposal(
+                    proposal_id="PROP-DERIVED-NOTIONAL",
+                    branch_id="baseline",
+                    action_type="spot_purchase_or_sale",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"volume_bbl_60f": 40000.0, "pinned_price_usd_per_bbl": 200.0},
+                    metrics={"margin_effect_usd": 200000.0, "volume_bbl_60f": 40000.0, "notional_usd": 1000.0},
+                    now_utc=t0 + timedelta(minutes=12),
+                    decision_id="DEC-OLD",
+                    expected_source_revision="rev-42",
+                )
+                self.assertEqual(p_notional["authority_class"], "ESCALATE")
+                self.assertEqual(p_notional["policy_result"], "ESCALATED")
+                self.assertTrue(p_notional["requires_new_decision_id"])
+
+                vp_tok = auth.issue_token("vp_supply_ops", "strong-test-pass")
+                self.assertIsNotNone(vp_tok)
+                auth_esc = gate.authorize_proposal_with_session(
+                    auth_store=auth,
+                    token=vp_tok,
+                    auth_id="AUTH-ESC-DENY",
+                    proposal_id="PROP-DERIVED-NOTIONAL",
+                    branch_id="baseline",
+                    payload_digest=p_notional["payload_digest"],
+                    now_utc=t0 + timedelta(minutes=13),
+                )
+                self.assertEqual(auth_esc["status"], "DENIED")
+                self.assertEqual(auth_esc["reason"], "ESCALATED_PROPOSAL_IS_TERMINAL_REQUIRES_NEW_DECISION_ID")
+
+                exec_esc = gate.execute_authorized_action(
+                    idempotency_key="IDEM-ESC-DENY",
+                    proposal_id="PROP-DERIVED-NOTIONAL",
+                    auth_id="AUTH-ESC-DENY",
+                    branch_id="baseline",
+                    payload={"volume_bbl_60f": 40000.0, "pinned_price_usd_per_bbl": 200.0},
+                    now_utc=t0 + timedelta(minutes=13),
+                    current_source_revision="rev-42",
+                )
+                self.assertEqual(exec_esc["status"], "DENIED")
+                self.assertEqual(exec_esc["reason"], "ESCALATED_PROPOSAL_IS_TERMINAL_REQUIRES_NEW_DECISION_ID")
             finally:
                 gate.close()
                 auth.close()
