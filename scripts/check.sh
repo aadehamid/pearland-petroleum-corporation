@@ -86,6 +86,15 @@ echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO
 uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
 
 echo
+echo "== WP-5B Relate WASM server-filtered graph package =="
+python3 -m unittest tests/test_wp5b_relate_wasm.py
+
+echo
+echo "== WP-3A reduced Pyomo+HiGHS Planning LP, UC-3 backcasting (PO-12b), and closed-loop WP-1 checks =="
+uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
+  python3 -m unittest tests/test_wp3a_planning_lp.py
+
+echo
 echo "== WP-6 Scenario B vertical slice (S2-* crude-quality rejection & delayed restatement) =="
 uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml \
   python3 -m unittest tests/test_wp6_scenario_b.py
