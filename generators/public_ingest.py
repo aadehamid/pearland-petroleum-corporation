@@ -150,6 +150,7 @@ class IngestedObject:
     unit: str | None
     date_min: str | None
     date_max: str | None
+    uploaded: bool
     provenance_class: str = "OBSERVED"
 
 
@@ -232,7 +233,34 @@ def fetch_eia_series(
             break
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
+    if not rows:
+        raise ValueError(
+            f"EIA series {entry['series_id']} returned 0 rows for window {start_date}..{end_date}"
+        )
     return rows
+
+
+def fetch_epa_ghgrp_state(
+    state: str,
+    http_get: Callable[[str], bytes],
+    page_size: int = 500,
+    max_pages: int = 100,
+) -> list[dict[str, Any]]:
+    """Fetch all paginated EPA Envirofacts GHGRP NAICS 324110 records for one state."""
+    records: list[dict[str, Any]] = []
+    start = 0
+    for _ in range(max_pages):
+        end = start + page_size - 1  # Envirofacts ROWS/start:end is inclusive
+        epa_url = f"{EPA_GHGRP_BASE_URL}/PUB_DIM_FACILITY/NAICS_CODE/324110/STATE/{state}/ROWS/{start}:{end}/JSON"
+        epa_raw = http_get(epa_url)
+        parsed = json.loads(epa_raw.decode("utf-8"))
+        if not isinstance(parsed, list):
+            raise ValueError(f"Unexpected EPA Envirofacts response structure for state {state}")
+        records.extend(parsed)
+        if len(parsed) < page_size:
+            return records
+        start += len(parsed)
+    raise RuntimeError(f"EPA Envirofacts pagination exceeded {max_pages} pages for state {state}")
 
 
 def parse_hurdat2_storms(raw_text: str, min_year: int = 2010) -> list[dict[str, Any]]:
@@ -285,28 +313,41 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
     """Parse a PHMSA Form 7000-1 hazardous liquid incident ZIP archive into normalized rows."""
     rows: list[dict[str, Any]] = []
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        csv_names = [n for n in zf.namelist() if n.lower().endswith((".csv", ".txt"))]
+        csv_names = sorted(n for n in zf.namelist() if n.lower().endswith((".csv", ".txt")))
         if not csv_names:
             raise ValueError("PHMSA ZIP archive contains no CSV/TXT data file")
-        with zf.open(csv_names[0]) as fh:
-            text = io.TextIOWrapper(fh, encoding="utf-8-sig", errors="replace")
-            sample = text.read(4096)
-            text.seek(0)
-            delimiter = "\t" if "\t" in sample.splitlines()[0] else ","
-            reader = csv.DictReader(text, delimiter=delimiter)
-            for row in reader:
-                if not row.get("REPORT_NUMBER"):
+        matched_member: str | None = None
+        for member in csv_names:
+            with zf.open(member) as fh:
+                text = io.TextIOWrapper(fh, encoding="utf-8-sig", errors="replace")
+                first_line = text.readline()
+                if not first_line:
                     continue
-                rows.append(
-                    {
-                        "report_number": row.get("REPORT_NUMBER", "").strip(),
-                        "year": row.get("I_YEAR", "").strip(),
-                        "state": row.get("ACCIDENT_STATE_ABBREVIATION", "").strip(),
-                        "commodity": row.get("COMMODITY_RELEASED_TYPE", "").strip(),
-                        "cause": row.get("CAUSE", "").strip(),
-                        "provenance_class": "OBSERVED",
-                    }
-                )
+                delimiter = "\t" if "\t" in first_line else ","
+                headers = {h.strip().strip('"') for h in first_line.split(delimiter)}
+                if "REPORT_NUMBER" not in headers:
+                    continue
+                matched_member = member
+                text.seek(0)
+                reader = csv.DictReader(text, delimiter=delimiter)
+                for row in reader:
+                    if not row.get("REPORT_NUMBER"):
+                        continue
+                    rows.append(
+                        {
+                            "report_number": row.get("REPORT_NUMBER", "").strip(),
+                            "year": row.get("I_YEAR", "").strip(),
+                            "state": row.get("ACCIDENT_STATE_ABBREVIATION", "").strip(),
+                            "commodity": row.get("COMMODITY_RELEASED_TYPE", "").strip(),
+                            "cause": row.get("CAUSE", "").strip(),
+                            "provenance_class": "OBSERVED",
+                        }
+                    )
+                break
+        if matched_member is None:
+            raise ValueError("PHMSA ZIP archive contains no CSV/TXT member with REPORT_NUMBER header")
+    if not rows:
+        raise ValueError("PHMSA ZIP archive parsed 0 valid incident rows")
     return rows
 
 
@@ -347,9 +388,19 @@ def run_public_ingest(
     """Run deterministic public ingestion and return a secret-free OBSERVED vintage manifest."""
     ingested: list[IngestedObject] = []
 
-    def emit(source: str, name: str, rel_key: str, payload: bytes, content_type: str,
-             row_count: int, unit: str | None = None, date_min: str | None = None, date_max: str | None = None):
+    def emit(
+        source: str,
+        name: str,
+        rel_key: str,
+        payload: bytes,
+        content_type: str,
+        row_count: int,
+        unit: str | None = None,
+        date_min: str | None = None,
+        date_max: str | None = None,
+    ):
         r2_key = f"raw/external/{source}/vintage={vintage}/{rel_key}"
+        uploaded = upload_fn is not None
         if upload_fn is not None:
             upload_fn(r2_key, payload, content_type)
         ingested.append(
@@ -363,6 +414,7 @@ def run_public_ingest(
                 unit=unit,
                 date_min=date_min,
                 date_max=date_max,
+                uploaded=uploaded,
             )
         )
 
@@ -407,35 +459,42 @@ def run_public_ingest(
             "max_value": max(numeric_vals) if numeric_vals else None,
         }
 
-    # 2. NOAA NHC HURDAT2 Atlantic best-track archive
+    # 2. NOAA NHC HURDAT2 Atlantic best-track archive (full 1851-present payload)
     hurdat_raw = http_get(NOAA_HURDAT2_URL)
-    storms = parse_hurdat2_storms(hurdat_raw.decode("utf-8", errors="replace"), min_year=2010)
+    all_storms = parse_hurdat2_storms(hurdat_raw.decode("utf-8", errors="replace"), min_year=0)
+    if not all_storms:
+        raise ValueError("NOAA HURDAT2 archive parsed 0 storm records")
+    storms_since_2010 = [s for s in all_storms if s["year"] >= 2010]
     emit(
         source="noaa",
         name="hurdat2_atlantic_best_track",
         rel_key="hurdat2_atlantic.txt",
         payload=hurdat_raw,
         content_type="text/plain",
-        row_count=len(storms),
-        unit="kt/mb",
-        date_min=str(min(s["year"] for s in storms)) if storms else None,
-        date_max=str(max(s["year"] for s in storms)) if storms else None,
+        row_count=len(all_storms),
+        unit="storm_records",
+        date_min=str(min(s["year"] for s in all_storms)),
+        date_max=str(max(s["year"] for s in all_storms)),
     )
 
-    # 3. EPA Envirofacts GHGRP Subpart Y PADD 3 refinery facilities (NAICS 324110, TX & LA)
+    # 3. EPA Envirofacts GHGRP Subpart Y PADD 3 refinery facilities (NAICS 324110, TX & LA; full pagination)
     epa_records: list[dict[str, Any]] = []
     for state in ("TX", "LA"):
-        epa_url = f"{EPA_GHGRP_BASE_URL}/PUB_DIM_FACILITY/NAICS_CODE/324110/STATE/{state}/ROWS/0:200/JSON"
-        epa_raw = http_get(epa_url)
-        parsed = json.loads(epa_raw.decode("utf-8"))
-        if isinstance(parsed, list):
-            epa_records.extend(parsed)
+        epa_records.extend(fetch_epa_ghgrp_state(state, http_get=http_get))
+    if not epa_records:
+        raise ValueError("EPA Envirofacts GHGRP query returned 0 records for TX/LA NAICS 324110")
     epa_payload = json.dumps(
         {"provenance_class": "OBSERVED", "source": "EPA_ENVIROFACTS_GHGRP", "naics": "324110", "records": epa_records},
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
-    unique_facilities = {r.get("facility_id") for r in epa_records if r.get("facility_id") is not None}
+    unique_facilities = {
+        (r.get("facility_id") if r.get("facility_id") is not None else r.get("FACILITY_ID"))
+        for r in epa_records
+        if (r.get("facility_id") is not None or r.get("FACILITY_ID") is not None)
+    }
+    if not unique_facilities:
+        raise ValueError("EPA Envirofacts GHGRP records contained no facility_id / FACILITY_ID keys")
     emit(
         source="epa",
         name="ghgrp_naics_324110_tx_la",
@@ -465,17 +524,22 @@ def run_public_ingest(
         "schema_version": "1.0.0",
         "manifest_kind": "PPC-WP1-PUBLIC-DATA-VINTAGE",
         "provenance_class": "OBSERVED",
+        "upload_status": "UPLOADED_TO_R2" if upload_fn is not None else "LOCAL_DRY_RUN_NOT_UPLOADED",
         "vintage": vintage,
         "window": {"start_date": start_date, "end_date": end_date},
         "captured_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "governing_adrs": ["ADR-0051", "ADR-0057"],
-        "r2_bucket": "pearland-petroleum-corp",
+        "r2_bucket": "pearland-petroleum-corp" if upload_fn is not None else None,
+        "target_r2_bucket": "pearland-petroleum-corp",
         "sources": {
             "eia": {"series_count": len(EIA_SERIES_CATALOG), "series": eia_summary},
             "noaa": {
                 "archive_url": NOAA_HURDAT2_URL,
-                "storms_since_2010": len(storms),
-                "hurricanes_since_2010": sum(1 for s in storms if s["reached_hurricane"]),
+                "total_storms_in_archive": len(all_storms),
+                "archive_year_min": min(s["year"] for s in all_storms),
+                "archive_year_max": max(s["year"] for s in all_storms),
+                "storms_since_2010": len(storms_since_2010),
+                "hurricanes_since_2010": sum(1 for s in storms_since_2010 if s["reached_hurricane"]),
             },
             "epa": {
                 "table": "PUB_DIM_FACILITY",
@@ -483,6 +547,7 @@ def run_public_ingest(
                 "states": ["TX", "LA"],
                 "row_count": len(epa_records),
                 "unique_facilities": len(unique_facilities),
+                "rfs_rin_status": "DEFERRED_RFS_RIN_CONTEXT",
             },
             "phmsa": {"status": phmsa_status, "archive_url": PHMSA_ARCHIVE_URL},
         },
@@ -497,6 +562,7 @@ def run_public_ingest(
                 "unit": o.unit,
                 "date_min": o.date_min,
                 "date_max": o.date_max,
+                "uploaded": o.uploaded,
                 "provenance_class": o.provenance_class,
             }
             for o in ingested

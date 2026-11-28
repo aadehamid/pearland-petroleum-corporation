@@ -2,17 +2,19 @@
   "schema_version": "1.0.0",
   "manifest_kind": "PPC-WP1-PUBLIC-DATA-VINTAGE",
   "provenance_class": "OBSERVED",
+  "upload_status": "UPLOADED_TO_R2",
   "vintage": "2026-11-28",
   "window": {
     "start_date": "2024-01-01",
     "end_date": "2025-12-31"
   },
-  "captured_at_utc": "2026-11-28T06:36:41Z",
+  "captured_at_utc": "2026-11-28T07:05:13Z",
   "governing_adrs": [
     "ADR-0051",
     "ADR-0057"
   ],
   "r2_bucket": "pearland-petroleum-corp",
+  "target_r2_bucket": "pearland-petroleum-corp",
   "sources": {
     "eia": {
       "series_count": 14,
@@ -161,6 +163,9 @@
     },
     "noaa": {
       "archive_url": "https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt",
+      "total_storms_in_archive": 1988,
+      "archive_year_min": 1851,
+      "archive_year_max": 2025,
       "storms_since_2010": 286,
       "hurricanes_since_2010": 125
     },
@@ -171,8 +176,9 @@
         "TX",
         "LA"
       ],
-      "row_count": 402,
-      "unique_facilities": 30
+      "row_count": 760,
+      "unique_facilities": 59,
+      "rfs_rin_status": "DEFERRED_RFS_RIN_CONTEXT"
     },
     "phmsa": {
       "status": "DEFERRED_MANUAL_ARCHIVE",
@@ -190,6 +196,7 @@
       "unit": "MBBL/D",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -202,6 +209,7 @@
       "unit": "MBBL/D",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -214,6 +222,7 @@
       "unit": "MBBL",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -226,6 +235,7 @@
       "unit": "MBBL",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -238,6 +248,7 @@
       "unit": "MBBL",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -250,6 +261,7 @@
       "unit": "MBBL",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -262,6 +274,7 @@
       "unit": "MBBL",
       "date_min": "2024-01-05",
       "date_max": "2025-12-26",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -274,6 +287,7 @@
       "unit": "$/BBL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -286,6 +300,7 @@
       "unit": "$/BBL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -298,6 +313,7 @@
       "unit": "$/GAL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -310,6 +326,7 @@
       "unit": "$/GAL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -322,6 +339,7 @@
       "unit": "$/GAL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -334,6 +352,7 @@
       "unit": "$/GAL",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -346,6 +365,7 @@
       "unit": "$/MMBTU",
       "date_min": "2024-01-02",
       "date_max": "2025-12-31",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
@@ -354,24 +374,26 @@
       "r2_key": "raw/external/noaa/vintage=2026-11-28/hurdat2_atlantic.txt",
       "sha256": "75202780ce56c8458f16fbef5fb8a026b99b00878dbb95c458211b3e6ef125b4",
       "size_bytes": 7071568,
-      "row_count": 286,
-      "unit": "kt/mb",
-      "date_min": "2010",
+      "row_count": 1988,
+      "unit": "storm_records",
+      "date_min": "1851",
       "date_max": "2025",
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     },
     {
       "source": "epa",
       "name": "ghgrp_naics_324110_tx_la",
       "r2_key": "raw/external/epa/vintage=2026-11-28/ghgrp_naics_324110_tx_la.json",
-      "sha256": "e975ad5f943b6e1af133ef34f53b979460560d966afbb013fc5903d033798692",
-      "size_bytes": 382934,
-      "row_count": 402,
+      "sha256": "c5f41148d59649bcb1fc80ba7dd3d789aaaac49c44a3861532ad681432c7ebad",
+      "size_bytes": 722306,
+      "row_count": 760,
       "unit": "facility_year_rows",
       "date_min": null,
       "date_max": null,
+      "uploaded": true,
       "provenance_class": "OBSERVED"
     }
   ],
-  "manifest_sha256": "232df6100b4fb45c935de0591a0df0bda3b00eb6e5f483d21166696f86d5e78f"
+  "manifest_sha256": "6d68d9bf1fadef787147f74a691f0c8ce3cb04bef568685da5ce348c26280da4"
 }
