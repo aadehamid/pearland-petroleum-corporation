@@ -47,7 +47,7 @@ customer {
 
 The enterprise Customer can map to `crm.twenty.account`,
 `erp.erpnext.customer`, `commercial.postgres.counterparty`,
-`logistics.mysql.ship_to`, and `analytics.ducklake.silver_customer`.
+`logistics.mysql.ship_to`, and `analytics.delta.silver_customer`.
 
 ## Repository
 
@@ -57,7 +57,7 @@ architecture/models/*.aml
 physical/postgres/
 physical/mysql/
 physical/sqlite/
-physical/ducklake/
+physical/delta/
 physical/databricks/
 ontology/
 metadata/openmetadata/
