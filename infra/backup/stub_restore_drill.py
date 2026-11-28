@@ -25,8 +25,8 @@ def _canonical_db_digest(db_path: Path) -> tuple[str, list[dict[str, Any]]]:
     con = sqlite3.connect(str(db_path))
     try:
         rows = con.execute(
-            "SELECT source_system, branch_id, source_sequence, delivery_key, payload_digest "
-            "FROM outbox_entries ORDER BY source_sequence"
+            "SELECT source_system, branch_id, partition_key, source_sequence, delivery_key, payload_digest "
+            "FROM outbox_entries ORDER BY source_system, branch_id, partition_key, source_sequence"
         ).fetchall()
     finally:
         con.close()
@@ -34,9 +34,10 @@ def _canonical_db_digest(db_path: Path) -> tuple[str, list[dict[str, Any]]]:
         {
             "source_system": r[0],
             "branch_id": r[1],
-            "source_sequence": int(r[2]),
-            "delivery_key": r[3],
-            "payload_digest": r[4],
+            "partition_key": r[2],
+            "source_sequence": int(r[3]),
+            "delivery_key": r[4],
+            "payload_digest": r[5],
         }
         for r in rows
     ]
@@ -59,24 +60,27 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
             CREATE TABLE outbox_entries (
                 source_system TEXT NOT NULL,
                 branch_id TEXT NOT NULL,
-                source_sequence INTEGER NOT NULL PRIMARY KEY,
+                partition_key TEXT NOT NULL,
+                source_sequence INTEGER NOT NULL,
                 delivery_key TEXT NOT NULL,
-                payload_digest TEXT NOT NULL
+                payload_digest TEXT NOT NULL,
+                PRIMARY KEY (source_system, branch_id, partition_key, source_sequence)
             )
             """
         )
         inbox_rows: list[dict[str, Any]] = []
         for seq in range(1, row_count + 1):
             pdig = hashlib.sha256(f"stub-payload-{seq}".encode("utf-8")).hexdigest()
-            dkey = f"refinery_lims:stub:{seq}"
+            dkey = f"refinery_lims:stub:default:{seq}"
             con.execute(
-                "INSERT INTO outbox_entries VALUES (?, ?, ?, ?, ?)",
-                ("refinery_lims", "baseline", seq, dkey, pdig),
+                "INSERT INTO outbox_entries VALUES (?, ?, ?, ?, ?, ?)",
+                ("refinery_lims", "baseline", "default", seq, dkey, pdig),
             )
             inbox_rows.append(
                 {
                     "source_system": "refinery_lims",
                     "branch_id": "baseline",
+                    "partition_key": "default",
                     "source_sequence": seq,
                     "delivery_key": dkey,
                     "payload_digest": pdig,

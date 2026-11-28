@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""WP-4A Cloudflare R2 free-tier Class A write-operation budget check (C9, ADR-0055).
+"""WP-4A Cloudflare R2 free-tier Class A write-operation static budget model (C9, ADR-0055).
 
-Verifies that Slice 1 periodic R2 write streams stay comfortably inside the
-Cloudflare R2 free-tier monthly Class A operation allowance (1,000,000/month,
-per Cloudflare R2 pricing docs).
+Models 31-day Slice 1 periodic R2 Class A write operations against the Cloudflare
+R2 free-tier monthly allowance (1,000,000/month, per Cloudflare R2 pricing docs).
+Cadences are quoted from PPC-REVIEW-003 §2 and ADR-0055 (snapshot 2026-11-28) and
+must be re-derived whenever deployment backup/publish cadences change.
 
 Provenance note:
 - 60-second SQLite/Postgres/MySQL backup syncs and hourly OTel Collector flushes

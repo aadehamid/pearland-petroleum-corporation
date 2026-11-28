@@ -53,9 +53,20 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_TAIL" for g in tail_loss["gaps"]))
 
         # 3. R2 raw log proves higher sequence than restored outbox -> RECOVERY_GAP_MISSING_OUTBOX_VS_R2
-        r2_tail = check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline"): 4})
+        r2_tail = check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 4})
         self.assertEqual(r2_tail["status"], "RECOVERY_GAP")
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_VS_R2" for g in r2_tail["gaps"]))
+        with self.assertRaises(ValueError):
+            check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline"): 4})  # type: ignore[dict-item]
+
+        # 4. Cross-sequence delivery_key reuse with different digest MUST fail as conflict (PPC-INT-001 §2)
+        reused_key_outbox = [
+            {"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "d1"},
+            {"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 2, "delivery_key": "k1", "payload_digest": "d2"},
+        ]
+        reused_res = check_recovery_gaps(reused_key_outbox, [dict(r) for r in reused_key_outbox])
+        self.assertEqual(reused_res["status"], "RECOVERY_GAP")
+        self.assertTrue(any(c["kind"] == "PAYLOAD_DIGEST_CONFLICT" for c in reused_res["conflicts"]))
 
         # 4. Sequence hole (1 -> 3) -> RECOVERY_GAP_SEQUENCE_HOLE
         hole_outbox = [outbox[0], {**outbox[1], "source_sequence": 3, "delivery_key": "k3"}]

@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """Post-restore outbox-sequence vs InboxReceipt RECOVERY_GAP checker (WP-4A/WP-4B, PO-03).
 
-Compares committed source outbox sequences against applied InboxReceipt records
-(and optional R2 raw-event high-water marks) scoped strictly per
-`(source_system, branch_id, partition_key)` in accordance with PPC-INT-001 §2
-("Source sequence is ordered only within its declared partition").
+Compares committed source outbox sequences and delivery keys against applied
+InboxReceipt records (and optional R2 raw-event high-water marks) scoped strictly
+per `(source_system, branch_id, partition_key)` in accordance with PPC-INT-001 §2
+("Source sequence is ordered only within its declared partition"; "Same key with
+different digest is a conflict").
 
 Exposes:
 - Unapplied outbox rows (`RECOVERY_GAP_UNAPPLIED_OUTBOX`)
 - Missing outbox rows proven committed by InboxReceipt or R2 raw log (`RECOVERY_GAP_MISSING_OUTBOX_TAIL`, `RECOVERY_GAP_MISSING_OUTBOX_VS_R2`)
 - Interior per-partition sequence holes (`RECOVERY_GAP_SEQUENCE_HOLE`)
 - Duplicate per-partition sequence rows (`duplicate_outbox`, `duplicate_inbox`)
-- Payload digest or delivery-key conflicts (`PAYLOAD_DIGEST_CONFLICT`, `DELIVERY_KEY_MISMATCH`)
+- Cross-sequence delivery-key reuse or digest conflicts (`DELIVERY_KEY_REUSED_ACROSS_SEQUENCES`, `PAYLOAD_DIGEST_CONFLICT`, `DELIVERY_KEY_MISMATCH`)
 """
 from __future__ import annotations
 
@@ -27,30 +28,35 @@ def _stream_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
 
 
 def _normalize_r2_hw(
-    r2_raw_high_water: Mapping[tuple[str, ...], int] | None,
+    r2_raw_high_water: Mapping[tuple[str, str, str], int] | None,
 ) -> dict[tuple[str, str, str], int]:
     out: dict[tuple[str, str, str], int] = {}
     if not r2_raw_high_water:
         return out
     for k, v in r2_raw_high_water.items():
-        if len(k) == 2:
-            out[(str(k[0]), str(k[1]), "default")] = int(v)
-        elif len(k) == 3:
-            out[(str(k[0]), str(k[1]), str(k[2]))] = int(v)
-        else:
-            raise ValueError(f"Expected 2-tuple or 3-tuple R2 stream key, got {k!r}")
+        if len(k) != 3:
+            raise ValueError(
+                f"r2_raw_high_water keys must be 3-tuples (source_system, branch_id, partition_key), got {k!r}"
+            )
+        out[(str(k[0]), str(k[1]), str(k[2]))] = int(v)
     return out
 
 
 def check_recovery_gaps(
     outbox_rows: Sequence[Mapping[str, Any]],
     inbox_rows: Sequence[Mapping[str, Any]],
-    r2_raw_high_water: Mapping[tuple[str, ...], int] | None = None,
+    r2_raw_high_water: Mapping[tuple[str, str, str], int] | None = None,
 ) -> dict[str, Any]:
     """Compare source outbox entries against applied InboxReceipts per (source_system, branch_id, partition_key)."""
     inbox_by_key: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     duplicate_inbox: list[dict[str, Any]] = []
     inbox_seqs_by_stream: dict[tuple[str, str, str], list[int]] = {}
+    conflicts: list[dict[str, Any]] = []
+
+    # Track delivery_key -> (digest, first_seq_key) across ALL rows to catch cross-sequence key reuse/conflicts
+    delivery_key_seen_outbox: dict[str, tuple[str, tuple[str, str, str, int]]] = {}
+    delivery_key_seen_inbox: dict[str, tuple[str, tuple[str, str, str, int]]] = {}
+
     for row in inbox_rows:
         src, branch, part = _stream_key(row)
         seq = int(row["source_sequence"])
@@ -61,8 +67,26 @@ def check_recovery_gaps(
         else:
             inbox_by_key[key] = dict(row)
 
+        dkey = str(row.get("delivery_key") or "")
+        dig = str(row.get("payload_digest") or "")
+        if dkey:
+            if dkey in delivery_key_seen_inbox:
+                prev_dig, prev_key = delivery_key_seen_inbox[dkey]
+                conflicts.append(
+                    {
+                        "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
+                        "side": "inbox",
+                        "delivery_key": dkey,
+                        "first_key": prev_key,
+                        "second_key": key,
+                        "first_digest": prev_dig,
+                        "second_digest": dig,
+                    }
+                )
+            else:
+                delivery_key_seen_inbox[dkey] = (dig, key)
+
     gaps: list[dict[str, Any]] = []
-    conflicts: list[dict[str, Any]] = []
     duplicate_outbox: list[dict[str, Any]] = []
     outbox_by_key: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     outbox_seqs_by_stream: dict[tuple[str, str, str], list[int]] = {}
@@ -76,6 +100,25 @@ def check_recovery_gaps(
             duplicate_outbox.append({"key": key, "delivery_key": row.get("delivery_key")})
         else:
             outbox_by_key[key] = dict(row)
+
+        dkey = str(row.get("delivery_key") or "")
+        dig = str(row.get("payload_digest") or "")
+        if dkey:
+            if dkey in delivery_key_seen_outbox:
+                prev_dig, prev_key = delivery_key_seen_outbox[dkey]
+                conflicts.append(
+                    {
+                        "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
+                        "side": "outbox",
+                        "delivery_key": dkey,
+                        "first_key": prev_key,
+                        "second_key": key,
+                        "first_digest": prev_dig,
+                        "second_digest": dig,
+                    }
+                )
+            else:
+                delivery_key_seen_outbox[dkey] = (dig, key)
 
         receipt = inbox_by_key.get(key)
         if receipt is None:
