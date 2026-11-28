@@ -149,92 +149,121 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
     return bytes(out), budget_hit, bool(dobj.eof)
 
 
-def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool, bool]:
+def _is_clean_utf8_text(buf: bytes) -> bool:
+    """Return True iff buf is valid UTF-8 text with no NUL or non-whitespace C0 control bytes."""
+    try:
+        text = buf.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        return False
+    for ch in text:
+        code = ord(ch)
+        if code < 32 and ch not in ("\t", "\n", "\r"):
+            return False
+    return True
+
+
+def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool, bool]:
     """Decompress gzip/zlib members (resuming after garbage gaps between intact gzip/zlib headers) and raw-deflate streams.
 
-    Returns (buffers, budget_exceeded, corrupt_stream_unscanned).
+    Returns ([(buffer, is_speculative), ...], budget_exceeded, fully_decompressed_cleanly).
+    `fully_decompressed_cleanly` is True iff a gzip or zlib pass consumed `buf` cleanly to EOF with no errors.
     """
-    results: list[bytes] = []
+    results: list[tuple[bytes, bool]] = []
     budget_exceeded = False
-    corrupt_unscanned = False
+    fully_decompressed_cleanly = False
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
         rem = buf
         chunks: list[bytes] = []
         total_out = 0
+        had_error = False
+        had_clean_member = False
+        is_raw_probe = wbits == -zlib.MAX_WBITS
         while rem:
             remaining_budget = _MAX_DECOMPRESSED_BYTES - total_out
             if remaining_budget <= 0:
                 budget_exceeded = True
+                had_error = True
                 break
             try:
                 dobj = zlib.decompressobj(wbits)
                 part = dobj.decompress(rem, remaining_budget)
                 if dobj.unconsumed_tail:
                     budget_exceeded = True
+                    had_error = True
                     if part:
                         chunks.append(part)
-                        results.append(part)
+                        results.append((part, True))
                     break
                 part += dobj.flush()
+                if not dobj.eof:
+                    # Truncated stream without reaching deflate EOF
+                    had_error = True
+                    if part:
+                        total_out += len(part)
+                        chunks.append(part)
+                        results.append((part, True))
+                    break
                 if part:
                     total_out += len(part)
                     chunks.append(part)
-                    results.append(part)
+                    results.append((part, is_raw_probe))
+                had_clean_member = True
                 nxt = dobj.unused_data
-                if not nxt or len(nxt) >= len(rem):
+                if not nxt:
+                    rem = b""
+                    break
+                if len(nxt) >= len(rem):
+                    had_error = True
                     break
                 rem = nxt
             except zlib.error:
+                had_error = True
                 # Recover any bytes decompressed before a corrupt trailer or mid-stream error
-                # instead of silently discarding them, and fail closed if a compressed header
-                # failed decompression.
+                # instead of silently discarding them; also probe past corrupt 2-byte zlib / 10-byte gzip headers.
                 partial, partial_budget, _ = _recover_partial_stream(wbits, rem, remaining_budget)
-                # If a 2-byte zlib header (CMF/FLG) or 10-byte gzip header was corrupted,
-                # also probe raw-deflate immediately past the header; only treat it as a
-                # header-corrupted compressed stream when raw-deflate reaches EOF or hits budget
-                # (avoiding false positives on plain ASCII/JSON or the other container format).
                 header_skip_partial = b""
-                if not partial and wbits == zlib.MAX_WBITS and len(rem) > 2 and not rem.startswith(b"\x1f\x8b"):
-                    cand, skip_budget, skip_eof = _recover_partial_stream(
-                        -zlib.MAX_WBITS, rem[2:], remaining_budget
-                    )
-                    if skip_eof or skip_budget:
-                        header_skip_partial = cand
-                        partial_budget = partial_budget or skip_budget
-                elif not partial and wbits == 16 + zlib.MAX_WBITS and len(rem) > 10 and not rem.startswith(
-                    (b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda")
-                ):
-                    cand, skip_budget, skip_eof = _recover_partial_stream(
-                        -zlib.MAX_WBITS, rem[10:], remaining_budget
-                    )
-                    if skip_eof or skip_budget:
-                        header_skip_partial = cand
-                        partial_budget = partial_budget or skip_budget
+                if not partial and wbits == zlib.MAX_WBITS and len(rem) > 2:
+                    cand, skip_budget, _ = _recover_partial_stream(-zlib.MAX_WBITS, rem[2:], remaining_budget)
+                    header_skip_partial = cand
+                    partial_budget = partial_budget or skip_budget
+                elif not partial and wbits == 16 + zlib.MAX_WBITS and len(rem) > 10:
+                    cand, skip_budget, _ = _recover_partial_stream(-zlib.MAX_WBITS, rem[10:], remaining_budget)
+                    header_skip_partial = cand
+                    partial_budget = partial_budget or skip_budget
                 recovered = partial or header_skip_partial
                 if partial_budget:
                     budget_exceeded = True
                 if recovered:
                     total_out += len(recovered)
                     chunks.append(recovered)
-                    results.append(recovered)
-                if wbits == 16 + zlib.MAX_WBITS and (recovered or rem.startswith(b"\x1f\x8b")):
-                    corrupt_unscanned = True
-                elif wbits == zlib.MAX_WBITS and (
-                    recovered or rem.startswith((b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda"))
-                ):
-                    corrupt_unscanned = True
+                    results.append((recovered, True))
                 next_off = _find_next_magic_offset(rem)
                 if next_off is None:
                     break
                 rem = rem[next_off:]
         if len(chunks) > 1:
-            results.append(b"".join(chunks))
-    return results, budget_exceeded, corrupt_unscanned
+            results.append((b"".join(chunks), is_raw_probe or had_error))
+        if not is_raw_probe and had_clean_member and not had_error and not rem:
+            fully_decompressed_cleanly = True
+    return results, budget_exceeded, fully_decompressed_cleanly
 
 
-def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool, bool]:
-    """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1)."""
-    out, budget_exceeded, corrupt_unscanned = _decompress_all_members(raw_bytes)
+def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tuple[bytes, bool]], bool, bool]:
+    """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1).
+
+    Returns ([(child_bytes, child_is_speculative), ...], budget_exceeded, corrupt_unscanned).
+    Only non-speculative binary buffers that fail clean gzip/zlib decompression emit `corrupt_unscanned`,
+    preventing both false positives on speculative ASCII offset slices and fail-open on corrupt archives.
+    """
+    decompressed, budget_exceeded, cleanly_decompressed = _decompress_all_members(raw_bytes)
+    out: list[tuple[bytes, bool]] = [(buf, speculative or child_spec) for buf, child_spec in decompressed]
+
+    corrupt_unscanned = (
+        (not speculative)
+        and bool(raw_bytes)
+        and (not _is_clean_utf8_text(raw_bytes))
+        and (not cleanly_decompressed)
+    )
 
     stripped = re.sub(rb"\s+", b"", raw_bytes)
     for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
@@ -249,7 +278,9 @@ def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool, bool]:
             try:
                 decoded = base64.b64decode(padded, validate=True)
                 if decoded:
-                    out.append(decoded)
+                    # Base64/hex decodings are speculative probes (plain ASCII words can decode as
+                    # random bytes), so they are scanned for markers without triggering corrupt-binary FPs.
+                    out.append((decoded, True))
             except Exception:
                 pass
 
@@ -261,7 +292,7 @@ def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool, bool]:
                 try:
                     decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
                     if decoded:
-                        out.append(decoded)
+                        out.append((decoded, True))
                 except Exception:
                     pass
     return out, budget_exceeded, corrupt_unscanned
@@ -270,22 +301,27 @@ def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool, bool]:
 def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[list[str], bool, bool]:
     """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget/corrupt flags."""
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
-    seen: set[bytes] = {raw_bytes}
+    # Track best (least-speculative) state seen per byte buffer so a non-speculative path is never shadowed
+    seen: dict[bytes, bool] = {raw_bytes: False}
     byte_candidates: list[bytes] = [raw_bytes]
-    frontier: list[bytes] = [raw_bytes]
+    frontier: list[tuple[bytes, bool]] = [(raw_bytes, False)]
     budget_exceeded = False
     corrupt_unscanned = False
     for _ in range(max_depth):
-        next_frontier: list[bytes] = []
-        for buf in frontier:
-            children, exceeded, corrupt = _decode_one_layer(buf)
+        next_frontier: list[tuple[bytes, bool]] = []
+        for buf, is_spec in frontier:
+            children, exceeded, corrupt = _decode_one_layer(buf, speculative=is_spec)
             budget_exceeded = budget_exceeded or exceeded
             corrupt_unscanned = corrupt_unscanned or corrupt
-            for child in children:
-                if child not in seen:
-                    seen.add(child)
+            for child, child_spec in children:
+                prev_spec = seen.get(child)
+                if prev_spec is None:
+                    seen[child] = child_spec
                     byte_candidates.append(child)
-                    next_frontier.append(child)
+                    next_frontier.append((child, child_spec))
+                elif prev_spec and not child_spec:
+                    seen[child] = False
+                    next_frontier.append((child, False))
         if not next_frontier:
             break
         frontier = next_frontier

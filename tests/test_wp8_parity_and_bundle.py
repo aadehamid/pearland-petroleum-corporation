@@ -257,13 +257,35 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         )
 
         # Verify corrupt zlib CMF/FLG headers both recover the hidden marker and emit DECOMPRESSION_ERROR_UNSCANNED
-        corrupt_hdr_audit = audit_observable_for_hidden_leaks(
-            {"bad_hdr.zlib": b"\x78\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:]}
-        )
-        self.assertEqual(corrupt_hdr_audit["leak_audit"]["status"], "FAILED")
-        hdr_markers = {f["marker"] for f in corrupt_hdr_audit["findings"]}
-        self.assertIn("DECOMPRESSION_ERROR_UNSCANNED", hdr_markers)
-        self.assertIn("evaluation/hidden", hdr_markers)
+        for hdr_name, bad_hdr in (
+            ("flg", b"\x78\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:]),
+            ("cmf", b"\x79\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:]),
+        ):
+            corrupt_hdr_audit = audit_observable_for_hidden_leaks({f"bad_{hdr_name}.zlib": bad_hdr})
+            self.assertEqual(corrupt_hdr_audit["leak_audit"]["status"], "FAILED", hdr_name)
+            hdr_markers = {f["marker"] for f in corrupt_hdr_audit["findings"]}
+            self.assertIn("DECOMPRESSION_ERROR_UNSCANNED", hdr_markers, hdr_name)
+            self.assertIn("evaluation/hidden", hdr_markers, hdr_name)
+
+        # Corrupt zlib header PLUS corrupted body byte MUST still fail closed with DECOMPRESSION_ERROR_UNSCANNED
+        double_corrupt = bytearray(zlib.compress(b"evaluation/hidden/keys.json"))
+        double_corrupt[0] = 0x79
+        double_corrupt[2] ^= 0xFF
+        double_audit = audit_observable_for_hidden_leaks({"double_corrupt.zlib": bytes(double_corrupt)})
+        self.assertEqual(double_audit["leak_audit"]["status"], "FAILED")
+        self.assertTrue(any(f["marker"] == "DECOMPRESSION_ERROR_UNSCANNED" for f in double_audit["findings"]))
+
+        # Clean base64-wrapped zlib/gzip, small-window RFC 1950 zlib, and alphanumeric ASCII MUST pass with 0 FPs
+        cobj = zlib.compressobj(9, zlib.DEFLATED, 8)
+        small_win_zlib = cobj.compress(b"clean refinery operational summary") + cobj.flush()
+        for clean_name, clean_payload in (
+            ("b64_zlib_clean", base64.b64encode(zlib.compress(b"small text"))),
+            ("b64_gzip_clean", base64.b64encode(gzip.compress(b"small text"))),
+            ("small_win_zlib_clean", small_win_zlib),
+            ("alnum_word_clean", b"operationalreport12345678"),
+        ):
+            clean_res = audit_observable_for_hidden_leaks({clean_name: clean_payload})
+            self.assertEqual(clean_res["leak_audit"]["status"], "PASSED", (clean_name, clean_res["findings"]))
 
         # Empty adapter_pins MUST be rejected
         with self.assertRaises(ValueError):
