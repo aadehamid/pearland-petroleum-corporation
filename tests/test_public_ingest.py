@@ -107,18 +107,44 @@ class TestPublicIngest(unittest.TestCase):
 
         def fake_get(url: str) -> bytes:
             calls.append(url)
-            if "ROWS/0:1/" in url:
+            # Simulate a server-capped short non-final page (2 rows when page_size=3),
+            # followed by 1 more row, followed by an empty exhaustion page [].
+            if "ROWS/0:2/" in url:
                 return json.dumps([
                     {"FACILITY_ID": 1001, "STATE": "TX", "NAICS_CODE": "324110"},
                     {"FACILITY_ID": 1002, "STATE": "TX", "NAICS_CODE": "324110"},
                 ]).encode("utf-8")
-            if "ROWS/2:3/" in url:
+            if "ROWS/2:4/" in url:
                 return json.dumps([{"facility_id": 1003, "state": "TX", "naics_code": "324110"}]).encode("utf-8")
+            if "ROWS/3:5/" in url:
+                return json.dumps([]).encode("utf-8")
             raise AssertionError(f"Unexpected EPA URL: {url}")
 
-        rows = public_ingest.fetch_epa_ghgrp_state("TX", http_get=fake_get, page_size=2)
+        rows = public_ingest.fetch_epa_ghgrp_state("TX", http_get=fake_get, page_size=3)
         self.assertEqual(len(rows), 3)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
+
+        # Duplicate EPA row without year must fail closed (cannot bypass dedup)
+        def dup_no_year(url: str) -> bytes:
+            if "ROWS/0:1/" in url:
+                return json.dumps([{"FACILITY_ID": 1001, "STATE": "TX", "NAICS_CODE": "324110"}]).encode("utf-8")
+            if "ROWS/1:2/" in url:
+                return json.dumps([{"FACILITY_ID": 1001, "STATE": "TX", "NAICS_CODE": "324110"}]).encode("utf-8")
+            return json.dumps([]).encode("utf-8")
+
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_epa_ghgrp_state("TX", http_get=dup_no_year, page_size=2)
+
+        # Oversized page (> page_size) must fail closed
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_epa_ghgrp_state(
+                "TX",
+                http_get=lambda _u: json.dumps([
+                    {"FACILITY_ID": 1, "STATE": "TX", "NAICS_CODE": "324110"},
+                    {"FACILITY_ID": 2, "STATE": "TX", "NAICS_CODE": "324110"},
+                ]).encode("utf-8"),
+                page_size=1,
+            )
 
     def test_hurdat2_and_phmsa_parsers(self):
         all_storms = public_ingest.parse_hurdat2_storms(SAMPLE_HURDAT2, min_year=0)
@@ -172,7 +198,10 @@ class TestPublicIngest(unittest.TestCase):
             if "nhc.noaa.gov" in url:
                 return SAMPLE_HURDAT2.encode("utf-8")
             if "data.epa.gov" in url:
-                # Mix uppercase and lowercase facility_id keys as returned by Envirofacts
+                # Mix uppercase and lowercase facility_id keys as returned by Envirofacts;
+                # return [] on the second page to signal pagination exhaustion.
+                if "/ROWS/0:" not in url:
+                    return json.dumps([]).encode("utf-8")
                 if "/STATE/TX/" in url:
                     return json.dumps([{"FACILITY_ID": 1000025, "STATE": "TX", "NAICS_CODE": "324110"}]).encode("utf-8")
                 return json.dumps([{"facility_id": 1000099, "state": "LA", "naics_code": "324110"}]).encode("utf-8")
@@ -237,6 +266,30 @@ class TestPublicIngest(unittest.TestCase):
         self.assertEqual(dry["sources"]["phmsa"]["status"], "PARSED_LOCAL_DRY_RUN")
         self.assertTrue(all(not o["uploaded"] for o in dry["objects"]))
 
+        # Blank or non-numeric EIA value must fail closed rather than silently dropping rows
+        def blank_eia_get(url: str) -> bytes:
+            if "api.eia.gov" in url:
+                import urllib.parse
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                sid = qs["facets[series][]"][0]
+                return json.dumps(
+                    {"response": {"total": "2", "data": [
+                        {"period": "2025-01-02", "series": sid, "value": "73.12"},
+                        {"period": "2025-01-03", "series": sid, "value": ""},
+                    ]}}
+                ).encode("utf-8")
+            return fake_get(url)
+
+        with self.assertRaises(ValueError):
+            public_ingest.run_public_ingest(
+                vintage="2026-11-28",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                eia_api_key="TEST_SECRET_NEVER_STORED",
+                http_get=blank_eia_get,
+                upload_fn=fake_upload,
+            )
+
         # Hidden-truth bucket MUST be rejected inside run_public_ingest (ADR-0057)
         with self.assertRaises(ValueError):
             public_ingest.run_public_ingest(
@@ -248,6 +301,39 @@ class TestPublicIngest(unittest.TestCase):
                 upload_fn=fake_upload,
                 target_bucket="pearland-petroleum-hidden",
             )
+
+    def test_manifest_schema_rejects_self_contradictory_manifests(self):
+        import copy
+
+        schema = json.loads(MANIFEST_SCHEMA_PATH.read_text(encoding="utf-8"))
+        base = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+
+        # 1. UPLOADED_TO_R2 with uploaded=false / r2_etag=null must fail schema
+        m1 = copy.deepcopy(base)
+        m1["objects"][0]["uploaded"] = False
+        m1["objects"][0]["r2_etag"] = None
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(instance=m1, schema=schema)
+
+        # 2. phmsa object while sources.phmsa.status == DEFERRED_MANUAL_ARCHIVE must fail schema
+        m2 = copy.deepcopy(base)
+        m2["objects"].append({**m2["objects"][-1], "source": "phmsa", "r2_key": "raw/external/phmsa/vintage=2026-11-28/x.json"})
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(instance=m2, schema=schema)
+
+        # 3. Zero EPA counts in summary must fail schema
+        m3 = copy.deepcopy(base)
+        m3["sources"]["epa"]["row_count"] = 0
+        m3["sources"]["epa"]["unique_facilities"] = 0
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(instance=m3, schema=schema)
+
+        # 4. Null/string EIA per-series stats must fail schema
+        m4 = copy.deepcopy(base)
+        m4["sources"]["eia"]["series"]["RWTC"]["latest_value"] = None
+        m4["sources"]["eia"]["series"]["RWTC"]["min_value"] = "oops"
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(instance=m4, schema=schema)
 
     def test_committed_vintage_manifest_integrity_and_no_secrets(self):
         self.assertTrue(MANIFEST_PATH.exists(), f"Committed WP-1a vintage manifest missing: {MANIFEST_PATH}")

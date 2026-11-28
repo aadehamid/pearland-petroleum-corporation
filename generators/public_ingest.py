@@ -21,6 +21,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import re
 import time
@@ -278,9 +279,15 @@ def fetch_epa_ghgrp_state(
     page_size: int = 500,
     max_pages: int = 100,
 ) -> list[dict[str, Any]]:
-    """Fetch all paginated EPA Envirofacts GHGRP NAICS 324110 records for one state."""
+    """Fetch all paginated EPA Envirofacts GHGRP NAICS 324110 records for one state.
+
+    Advances by `len(parsed)` and stops only on an empty page (`[]`) so a
+    server-capped short page never silently truncates pagination. Every row is
+    deduplicated — by `(facility_id, year)` when `year` is present, or by
+    canonical row JSON otherwise.
+    """
     records: list[dict[str, Any]] = []
-    seen_row_keys: set[tuple[str, str]] = set()
+    seen_row_keys: set[tuple[str, ...]] = set()
     start = 0
     for _ in range(max_pages):
         end = start + page_size - 1  # Envirofacts ROWS/start:end is inclusive
@@ -289,6 +296,12 @@ def fetch_epa_ghgrp_state(
         parsed = json.loads(epa_raw.decode("utf-8"))
         if not isinstance(parsed, list):
             raise ValueError(f"Unexpected EPA Envirofacts response structure for state {state}")
+        if not parsed:
+            return records
+        if len(parsed) > page_size:
+            raise ValueError(
+                f"EPA Envirofacts ignored ROWS range for state {state}: got {len(parsed)} rows > page_size={page_size}"
+            )
         for rec in parsed:
             rec_state = rec.get("state") if rec.get("state") is not None else rec.get("STATE")
             if rec_state is None or str(rec_state).strip().upper() != state.upper():
@@ -300,14 +313,14 @@ def fetch_epa_ghgrp_state(
             if rec_fac is None or not str(rec_fac).strip():
                 raise ValueError(f"EPA record missing non-blank facility_id / FACILITY_ID for state {state}")
             rec_year = rec.get("year") if rec.get("year") is not None else rec.get("YEAR")
-            if rec_year is not None:
-                rkey = (str(rec_fac).strip(), str(rec_year).strip())
-                if rkey in seen_row_keys:
-                    raise ValueError(f"Duplicate EPA (facility_id, year) row detected across pages: {rkey}")
-                seen_row_keys.add(rkey)
+            if rec_year is not None and str(rec_year).strip():
+                rkey: tuple[str, ...] = ("fac_year", str(rec_fac).strip(), str(rec_year).strip())
+            else:
+                rkey = ("row_json", json.dumps(rec, sort_keys=True, separators=(",", ":")))
+            if rkey in seen_row_keys:
+                raise ValueError(f"Duplicate EPA row detected across pages: {rkey}")
+            seen_row_keys.add(rkey)
         records.extend(parsed)
-        if len(parsed) < page_size:
-            return records
         start += len(parsed)
     raise RuntimeError(f"EPA Envirofacts pagination exceeded {max_pages} pages for state {state}")
 
@@ -498,10 +511,36 @@ def run_public_ingest(
         )
 
     # 1. EIA Open Data API v2 series (PADD 3 + USGC + Henry Hub)
+    catalog_ids = [entry["series_id"] for entry in EIA_SERIES_CATALOG]
+    if len(set(catalog_ids)) != len(catalog_ids):
+        raise ValueError(f"Duplicate series_id entries in EIA_SERIES_CATALOG: {catalog_ids}")
     eia_summary: dict[str, Any] = {}
     for entry in EIA_SERIES_CATALOG:
         rows = fetch_eia_series(entry, eia_api_key, start_date, end_date, http_get=http_get)
-        periods = sorted(str(r["period"]) for r in rows if r.get("period"))
+        numeric_pairs: list[tuple[str, float]] = []
+        for row in rows:
+            period_str = str(row.get("period", "")).strip()
+            if not period_str:
+                raise ValueError(f"EIA series {entry['series_id']} contains a row with blank period")
+            raw_val = row.get("value")
+            if raw_val in (None, ""):
+                raise ValueError(
+                    f"EIA series {entry['series_id']} has blank/null value at period {period_str}"
+                )
+            try:
+                num_val = float(raw_val)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"EIA series {entry['series_id']} has non-numeric value {raw_val!r} at period {period_str}"
+                ) from exc
+            if not math.isfinite(num_val):
+                raise ValueError(
+                    f"EIA series {entry['series_id']} has non-finite value {raw_val!r} at period {period_str}"
+                )
+            numeric_pairs.append((period_str, num_val))
+        numeric_pairs.sort(key=lambda pair: pair[0])
+        periods = [p for p, _ in numeric_pairs]
+        numeric_vals = [v for _, v in numeric_pairs]
         doc = {
             "provenance_class": "OBSERVED",
             "source": "EIA_API_V2",
@@ -523,28 +562,19 @@ def run_public_ingest(
             content_type="application/json",
             row_count=len(rows),
             unit=entry["unit"],
-            date_min=periods[0] if periods else None,
-            date_max=periods[-1] if periods else None,
+            date_min=periods[0],
+            date_max=periods[-1],
         )
-        numeric_pairs = sorted(
-            (
-                (str(r.get("period", "")), float(r["value"]))
-                for r in rows
-                if r.get("value") not in (None, "")
-            ),
-            key=lambda pair: pair[0],
-        )
-        numeric_vals = [v for _, v in numeric_pairs]
         eia_summary[entry["series_id"]] = {
             "unit": entry["unit"],
             "frequency": entry["frequency"],
             "row_count": len(rows),
-            "date_min": periods[0] if periods else None,
-            "date_max": periods[-1] if periods else None,
-            "latest_value": numeric_pairs[-1][1] if numeric_pairs else None,
-            "latest_value_period": numeric_pairs[-1][0] if numeric_pairs else None,
-            "min_value": min(numeric_vals) if numeric_vals else None,
-            "max_value": max(numeric_vals) if numeric_vals else None,
+            "date_min": periods[0],
+            "date_max": periods[-1],
+            "latest_value": numeric_pairs[-1][1],
+            "latest_value_period": numeric_pairs[-1][0],
+            "min_value": min(numeric_vals),
+            "max_value": max(numeric_vals),
         }
 
     # 2. NOAA NHC HURDAT2 Atlantic best-track archive (full 1851-present payload)
@@ -595,18 +625,24 @@ def run_public_ingest(
 
     # 4. PHMSA hazardous liquid archive (ingested only when --phmsa-zip is explicitly supplied; never bypasses anti-bot gates)
     phmsa_status = "DEFERRED_MANUAL_ARCHIVE"
+    phmsa_row_count: int | None = None
     if phmsa_zip_bytes is not None:
         phmsa_rows = parse_phmsa_liquid_zip(phmsa_zip_bytes)
+        phmsa_row_count = len(phmsa_rows)
         emit(
             source="phmsa",
             name="hazardous_liquid_accidents_2010_present",
             rel_key="accident_hazardous_liquid.zip",
             payload=phmsa_zip_bytes,
             content_type="application/zip",
-            row_count=len(phmsa_rows),
+            row_count=phmsa_row_count,
             unit="incident_rows",
         )
         phmsa_status = "INGESTED" if upload_fn is not None else "PARSED_LOCAL_DRY_RUN"
+
+    phmsa_summary: dict[str, Any] = {"status": phmsa_status, "archive_url": PHMSA_ARCHIVE_URL}
+    if phmsa_row_count is not None:
+        phmsa_summary["row_count"] = phmsa_row_count
 
     manifest: dict[str, Any] = {
         "schema_version": "1.0.0",
@@ -639,7 +675,7 @@ def run_public_ingest(
                 "unique_facilities": len(unique_facilities),
                 "rfs_rin_status": "DEFERRED_RFS_RIN_CONTEXT",
             },
-            "phmsa": {"status": phmsa_status, "archive_url": PHMSA_ARCHIVE_URL},
+            "phmsa": phmsa_summary,
         },
         "objects": [
             {

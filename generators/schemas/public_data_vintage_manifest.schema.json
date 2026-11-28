@@ -39,35 +39,109 @@
       }
     },
     "captured_at_utc": { "type": "string", "minLength": 20 },
-    "governing_adrs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "governing_adrs": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "r2_bucket": { "type": ["string", "null"] },
-    "target_r2_bucket": { "type": "string", "minLength": 1, "not": { "pattern": "hidden" } },
+    "target_r2_bucket": { "type": "string", "minLength": 1, "not": { "pattern": "(?i)hidden" } },
     "sources": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["eia", "noaa", "epa", "phmsa"],
       "properties": {
-        "eia": { "type": "object", "required": ["series_count", "series"] },
+        "eia": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["series_count", "series"],
+          "properties": {
+            "series_count": { "type": "integer", "minimum": 14, "maximum": 14 },
+            "series": {
+              "type": "object",
+              "minProperties": 14,
+              "maxProperties": 14,
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "unit",
+                  "frequency",
+                  "row_count",
+                  "date_min",
+                  "date_max",
+                  "latest_value",
+                  "latest_value_period",
+                  "min_value",
+                  "max_value"
+                ],
+                "properties": {
+                  "unit": { "type": "string", "minLength": 1 },
+                  "frequency": { "type": "string", "enum": ["daily", "weekly", "monthly"] },
+                  "row_count": { "type": "integer", "minimum": 1 },
+                  "date_min": { "type": "string", "minLength": 4 },
+                  "date_max": { "type": "string", "minLength": 4 },
+                  "latest_value": { "type": "number" },
+                  "latest_value_period": { "type": "string", "minLength": 4 },
+                  "min_value": { "type": "number" },
+                  "max_value": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
         "noaa": {
           "type": "object",
-          "required": ["archive_url", "total_storms_in_archive", "archive_year_min", "archive_year_max", "storms_since_2010", "hurricanes_since_2010"]
+          "additionalProperties": false,
+          "required": [
+            "archive_url",
+            "total_storms_in_archive",
+            "archive_year_min",
+            "archive_year_max",
+            "storms_since_2010",
+            "hurricanes_since_2010"
+          ],
+          "properties": {
+            "archive_url": { "type": "string", "minLength": 1 },
+            "total_storms_in_archive": { "type": "integer", "minimum": 1 },
+            "archive_year_min": { "type": "integer", "minimum": 1800 },
+            "archive_year_max": { "type": "integer", "minimum": 1800 },
+            "storms_since_2010": { "type": "integer", "minimum": 0 },
+            "hurricanes_since_2010": { "type": "integer", "minimum": 0 }
+          }
         },
         "epa": {
           "type": "object",
-          "required": ["table", "naics", "states", "row_count", "unique_facilities", "rfs_rin_status"]
+          "additionalProperties": false,
+          "required": ["table", "naics", "states", "row_count", "unique_facilities", "rfs_rin_status"],
+          "properties": {
+            "table": { "type": "string", "const": "PUB_DIM_FACILITY" },
+            "naics": { "type": "string", "const": "324110" },
+            "states": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 2 } },
+            "row_count": { "type": "integer", "minimum": 1 },
+            "unique_facilities": { "type": "integer", "minimum": 1 },
+            "rfs_rin_status": { "type": "string", "const": "DEFERRED_RFS_RIN_CONTEXT" }
+          }
         },
         "phmsa": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["status", "archive_url"],
           "properties": {
             "status": { "type": "string", "enum": ["INGESTED", "PARSED_LOCAL_DRY_RUN", "DEFERRED_MANUAL_ARCHIVE"] },
-            "archive_url": { "type": "string", "minLength": 1 }
-          }
+            "archive_url": { "type": "string", "minLength": 1 },
+            "row_count": { "type": "integer", "minimum": 1 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "status": { "const": "DEFERRED_MANUAL_ARCHIVE" } } },
+              "then": { "not": { "required": ["row_count"] } },
+              "else": { "required": ["row_count"] }
+            }
+          ]
         }
       }
     },
     "objects": {
       "type": "array",
       "minItems": 16,
+      "maxItems": 17,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -92,5 +166,79 @@
       }
     },
     "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "upload_status": { "const": "UPLOADED_TO_R2" } } },
+      "then": {
+        "properties": {
+          "r2_bucket": { "type": "string", "minLength": 1, "not": { "pattern": "(?i)hidden" } },
+          "sources": {
+            "properties": {
+              "phmsa": { "properties": { "status": { "enum": ["INGESTED", "DEFERRED_MANUAL_ARCHIVE"] } } }
+            }
+          },
+          "objects": {
+            "items": {
+              "properties": {
+                "uploaded": { "const": true },
+                "r2_etag": { "type": "string", "pattern": "^[0-9a-f]{32}$" }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "r2_bucket": { "type": "null" },
+          "sources": {
+            "properties": {
+              "phmsa": { "properties": { "status": { "enum": ["PARSED_LOCAL_DRY_RUN", "DEFERRED_MANUAL_ARCHIVE"] } } }
+            }
+          },
+          "objects": {
+            "items": {
+              "properties": {
+                "uploaded": { "const": false },
+                "r2_etag": { "type": "null" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "sources": {
+            "properties": {
+              "phmsa": { "properties": { "status": { "const": "DEFERRED_MANUAL_ARCHIVE" } } }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "objects": {
+            "minItems": 16,
+            "maxItems": 16,
+            "items": { "properties": { "source": { "enum": ["eia", "noaa", "epa"] } } }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "objects": {
+            "minItems": 17,
+            "maxItems": 17,
+            "contains": {
+              "type": "object",
+              "required": ["source"],
+              "properties": { "source": { "const": "phmsa" } }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
