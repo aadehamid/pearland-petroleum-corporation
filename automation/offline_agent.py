@@ -12,19 +12,45 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-REDACT_KEYS = frozenset({"password", "password_hash", "token", "secret", "restricted_payload", "api_key"})
+SENSITIVE_SUBSTRINGS = (
+    "secret",
+    "token",
+    "password",
+    "authorization",
+    "api_key",
+    "apikey",
+    "bearer",
+    "credential",
+    "restricted",
+    "private_key",
+)
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lk = key.lower()
+    return any(tok in lk for tok in SENSITIVE_SUBSTRINGS)
+
+
+def _redact_value(val: Any) -> Any:
+    if isinstance(val, Mapping):
+        return redact_otel_attributes(val)
+    if isinstance(val, list):
+        return [_redact_value(item) for item in val]
+    if isinstance(val, tuple):
+        return [_redact_value(item) for item in val]
+    if isinstance(val, str) and val.strip().lower().startswith("bearer "):
+        return "[REDACTED]"
+    return val
 
 
 def redact_otel_attributes(attrs: Mapping[str, Any]) -> dict[str, Any]:
-    """Strip restricted or secret attributes before writing OTLP JSON telemetry to R2."""
+    """Recursively strip restricted or secret attributes (including inside lists) before OTLP export."""
     cleaned: dict[str, Any] = {}
     for k, v in attrs.items():
-        if k.lower() in REDACT_KEYS or "secret" in k.lower() or "restricted" in k.lower():
+        if _is_sensitive_key(str(k)):
             cleaned[k] = "[REDACTED]"
-        elif isinstance(v, Mapping):
-            cleaned[k] = redact_otel_attributes(v)
         else:
-            cleaned[k] = v
+            cleaned[k] = _redact_value(v)
     return cleaned
 
 

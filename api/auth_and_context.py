@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Fixture user/role seeder and server-side signed session RBAC for PPC Context API (WP-3B, B14, N10).
+"""Local Slice 1 fixture user/role seeder and signed session RBAC store (WP-3B, B14 fixture profile, N10).
 
-Enforces server-side authentication and RBAC backed by users and role_assignments tables:
+Enforces server-side authentication and RBAC backed by SQLite users and role_assignments tables
+for offline tests and local development (production B14 deployment migrates password hashing to
+Argon2id in PostgreSQL with exe.dev secret-store rotation and dedicated api/seed_users.py):
 - Salted scrypt password hashing (never plaintext passwords)
-- HMAC-SHA256 signed JWT-style bearer tokens bound to server-side user_id
+- HMAC-SHA256 signed bearer tokens bound to server-side user_id
 - Forged client role headers (e.g. X-Role) are strictly ignored in favor of DB role_assignments
 """
 from __future__ import annotations
@@ -47,7 +49,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 
 class AuthRBACStore:
-    """PostgreSQL-compatible users + role_assignments store with signed session tokens."""
+    """SQLite local-fixture users + role_assignments store with HMAC-SHA256 signed session tokens."""
 
     def __init__(self, db_path: str | Path, signing_secret: str):
         if len(signing_secret) < 16:
@@ -78,10 +80,10 @@ class AuthRBACStore:
         self.conn.commit()
 
     def seed_fixture_accounts(self, fixture_password: str = "ppc-fixture-dev-only") -> int:
-        count = 0
+        inserted = 0
         for uid, uname, role, is_agent in SEED_USERS:
             p_hash = hash_password(fixture_password)
-            self.conn.execute(
+            cur = self.conn.execute(
                 "INSERT OR IGNORE INTO users (user_id, username, password_hash, is_agent) VALUES (?, ?, ?, ?)",
                 (uid, uname, p_hash, 1 if is_agent else 0),
             )
@@ -89,9 +91,10 @@ class AuthRBACStore:
                 "INSERT OR IGNORE INTO role_assignments (user_id, role_name) VALUES (?, ?)",
                 (uid, role),
             )
-            count += 1
+            if cur.rowcount > 0:
+                inserted += 1
         self.conn.commit()
-        return count
+        return inserted
 
     def issue_token(self, username: str, password: str, ttl_minutes: int = 60) -> str | None:
         row = self.conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()

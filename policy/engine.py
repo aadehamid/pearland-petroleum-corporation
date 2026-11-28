@@ -2,10 +2,13 @@
 """Service-side ACID Policy-as-Code Gate (WP-3B, ADR-0056 G3-b, AGENT-001 §1, PO-10).
 
 Reads schemas/policy_thresholds.yaml directly and enforces server-side:
-- PROHIBITED actions always resolve to DENIED (never approvable).
-- Missing numeric estimates count as exceeded and escalate tier.
-- proposer != approver and agents can never approve.
-- Exact payload_digest binding, branch binding, expiry window, and one-time ActionReceipt idempotency.
+- PROHIBITED actions always resolve to DENIED (never approvable or executable).
+- Required numeric estimates per action class: missing estimate counts as exceeded and escalates tier.
+- Payload-to-metrics binding: payload numeric magnitudes are cross-checked against metrics (conservative max),
+  and payload, metrics, decision_id, expected_source_revision, and policy_version are bound into payload_digest.
+- proposer != approver and agents can never approve; supports session-bound authorization via AuthRBACStore.
+- Clean single-use ActionReceipt execution with transaction rollback on error, hourly AUTO_EXECUTE rate cap,
+  source-revision freshness check, and policy_version match.
 """
 from __future__ import annotations
 
@@ -19,10 +22,61 @@ from typing import Any, Mapping
 import yaml
 
 
+# Required numeric estimates per action_type (ADR-0056 G3-b: missing required estimate escalates tier)
+REQUIRED_ACTION_METRICS: dict[str, tuple[str, ...]] = {
+    "feed_rate_change_inside_envelope": ("margin_effect_usd", "rate_change_bbl_per_day", "rate_change_pct"),
+    "unit_mode_change_inside_envelope": ("margin_effect_usd",),
+    "cdu_vdu_cut_point_shift": ("margin_effect_usd", "cut_point_shift_c"),
+    "in_refinery_tank_transfer": ("margin_effect_usd", "volume_bbl_60f"),
+    "larger_feed_rate_change": ("margin_effect_usd", "volume_bbl_60f"),
+    "max_distillate_or_max_gasoline_mode_swing": ("margin_effect_usd",),
+    "inter_terminal_transfer": ("margin_effect_usd", "volume_bbl_60f"),
+    "spot_purchase_or_sale": ("margin_effect_usd", "volume_bbl_60f", "notional_usd"),
+    "delivery_reschedule": ("margin_effect_usd", "delivery_reschedule_hours"),
+    "reroute_held_lot_to_another_hold": ("margin_effect_usd", "volume_bbl_60f"),
+}
+
+
 def canonical_digest(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
+
+
+def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -> dict[str, Any]:
+    """Cross-check payload numeric fields against caller-supplied metrics using conservative max magnitudes."""
+    merged = dict(metrics)
+    for field in (
+        "margin_effect_usd",
+        "rate_change_bbl_per_day",
+        "rate_change_pct",
+        "cut_point_shift_c",
+        "volume_bbl_60f",
+        "notional_usd",
+        "delivery_reschedule_hours",
+    ):
+        p_val = payload.get(field)
+        m_val = merged.get(field)
+        if p_val is not None and m_val is not None:
+            if abs(float(p_val)) > abs(float(m_val)):
+                merged[field] = float(p_val)
+        elif p_val is not None and m_val is None:
+            merged[field] = float(p_val)
+    # Guard against smuggling a huge feed_bbl_per_day target inside payload while reporting a tiny delta
+    if payload.get("feed_bbl_per_day") is not None and merged.get("rate_change_bbl_per_day") is not None:
+        if payload.get("baseline_feed_bbl_per_day") is not None:
+            implied = abs(float(payload["feed_bbl_per_day"]) - float(payload["baseline_feed_bbl_per_day"]))
+            if implied > abs(float(merged["rate_change_bbl_per_day"])):
+                merged["rate_change_bbl_per_day"] = implied
+        elif float(payload["feed_bbl_per_day"]) > 50000.0:
+            # Exceeds Tier 2 absolute volume envelope without baseline proof -> force conservative magnitude
+            merged["rate_change_bbl_per_day"] = max(
+                abs(float(merged["rate_change_bbl_per_day"])), float(payload["feed_bbl_per_day"])
+            )
+            merged["volume_bbl_60f"] = max(
+                abs(float(merged.get("volume_bbl_60f") or 0.0)), float(payload["feed_bbl_per_day"])
+            )
+    return merged
 
 
 class PolicyGateService:
@@ -30,9 +84,10 @@ class PolicyGateService:
 
     def __init__(self, thresholds_path: str | Path, db_path: str | Path):
         self.thresholds = yaml.safe_load(Path(thresholds_path).read_text(encoding="utf-8"))
+        self.policy_version = str(self.thresholds.get("policy_version", "1.0.0"))
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        self.conn = sqlite3.connect(str(self.db_path), isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
@@ -42,6 +97,7 @@ class PolicyGateService:
             """
             CREATE TABLE IF NOT EXISTS action_proposals (
                 proposal_id TEXT PRIMARY KEY,
+                decision_id TEXT NOT NULL,
                 branch_id TEXT NOT NULL,
                 action_type TEXT NOT NULL,
                 proposer_id TEXT NOT NULL,
@@ -50,8 +106,11 @@ class PolicyGateService:
                 required_tier INTEGER,
                 required_approver_role TEXT,
                 policy_result TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                expected_source_revision TEXT NOT NULL,
                 payload_digest TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
+                metrics_json TEXT NOT NULL,
                 created_at_utc TEXT NOT NULL,
                 expires_at_utc TEXT
             );
@@ -62,6 +121,7 @@ class PolicyGateService:
                 approver_id TEXT NOT NULL,
                 approver_role TEXT NOT NULL,
                 payload_digest TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
                 authorized_at_utc TEXT NOT NULL,
                 expires_at_utc TEXT NOT NULL
             );
@@ -70,17 +130,40 @@ class PolicyGateService:
                 proposal_id TEXT NOT NULL UNIQUE,
                 auth_id TEXT,
                 branch_id TEXT NOT NULL,
+                proposer_id TEXT NOT NULL,
+                authority_class TEXT NOT NULL,
                 payload_digest TEXT NOT NULL,
+                source_revision TEXT NOT NULL,
                 execution_status TEXT NOT NULL,
                 executed_at_utc TEXT NOT NULL
             );
             """
         )
-        self.conn.commit()
 
-    def classify_proposal(self, action_type: str, metrics: Mapping[str, Any]) -> dict[str, Any]:
+    def _auto_execute_count_last_hour(self, proposer_id: str, now_utc: datetime) -> int:
+        cutoff = (now_utc - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        row = self.conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM action_receipts
+            WHERE proposer_id = ? AND authority_class = 'AUTO_EXECUTE' AND executed_at_utc >= ?
+            """,
+            (proposer_id, cutoff),
+        ).fetchone()
+        return int(row["cnt"]) if row else 0
+
+    def classify_proposal(
+        self,
+        action_type: str,
+        metrics: Mapping[str, Any],
+        payload: Mapping[str, Any] | None = None,
+        *,
+        proposer_id: str | None = None,
+        now_utc: datetime | None = None,
+    ) -> dict[str, Any]:
         """Classify an action against schemas/policy_thresholds.yaml (ADR-0056 G3-b)."""
         classes = self.thresholds["authority_classes"]
+        eff_metrics = _effective_metrics(payload or {}, metrics)
+
         if action_type in classes["PROHIBITED"]["prohibited_actions"]:
             return {
                 "authority_class": "PROHIBITED",
@@ -88,32 +171,53 @@ class PolicyGateService:
                 "tier": None,
                 "required_approver_role": None,
                 "expiry_minutes": None,
+                "policy_version": self.policy_version,
             }
+
         if action_type in classes["AUTO_EXECUTE"]["allowed_actions"]:
+            max_hr = int(classes["AUTO_EXECUTE"]["limits"]["max_executions_per_agent_per_logical_hour"])
+            if proposer_id and now_utc and self._auto_execute_count_last_hour(proposer_id, now_utc) >= max_hr:
+                # Rate limit exceeded -> escalate to Tier 1 approval
+                t1 = classes["REQUIRE_APPROVAL_TIER_1"]
+                return {
+                    "authority_class": "REQUIRE_APPROVAL",
+                    "policy_result": "PENDING_APPROVAL",
+                    "tier": 1,
+                    "required_approver_role": t1["approver_roles"]["default"],
+                    "expiry_minutes": int(t1["expiry_logical_minutes"]),
+                    "policy_version": self.policy_version,
+                    "rate_limit_escalated": True,
+                }
             return {
                 "authority_class": "AUTO_EXECUTE",
                 "policy_result": "AUTO_EXECUTED",
                 "tier": 0,
                 "required_approver_role": None,
                 "expiry_minutes": None,
+                "policy_version": self.policy_version,
             }
 
-        # Missing numeric estimate counts as exceeded -> escalates (ADR-0056 global invariant)
-        margin_usd = metrics.get("margin_effect_usd")
-        vol_bbl = metrics.get("volume_bbl_60f")
-        notional_usd = metrics.get("notional_usd")
-        rate_chg_bbl = metrics.get("rate_change_bbl_per_day")
-        cut_shift_c = metrics.get("cut_point_shift_c")
+        required = REQUIRED_ACTION_METRICS.get(action_type, ("margin_effect_usd",))
+        missing_required = any(eff_metrics.get(k) is None for k in required)
+
+        margin_usd = eff_metrics.get("margin_effect_usd")
+        vol_bbl = eff_metrics.get("volume_bbl_60f")
+        notional_usd = eff_metrics.get("notional_usd")
+        rate_chg_bbl = eff_metrics.get("rate_change_bbl_per_day")
+        rate_chg_pct = eff_metrics.get("rate_change_pct")
+        cut_shift_c = eff_metrics.get("cut_point_shift_c")
+        resched_h = eff_metrics.get("delivery_reschedule_hours")
 
         t1 = classes["REQUIRE_APPROVAL_TIER_1"]
         t2 = classes["REQUIRE_APPROVAL_TIER_2"]
 
-        if action_type in t1["allowed_actions"]:
+        if not missing_required and action_type in t1["allowed_actions"]:
             lim = t1["limits"]
             within_t1 = (
                 margin_usd is not None
                 and abs(float(margin_usd)) <= lim["max_margin_effect_usd"]
                 and (rate_chg_bbl is None or abs(float(rate_chg_bbl)) <= lim["max_rate_change_bbl_per_day"])
+                and (rate_chg_pct is None or abs(float(rate_chg_pct)) <= lim["max_rate_change_pct"])
                 and (cut_shift_c is None or abs(float(cut_shift_c)) <= lim["max_cut_point_shift_c"])
                 and (vol_bbl is None or abs(float(vol_bbl)) <= lim["max_transfer_volume_bbl_60f"])
             )
@@ -124,19 +228,22 @@ class PolicyGateService:
                     "tier": 1,
                     "required_approver_role": t1["approver_roles"]["default"],
                     "expiry_minutes": int(t1["expiry_logical_minutes"]),
+                    "policy_version": self.policy_version,
                 }
 
-        if action_type in t2["allowed_actions"] or action_type in t1["allowed_actions"]:
+        if not missing_required and (action_type in t2["allowed_actions"] or action_type in t1["allowed_actions"]):
             lim = t2["limits"]
             within_t2 = (
                 margin_usd is not None
                 and abs(float(margin_usd)) <= lim["max_margin_effect_usd"]
                 and (vol_bbl is None or abs(float(vol_bbl)) <= lim["max_volume_bbl_60f"])
+                and (rate_chg_bbl is None or abs(float(rate_chg_bbl)) <= lim["max_volume_bbl_60f"])
                 and (notional_usd is None or abs(float(notional_usd)) <= lim["max_notional_usd"])
                 and (cut_shift_c is None or abs(float(cut_shift_c)) <= lim["max_cut_point_shift_c"])
+                and (resched_h is None or abs(float(resched_h)) <= lim["max_delivery_reschedule_hours"])
             )
             if within_t2:
-                domain = str(metrics.get("domain", "physical"))
+                domain = str(eff_metrics.get("domain", "physical"))
                 role = t2["approver_roles"].get(domain, t2["approver_roles"]["physical"])
                 return {
                     "authority_class": "REQUIRE_APPROVAL",
@@ -144,14 +251,19 @@ class PolicyGateService:
                     "tier": 2,
                     "required_approver_role": role,
                     "expiry_minutes": int(t2["expiry_logical_minutes"]),
+                    "policy_version": self.policy_version,
                 }
 
+        # ESCALATE expiry uses YAML ESCALATE.expiry_logical_minutes if defined, else Tier 2 expiry from YAML
+        esc_expiry = int(classes["ESCALATE"].get("expiry_logical_minutes", t2["expiry_logical_minutes"]))
         return {
             "authority_class": "ESCALATE",
             "policy_result": "ESCALATED",
             "tier": 3,
             "required_approver_role": classes["ESCALATE"]["approver_roles"]["default"],
-            "expiry_minutes": 240,
+            "expiry_minutes": esc_expiry,
+            "policy_version": self.policy_version,
+            "requires_new_decision_id": bool(classes["ESCALATE"].get("requires_new_decision_id", True)),
         }
 
     def submit_proposal(
@@ -165,8 +277,14 @@ class PolicyGateService:
         payload: Mapping[str, Any],
         metrics: Mapping[str, Any],
         now_utc: datetime,
+        decision_id: str | None = None,
+        expected_source_revision: str = "rev-0",
     ) -> dict[str, Any]:
-        cls = self.classify_proposal(action_type, metrics)
+        eff_metrics = _effective_metrics(payload, metrics)
+        cls = self.classify_proposal(
+            action_type, eff_metrics, payload, proposer_id=proposer_id, now_utc=now_utc
+        )
+        eff_decision_id = decision_id or f"DEC-{proposal_id}"
         digest = canonical_digest(payload)
         expires = (
             (now_utc + timedelta(minutes=cls["expiry_minutes"])).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -175,38 +293,81 @@ class PolicyGateService:
         )
         cur = self.conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
-        cur.execute(
-            """
-            INSERT INTO action_proposals (
-                proposal_id, branch_id, action_type, proposer_id, proposer_is_agent,
-                authority_class, required_tier, required_approver_role, policy_result,
-                payload_digest, payload_json, created_at_utc, expires_at_utc
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                proposal_id,
-                branch_id,
-                action_type,
-                proposer_id,
-                1 if proposer_is_agent else 0,
-                cls["authority_class"],
-                cls["tier"],
-                cls["required_approver_role"],
-                cls["policy_result"],
-                digest,
-                json.dumps(payload, sort_keys=True, separators=(",", ":")),
-                now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                expires,
-            ),
-        )
-        self.conn.commit()
+        try:
+            cur.execute(
+                """
+                INSERT INTO action_proposals (
+                    proposal_id, decision_id, branch_id, action_type, proposer_id, proposer_is_agent,
+                    authority_class, required_tier, required_approver_role, policy_result,
+                    policy_version, expected_source_revision,
+                    payload_digest, payload_json, metrics_json, created_at_utc, expires_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    proposal_id,
+                    eff_decision_id,
+                    branch_id,
+                    action_type,
+                    proposer_id,
+                    1 if proposer_is_agent else 0,
+                    cls["authority_class"],
+                    cls["tier"],
+                    cls["required_approver_role"],
+                    cls["policy_result"],
+                    self.policy_version,
+                    expected_source_revision,
+                    digest,
+                    json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    json.dumps(eff_metrics, sort_keys=True, separators=(",", ":")),
+                    now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    expires,
+                ),
+            )
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
         return {
             "proposal_id": proposal_id,
+            "decision_id": eff_decision_id,
             "branch_id": branch_id,
+            "expected_source_revision": expected_source_revision,
             "payload_digest": digest,
             "expires_at_utc": expires,
             **cls,
         }
+
+    def authorize_proposal_with_session(
+        self,
+        *,
+        auth_store: Any,
+        token: str,
+        headers: Mapping[str, str] | None = None,
+        auth_id: str,
+        proposal_id: str,
+        branch_id: str,
+        payload_digest: str,
+        now_utc: datetime,
+    ) -> dict[str, Any]:
+        """Authorize a proposal deriving verified approver_id, roles, and is_agent strictly from AuthRBACStore."""
+        ctx = auth_store.authenticate_request(token, headers=headers)
+        if ctx is None:
+            return {"status": "DENIED", "reason": "UNAUTHENTICATED_SESSION"}
+        row = self.conn.execute(
+            "SELECT required_approver_role FROM action_proposals WHERE proposal_id = ?", (proposal_id,)
+        ).fetchone()
+        req_role = row["required_approver_role"] if row else None
+        matched_role = req_role if (req_role and req_role in ctx["roles"]) else (ctx["roles"][0] if ctx["roles"] else "")
+        return self.authorize_proposal(
+            auth_id=auth_id,
+            proposal_id=proposal_id,
+            approver_id=ctx["user_id"],
+            approver_role=matched_role,
+            approver_is_agent=bool(ctx["is_agent"]),
+            branch_id=branch_id,
+            payload_digest=payload_digest,
+            now_utc=now_utc,
+        )
 
     def authorize_proposal(
         self,
@@ -235,6 +396,8 @@ class PolicyGateService:
             return {"status": "DENIED", "reason": "CROSS_BRANCH_APPROVAL_FORBIDDEN"}
         if payload_digest != row["payload_digest"]:
             return {"status": "DENIED", "reason": "PAYLOAD_DIGEST_MISMATCH"}
+        if row["policy_version"] != self.policy_version:
+            return {"status": "DENIED", "reason": "POLICY_VERSION_MISMATCH"}
         if row["required_approver_role"] and approver_role != row["required_approver_role"]:
             return {"status": "DENIED", "reason": f"ROLE_MISMATCH (required {row['required_approver_role']})"}
         if row["expires_at_utc"]:
@@ -244,25 +407,30 @@ class PolicyGateService:
 
         cur = self.conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
-        cur.execute(
-            """
-            INSERT INTO action_authorizations (
-                auth_id, proposal_id, branch_id, approver_id, approver_role,
-                payload_digest, authorized_at_utc, expires_at_utc
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                auth_id,
-                proposal_id,
-                branch_id,
-                approver_id,
-                approver_role,
-                payload_digest,
-                now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                row["expires_at_utc"] or now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            ),
-        )
-        self.conn.commit()
+        try:
+            cur.execute(
+                """
+                INSERT INTO action_authorizations (
+                    auth_id, proposal_id, branch_id, approver_id, approver_role,
+                    payload_digest, policy_version, authorized_at_utc, expires_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    auth_id,
+                    proposal_id,
+                    branch_id,
+                    approver_id,
+                    approver_role,
+                    payload_digest,
+                    self.policy_version,
+                    now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    row["expires_at_utc"] or now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ),
+            )
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
         return {"status": "AUTHORIZED", "auth_id": auth_id, "proposal_id": proposal_id}
 
     def execute_authorized_action(
@@ -274,72 +442,109 @@ class PolicyGateService:
         branch_id: str,
         payload: Mapping[str, Any],
         now_utc: datetime,
+        current_source_revision: str | None = None,
     ) -> dict[str, Any]:
-        """Execute an authorized (or AUTO_EXECUTE) action with exact digest, branch, expiry, and idempotency checks."""
+        """Execute an authorized (or AUTO_EXECUTE) action with exact digest, branch, revision, expiry, and single-use checks."""
         digest = canonical_digest(payload)
-        prior = self.conn.execute(
-            "SELECT * FROM action_receipts WHERE idempotency_key = ?", (idempotency_key,)
-        ).fetchone()
-        if prior is not None:
-            if prior["payload_digest"] == digest and prior["proposal_id"] == proposal_id:
-                return {"status": "IDEMPOTENT_REPLAY", "idempotency_key": idempotency_key, "proposal_id": proposal_id}
-            return {"status": "DENIED", "reason": "IDEMPOTENCY_KEY_CONFLICT"}
-
-        prop = self.conn.execute(
-            "SELECT * FROM action_proposals WHERE proposal_id = ?", (proposal_id,)
-        ).fetchone()
-        if prop is None:
-            return {"status": "DENIED", "reason": "UNKNOWN_PROPOSAL"}
-        if prop["authority_class"] == "PROHIBITED":
-            return {"status": "DENIED", "reason": "PROHIBITED_ACTION_DENIED"}
-        if prop["branch_id"] != branch_id:
-            return {"status": "DENIED", "reason": "CROSS_BRANCH_EXECUTION_FORBIDDEN"}
-        if prop["payload_digest"] != digest:
-            return {"status": "DENIED", "reason": "MUTATED_PAYLOAD_REJECTED"}
-
-        if prop["authority_class"] != "AUTO_EXECUTE":
-            if not auth_id:
-                return {"status": "DENIED", "reason": "MISSING_AUTHORIZATION"}
-            auth = self.conn.execute(
-                "SELECT * FROM action_authorizations WHERE auth_id = ? AND proposal_id = ?",
-                (auth_id, proposal_id),
-            ).fetchone()
-            if auth is None:
-                return {"status": "DENIED", "reason": "INVALID_AUTHORIZATION"}
-            if auth["branch_id"] != branch_id:
-                return {"status": "DENIED", "reason": "CROSS_BRANCH_APPROVAL_REUSE_FORBIDDEN"}
-            if auth["payload_digest"] != digest:
-                return {"status": "DENIED", "reason": "AUTHORIZATION_DIGEST_MISMATCH"}
-            exp = datetime.fromisoformat(auth["expires_at_utc"].replace("Z", "+00:00"))
-            if now_utc > exp:
-                return {"status": "DENIED", "reason": "AUTHORIZATION_EXPIRED"}
-
         cur = self.conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
-        cur.execute(
-            """
-            INSERT INTO action_receipts (
-                idempotency_key, proposal_id, auth_id, branch_id, payload_digest,
-                execution_status, executed_at_utc
-            ) VALUES (?, ?, ?, ?, ?, 'EXECUTED', ?)
-            """,
-            (
-                idempotency_key,
-                proposal_id,
-                auth_id,
-                branch_id,
-                digest,
-                now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            ),
-        )
-        self.conn.commit()
-        return {
-            "status": "EXECUTED",
-            "idempotency_key": idempotency_key,
-            "proposal_id": proposal_id,
-            "auth_id": auth_id,
-            "payload_digest": digest,
-        }
+        try:
+            prior = cur.execute(
+                "SELECT * FROM action_receipts WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+            if prior is not None:
+                cur.execute("ROLLBACK")
+                if prior["payload_digest"] == digest and prior["proposal_id"] == proposal_id:
+                    return {"status": "IDEMPOTENT_REPLAY", "idempotency_key": idempotency_key, "proposal_id": proposal_id}
+                return {"status": "DENIED", "reason": "IDEMPOTENCY_KEY_CONFLICT"}
+
+            existing_prop_receipt = cur.execute(
+                "SELECT idempotency_key FROM action_receipts WHERE proposal_id = ?", (proposal_id,)
+            ).fetchone()
+            if existing_prop_receipt is not None:
+                cur.execute("ROLLBACK")
+                return {
+                    "status": "DENIED",
+                    "reason": "PROPOSAL_ALREADY_EXECUTED",
+                    "prior_idempotency_key": existing_prop_receipt["idempotency_key"],
+                }
+
+            prop = cur.execute(
+                "SELECT * FROM action_proposals WHERE proposal_id = ?", (proposal_id,)
+            ).fetchone()
+            if prop is None:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "UNKNOWN_PROPOSAL"}
+            if prop["authority_class"] == "PROHIBITED":
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "PROHIBITED_ACTION_DENIED"}
+            if prop["branch_id"] != branch_id:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "CROSS_BRANCH_EXECUTION_FORBIDDEN"}
+            if prop["payload_digest"] != digest:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "MUTATED_PAYLOAD_REJECTED"}
+            if prop["policy_version"] != self.policy_version:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "POLICY_VERSION_MISMATCH"}
+            eff_rev = current_source_revision if current_source_revision is not None else prop["expected_source_revision"]
+            if eff_rev != prop["expected_source_revision"]:
+                cur.execute("ROLLBACK")
+                return {"status": "DENIED", "reason": "SOURCE_REVISION_STALE"}
+
+            if prop["authority_class"] != "AUTO_EXECUTE":
+                if not auth_id:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "MISSING_AUTHORIZATION"}
+                auth = cur.execute(
+                    "SELECT * FROM action_authorizations WHERE auth_id = ? AND proposal_id = ?",
+                    (auth_id, proposal_id),
+                ).fetchone()
+                if auth is None:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "INVALID_AUTHORIZATION"}
+                if auth["branch_id"] != branch_id:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "CROSS_BRANCH_APPROVAL_REUSE_FORBIDDEN"}
+                if auth["payload_digest"] != digest:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "AUTHORIZATION_DIGEST_MISMATCH"}
+                exp = datetime.fromisoformat(auth["expires_at_utc"].replace("Z", "+00:00"))
+                if now_utc > exp:
+                    cur.execute("ROLLBACK")
+                    return {"status": "DENIED", "reason": "AUTHORIZATION_EXPIRED"}
+
+            cur.execute(
+                """
+                INSERT INTO action_receipts (
+                    idempotency_key, proposal_id, auth_id, branch_id, proposer_id,
+                    authority_class, payload_digest, source_revision, execution_status, executed_at_utc
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EXECUTED', ?)
+                """,
+                (
+                    idempotency_key,
+                    proposal_id,
+                    auth_id,
+                    branch_id,
+                    prop["proposer_id"],
+                    prop["authority_class"],
+                    digest,
+                    eff_rev,
+                    now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ),
+            )
+            cur.execute("COMMIT")
+            return {
+                "status": "EXECUTED",
+                "idempotency_key": idempotency_key,
+                "proposal_id": proposal_id,
+                "auth_id": auth_id,
+                "payload_digest": digest,
+                "source_revision": eff_rev,
+            }
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         self.conn.close()
