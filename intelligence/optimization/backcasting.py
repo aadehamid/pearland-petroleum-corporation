@@ -35,16 +35,22 @@ def evaluate_lp_setpoints_in_wp1_physics(
     lp_result: Mapping[str, Any],
     inputs: PlanningLPInputs,
     compressor_circ_fraction: float,
-    h2_allocable_t_per_day: float,
+    h2_allocable_t_per_day: float | None = None,
     rvp_cap_psi: float | None = None,
 ) -> dict[str, Any]:
     """Closed-loop check: bind LP setpoints to `inputs` and evaluate in mechanistic WP-1 EQ-05 & EQ-08 physics."""
     comp_frac = _require_finite("compressor_circ_fraction", compressor_circ_fraction)
     if not (0.0 <= comp_frac <= 1.0):
         raise ValueError(f"compressor_circ_fraction must be in [0, 1], got {comp_frac!r}")
-    h2_alloc = _require_finite("h2_allocable_t_per_day", h2_allocable_t_per_day)
-    if h2_alloc < 0.0:
-        raise ValueError(f"h2_allocable_t_per_day must be non-negative, got {h2_alloc!r}")
+    h2_arg = (
+        inputs.h2_hcu_headroom_t_per_day
+        if h2_allocable_t_per_day is None
+        else _require_finite("h2_allocable_t_per_day", h2_allocable_t_per_day)
+    )
+    if h2_arg < 0.0:
+        raise ValueError(f"h2_allocable_t_per_day must be non-negative, got {h2_arg!r}")
+    # Enforce the tighter of caller-supplied allocable H2 and the scenario's pinned headroom cap (SCN-A-H2CONT)
+    effective_h2_alloc = min(h2_arg, inputs.h2_hcu_headroom_t_per_day)
     effective_rvp_cap = (
         inputs.bob_rvp_max_psi if rvp_cap_psi is None else _require_finite("rvp_cap_psi", rvp_cap_psi)
     )
@@ -85,11 +91,23 @@ def evaluate_lp_setpoints_in_wp1_physics(
     if inputs.fixed_hcu_bpd is not None and abs(hcu_feed - inputs.fixed_hcu_bpd) > 1e-6:
         violations.append(f"HCU_FIXED_FEED_MISMATCH ({hcu_feed:.1f} != {inputs.fixed_hcu_bpd:.1f})")
 
+    implied_h2_used = (hcu_feed / 1000.0) * inputs.hcu_h2_intensity_t_per_kbbl
+    if implied_h2_used > inputs.h2_hcu_headroom_t_per_day + 1e-6:
+        violations.append(
+            f"H2_SCENARIO_HEADROOM_EXCEEDED ({implied_h2_used:.3f} > {inputs.h2_hcu_headroom_t_per_day:.3f} t/day)"
+        )
+    if "h2_used_hcu_t_per_day" in sp:
+        reported_h2 = _require_finite("h2_used_hcu_t_per_day", sp["h2_used_hcu_t_per_day"])
+        if reported_h2 > inputs.h2_hcu_headroom_t_per_day + 1e-6:
+            violations.append(
+                f"H2_REPORTED_HEADROOM_EXCEEDED ({reported_h2:.3f} > {inputs.h2_hcu_headroom_t_per_day:.3f} t/day)"
+            )
+
     hcu_chk = eq.hcu_evaluate(
         requested_feed_bbl_per_day=hcu_feed,
         mech_cap_bbl_per_day=40000.0,
         compressor_circ_fraction=comp_frac,
-        h2_allocable_t_per_day=h2_alloc,
+        h2_allocable_t_per_day=effective_h2_alloc,
         fixture_mode=True,
     )
     if not hcu_chk["feasible"]:
@@ -109,12 +127,16 @@ def evaluate_lp_setpoints_in_wp1_physics(
         )
 
     hcu_ulsd_bpd = float(hcu_chk["outputs"]["ulsd"]["volume_bbl_per_day"])
+    actual_feed_bpd = float(hcu_chk["actual_feed_bbl_per_day"])
+    hcu_ulsd_yield: float | None = (hcu_ulsd_bpd / actual_feed_bpd) if actual_feed_bpd > 0.0 else None
     return {
         "closed_loop_feasible": not violations,
         "violations": violations,
         "hcu_mechanistic_ulsd_bpd": hcu_ulsd_bpd,
-        "hcu_mechanistic_ulsd_yield_vol": (hcu_ulsd_bpd / hcu_feed) if hcu_feed > 0.0 else 0.0,
+        "hcu_mechanistic_actual_feed_bpd": actual_feed_bpd,
+        "hcu_mechanistic_ulsd_yield_vol": hcu_ulsd_yield,
         "hcu_mechanistic_max_feed_bpd": float(hcu_chk["max_feed_bbl_per_day"]),
+        "effective_h2_allocable_t_per_day": effective_h2_alloc,
         "chevron_rvp_psi": nonlin_rvp,
         "linear_rvp_psi": linear_rvp,
         "rvp_nonlinearity_gap_psi": nonlin_rvp - linear_rvp,
@@ -129,7 +151,7 @@ def run_uc3_three_way_backcast(
     actual_realized_margin_usd_per_day: float,
     *,
     compressor_circ_fraction: float = 0.75,
-    h2_allocable_t_per_day: float = 125.0,
+    h2_allocable_t_per_day: float | None = None,
     rvp_cap_psi: float | None = None,
 ) -> dict[str, Any]:
     """Execute EQ-09 three-way backcasting attribution and ground PO-12b calibration gap against WP-1 physics."""
@@ -150,18 +172,20 @@ def run_uc3_three_way_backcast(
     if any(r["feasibility_status"] != "FEASIBLE" for r in (orig_lp, recal_lp, alt_lp)):
         raise ValueError("All three backcasting cases must be feasible for EQ-09 attribution")
 
+    orig_h2 = orig_inputs.h2_hcu_headroom_t_per_day if h2_allocable_t_per_day is None else h2_allocable_t_per_day
+    recal_h2 = recal_inputs.h2_hcu_headroom_t_per_day if h2_allocable_t_per_day is None else h2_allocable_t_per_day
     orig_closed_loop = evaluate_lp_setpoints_in_wp1_physics(
         orig_lp,
         orig_inputs,
         compressor_circ_fraction=compressor_circ_fraction,
-        h2_allocable_t_per_day=h2_allocable_t_per_day,
+        h2_allocable_t_per_day=orig_h2,
         rvp_cap_psi=rvp_cap_psi,
     )
     recal_closed_loop = evaluate_lp_setpoints_in_wp1_physics(
         recal_lp,
         recal_inputs,
         compressor_circ_fraction=compressor_circ_fraction,
-        h2_allocable_t_per_day=h2_allocable_t_per_day,
+        h2_allocable_t_per_day=recal_h2,
         rvp_cap_psi=rvp_cap_psi,
     )
 
@@ -180,8 +204,13 @@ def run_uc3_three_way_backcast(
     # recalibrated LP must close WP-1 physics cleanly, and the EQ-09 calibration attribution must be non-zero.
     wp1_ulsd_yield = orig_closed_loop["hcu_mechanistic_ulsd_yield_vol"]
     orig_eff_ulsd = orig_inputs.hcu_ulsd_yield_vol + orig_inputs.delta_hcu_ulsd_yield_vol
-    orig_has_wp1_gap = (not orig_closed_loop["closed_loop_feasible"]) or (abs(orig_eff_ulsd - wp1_ulsd_yield) > 1e-4)
-    recal_matches_wp1_yield = abs(recal_ulsd - wp1_ulsd_yield) < abs(orig_eff_ulsd - wp1_ulsd_yield)
+    orig_has_wp1_gap = (not orig_closed_loop["closed_loop_feasible"]) or (
+        wp1_ulsd_yield is not None and abs(orig_eff_ulsd - wp1_ulsd_yield) > 1e-4
+    )
+    recal_matches_wp1_yield = (
+        wp1_ulsd_yield is not None
+        and abs(recal_ulsd - wp1_ulsd_yield) < abs(orig_eff_ulsd - wp1_ulsd_yield)
+    )
     po12b_world_truth_proven = (
         orig_has_wp1_gap
         and recal_closed_loop["closed_loop_feasible"]

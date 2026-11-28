@@ -185,6 +185,66 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
         self.assertFalse(chk["closed_loop_feasible"])
         self.assertTrue(any("HCU_SCENARIO_CAP_EXCEEDED" in v for v in chk["violations"]))
 
+        # Over-cap request (40,000 bbl/day under 0.75 derate -> actual 30,000 bbl/day) MUST compute yield
+        # on actual_feed_bbl_per_day (~0.442), NOT diluted requested feed (~0.3315); zero feed yields None.
+        scen_40k = PlanningLPInputs(case_id="OVERCAP-40K", branch_id="b1", hcu_max_bpd=40000.0)
+        overcap_sp = {
+            "feasibility_status": "FEASIBLE",
+            "input_digest": scen_40k.input_digest(),
+            "setpoints": {
+                "hcu_feed_bpd": 40000.0,
+                "cdu_total_bpd": 150000.0,
+                "fcc_feed_bpd": 20000.0,
+                "butane_vol_frac": 0.0,
+                "linear_bob_rvp_psi": 6.8,
+            },
+        }
+        overcap_chk = evaluate_lp_setpoints_in_wp1_physics(
+            overcap_sp, scen_40k, compressor_circ_fraction=0.75, h2_allocable_t_per_day=125.0
+        )
+        self.assertFalse(overcap_chk["closed_loop_feasible"])
+        self.assertAlmostEqual(overcap_chk["hcu_mechanistic_actual_feed_bpd"], 30000.0, places=3)
+        self.assertAlmostEqual(overcap_chk["hcu_mechanistic_ulsd_yield_vol"], 0.442, places=3)
+
+        zero_sp = {
+            "feasibility_status": "FEASIBLE",
+            "input_digest": scen_40k.input_digest(),
+            "setpoints": {
+                "hcu_feed_bpd": 0.0,
+                "cdu_total_bpd": 150000.0,
+                "fcc_feed_bpd": 20000.0,
+                "butane_vol_frac": 0.0,
+                "linear_bob_rvp_psi": 6.8,
+            },
+        }
+        zero_chk = evaluate_lp_setpoints_in_wp1_physics(
+            zero_sp, scen_40k, compressor_circ_fraction=1.0, h2_allocable_t_per_day=125.0
+        )
+        self.assertIsNone(zero_chk["hcu_mechanistic_ulsd_yield_vol"])
+
+        # SCN-A-H2CONT: scenario headroom 75 t/day MUST fail closed on 29,000 bbl/day even if caller passes 125 t/day
+        scen_h2 = PlanningLPInputs(
+            case_id="SCN-A-H2CONT-FORGED", branch_id="b1", hcu_max_bpd=30000.0, h2_hcu_headroom_t_per_day=75.0
+        )
+        forged_29k = {
+            "feasibility_status": "FEASIBLE",
+            "input_digest": scen_h2.input_digest(),
+            "setpoints": {
+                "hcu_feed_bpd": 29000.0,
+                "cdu_total_bpd": 150000.0,
+                "fcc_feed_bpd": 20000.0,
+                "butane_vol_frac": 0.0,
+                "linear_bob_rvp_psi": 6.8,
+            },
+        }
+        h2_chk = evaluate_lp_setpoints_in_wp1_physics(
+            forged_29k, scen_h2, compressor_circ_fraction=1.0, h2_allocable_t_per_day=125.0
+        )
+        self.assertFalse(h2_chk["closed_loop_feasible"])
+        self.assertAlmostEqual(h2_chk["effective_h2_allocable_t_per_day"], 75.0, places=6)
+        self.assertTrue(any("H2_SCENARIO_HEADROOM_EXCEEDED" in v for v in h2_chk["violations"]))
+        self.assertTrue(any("HCU_INFEASIBLE" in v for v in h2_chk["violations"]))
+
 
 if __name__ == "__main__":
     unittest.main()
