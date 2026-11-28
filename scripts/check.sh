@@ -95,6 +95,11 @@ uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
   python3 -m unittest tests/test_wp3a_planning_lp.py
 
 echo
+echo "== WP-5 Scenario A vertical slice (SCN-A-T125 & SCN-A-H2CONT end-to-end) =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyomo --with highspy --with numpy --with pyyaml \
+  python3 -m unittest tests/test_wp5_scenario_a.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
