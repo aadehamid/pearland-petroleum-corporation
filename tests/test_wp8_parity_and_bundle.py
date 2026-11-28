@@ -167,6 +167,10 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                 ).encode("utf-8"),
             ),
             (
+                "zlib_corrupt_gap_then_hidden_member",
+                zlib.compress(b"clean") + b"GARBAGEHDR" + zlib.compress(b"evaluation/hidden/keys.json"),
+            ),
+            (
                 "zlib_bomb_exceeding_budget_fails_closed",
                 zlib.compress(b"\x00" * (65 * 1024 * 1024)) + zlib.compress(b"evaluation/hidden/keys.json") + b"\x00pad",
             ),
@@ -201,6 +205,15 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             manifest_json='{"r2_bucket":"pearland-petroleum-corp"}',
         )
         self.assertEqual(attr["findings"][0]["artifact"], "payload:__observable_manifest__")
+
+        # Explicitly pin DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED marker on budget-exceeding bomb
+        bomb_audit = audit_observable_for_hidden_leaks(
+            {"bomb.zlib": zlib.compress(b"\x00" * (65 * 1024 * 1024)) + b"\x00pad"}
+        )
+        self.assertEqual(bomb_audit["leak_audit"]["status"], "FAILED")
+        self.assertTrue(
+            any(f["marker"] == "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED" for f in bomb_audit["findings"])
+        )
 
         # Empty adapter_pins MUST be rejected
         with self.assertRaises(ValueError):

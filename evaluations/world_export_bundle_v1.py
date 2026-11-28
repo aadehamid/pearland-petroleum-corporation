@@ -67,8 +67,21 @@ def _text_views_from_bytes(buf: bytes) -> list[str]:
 _MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024
 
 
+_COMPRESSED_MAGIC_PREFIXES: tuple[bytes, ...] = (b"\x1f\x8b", b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda")
+
+
+def _find_next_magic_offset(buf: bytes) -> int | None:
+    """Return earliest offset > 0 of an embedded gzip/zlib header inside buf, or None."""
+    best: int | None = None
+    for magic in _COMPRESSED_MAGIC_PREFIXES:
+        idx = buf.find(magic, 1)
+        if idx != -1 and (best is None or idx < best):
+            best = idx
+    return best
+
+
 def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
-    """Decompress all members of gzip/zlib/raw-deflate streams; returns (buffers, budget_exceeded)."""
+    """Decompress all members of gzip/zlib/raw-deflate streams (including after corrupt gaps); returns (buffers, budget_exceeded)."""
     results: list[bytes] = []
     budget_exceeded = False
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
@@ -76,12 +89,12 @@ def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
         chunks: list[bytes] = []
         total_out = 0
         while rem:
+            remaining_budget = _MAX_DECOMPRESSED_BYTES - total_out
+            if remaining_budget <= 0:
+                budget_exceeded = True
+                break
             try:
                 dobj = zlib.decompressobj(wbits)
-                remaining_budget = _MAX_DECOMPRESSED_BYTES - total_out
-                if remaining_budget <= 0:
-                    budget_exceeded = True
-                    break
                 part = dobj.decompress(rem, remaining_budget)
                 if dobj.unconsumed_tail:
                     budget_exceeded = True
@@ -99,16 +112,14 @@ def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
                     break
                 rem = nxt
             except Exception:
-                break
+                # If a member already succeeded (or an embedded gzip/zlib header follows garbage),
+                # resume scanning at the next embedded compressed header rather than stopping silently.
+                next_off = _find_next_magic_offset(rem)
+                if next_off is None:
+                    break
+                rem = rem[next_off:]
         if len(chunks) > 1:
             results.append(b"".join(chunks))
-    for decompressor in (gzip.decompress, zlib.decompress):
-        try:
-            unpacked = decompressor(buf)
-            if unpacked:
-                results.append(unpacked)
-        except Exception:
-            pass
     return results, budget_exceeded
 
 
