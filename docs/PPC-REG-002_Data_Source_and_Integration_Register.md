@@ -51,5 +51,5 @@ mapping, SLA, retry, failure behavior, DQ and owner.
 - **SLA:** On-demand vintage pin per release window (daily/weekly historical series pinned by explicit date range).
 - **Retry:** Single 2-second backoff retry on HTTP 429; 60-second request timeout.
 - **Failure behavior:** Fail-closed on HTTP 4xx/5xx (with `api_key` redacted), missing/zero/truncated EIA `total`, duplicate EIA periods, filter mismatches (EIA series ID, EPA NAICS `324110`/state), malformed HURDAT2 rows, missing PHMSA `REPORT_NUMBER` data, or R2 ETag-vs-MD5 mismatch.
-- **DQ:** Recomputable SHA-256 and MD5/ETag per object, non-empty rows, unique EIA periods, filter conformance, and secret-free manifest verification (`tests/test_public_ingest.py`).
+- **DQ:** Recomputable SHA-256 and MD5/ETag per object and manifest, non-empty rows, unique EIA periods ordered for summary stats, per-record filter/ID conformance (note: EPA Envirofacts `PUB_DIM_FACILITY` returns no server-side total count, so pagination runs to exhaustion with per-record validation), and secret-free manifest verification (`tests/test_public_ingest.py`).
 - **Owner:** Refinery Process Modeling & Simulation Engineer (`WP-1` accountable role in `PPC-PLAN-001`).

@@ -171,7 +171,18 @@ class TestPublicIngest(unittest.TestCase):
 
         def fake_upload(key: str, data: bytes, _ctype: str) -> str:
             uploaded[key] = data
-            return hashlib.md5(data).hexdigest()
+            return f'"{hashlib.md5(data).hexdigest()}"'  # quoted ETag format returned by S3/R2
+
+        # Mismatched R2 ETag MUST fail closed
+        with self.assertRaises(RuntimeError):
+            public_ingest.run_public_ingest(
+                vintage="2026-11-28",
+                start_date="2025-01-01",
+                end_date="2025-12-31",
+                eia_api_key="TEST_SECRET_NEVER_STORED",
+                http_get=fake_get,
+                upload_fn=lambda _k, _d, _c: '"00000000000000000000000000000000"',
+            )
 
         manifest = public_ingest.run_public_ingest(
             vintage="2026-11-28",

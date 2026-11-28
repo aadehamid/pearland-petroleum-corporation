@@ -295,6 +295,9 @@ def fetch_epa_ghgrp_state(
             rec_naics = rec.get("naics_code") if rec.get("naics_code") is not None else rec.get("NAICS_CODE")
             if rec_naics is None or str(rec_naics).strip() != "324110":
                 raise ValueError(f"EPA NAICS filter mismatch: requested 324110, got {rec_naics!r}")
+            rec_fac = rec.get("facility_id") if rec.get("facility_id") is not None else rec.get("FACILITY_ID")
+            if rec_fac is None or not str(rec_fac).strip():
+                raise ValueError(f"EPA record missing non-blank facility_id / FACILITY_ID for state {state}")
         records.extend(parsed)
         if len(parsed) < page_size:
             return records
@@ -355,7 +358,7 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
         csv_names = sorted(n for n in zf.namelist() if n.lower().endswith((".csv", ".txt")))
         if not csv_names:
             raise ValueError("PHMSA ZIP archive contains no CSV/TXT data file")
-        matched_member: str | None = None
+        matched_members: list[str] = []
         for member in csv_names:
             with zf.open(member) as fh:
                 text = io.TextIOWrapper(fh, encoding="utf-8-sig", errors="replace")
@@ -366,7 +369,7 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
                 headers = {h.strip().strip('"') for h in first_line.split(delimiter)}
                 if "REPORT_NUMBER" not in headers:
                     continue
-                matched_member = member
+                matched_members.append(member)
                 text.seek(0)
                 reader = csv.DictReader(text, delimiter=delimiter)
                 for row_num, row in enumerate(reader, start=2):
@@ -384,8 +387,7 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
                             "provenance_class": "OBSERVED",
                         }
                     )
-                break
-        if matched_member is None:
+        if not matched_members:
             raise ValueError("PHMSA ZIP archive contains no CSV/TXT member with REPORT_NUMBER header")
     if not rows:
         raise ValueError("PHMSA ZIP archive parsed 0 valid incident rows")
@@ -440,7 +442,7 @@ def run_public_ingest(
     phmsa_zip_bytes: bytes | None = None,
     target_bucket: str = "pearland-petroleum-corp",
 ) -> dict[str, Any]:
-    """Run deterministic public ingestion and return a secret-free OBSERVED vintage manifest."""
+    """Run public ingestion producing deterministic raw data objects and a timestamped OBSERVED manifest."""
     if "hidden" in target_bucket.lower():
         raise ValueError("Public raw ingestion must never target the hidden-truth bucket (ADR-0057)")
     ingested: list[IngestedObject] = []
@@ -512,11 +514,14 @@ def run_public_ingest(
             date_min=periods[0] if periods else None,
             date_max=periods[-1] if periods else None,
         )
-        numeric_pairs = [
-            (str(r.get("period", "")), float(r["value"]))
-            for r in rows
-            if r.get("value") not in (None, "")
-        ]
+        numeric_pairs = sorted(
+            (
+                (str(r.get("period", "")), float(r["value"]))
+                for r in rows
+                if r.get("value") not in (None, "")
+            ),
+            key=lambda pair: pair[0],
+        )
         numeric_vals = [v for _, v in numeric_pairs]
         eia_summary[entry["series_id"]] = {
             "unit": entry["unit"],
