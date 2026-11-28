@@ -4,12 +4,15 @@
 Enforces strict temporal and authorization non-interference matching `check_package.py` fixtures:
 - Parses all ISO-8601 timestamps as timezone-aware UTC datetimes (never lexicographic string compare).
 - Eligibility requires ALL of:
-  1. Active ALLOW grant (with no matching DENY) for `(reader_role, channel, purpose)` at `cutoff`.
+  1. Active ALLOW grant (with no matching DENY) for `(reader_role, channel, purpose)` whose
+     `recorded_at_utc <= cutoff` and whose validity window covers `cutoff`.
   2. `recorded_at_utc <= cutoff` AND `published_at_utc <= cutoff`.
   3. A `DeliveryReceipt` for `(publication_id, reader_role, channel)` with `published_at <= delivered_at <= cutoff`.
   4. An explicit published `ReleaseEvent` (`PUBLISHED`/`SUPERSEDED`) that has NOT been effectively retracted
      by an authorized, delivered retraction event at or before `cutoff` (`DATA-001 §2` L1/X1; earlier
      cutoffs retain the published release; unmapped releases fail closed).
+  5. When `event_time_utc` is supplied, the publication's effective window `[effective_at_utc, effective_end_utc)`
+     covers `event_time_utc`.
 - Selects by immutable `supersession_ordinal` within `(subject_key, branch_id)` — rejecting cycles,
   forked successors, or ordinal ties (`NON_UNIQUE`) rather than guessing by delivery time.
 - Returns `UNKNOWN` only when no publication exists at all for `(subject_key, branch_id)`, and opaque
@@ -124,7 +127,10 @@ def _grant_allows(
             raise ValueError(f"AccessGrant.effect must be 'ALLOW' or 'DENY', got {g.effect!r}")
         if g.role != role or g.channel != channel or g.purpose != purpose:
             continue
-        rec_at = parse_utc_timestamp(g.recorded_at_utc or g.valid_from_utc)
+        # Fail closed when grant recording time is absent (INFO-001 §3 forbids inferring historical permission)
+        if not g.recorded_at_utc:
+            continue
+        rec_at = parse_utc_timestamp(g.recorded_at_utc)
         if rec_at > cutoff:
             continue
         start = parse_utc_timestamp(g.valid_from_utc)

@@ -50,7 +50,7 @@ module po08_noninterference {
     )
   }
 
-  // Mutate only records permanently ineligible at reader_cutoff (future, retracted, or restricted)
+  // Mutate only records permanently ineligible at reader_cutoff (future, unreceipted, retracted, or restricted)
   action mutate_ineligible_in_b = all {
     reader_cutoff' = reader_cutoff,
     reader_has_grant' = reader_has_grant,

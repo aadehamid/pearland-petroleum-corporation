@@ -176,8 +176,8 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
             DeliveryReceipt("BACKDATED-1", "PLANNER", "portal", "2026-06-15T09:31:00Z"),
         ]
         grants = [
-            AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW"),
-            AccessGrant("OPERATOR", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW"),
+            AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW", recorded_at_utc="2026-06-15T00:00:00Z"),
+            AccessGrant("OPERATOR", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW", recorded_at_utc="2026-06-15T00:00:00Z"),
         ]
 
         # 1. Unknown subject -> UNKNOWN (true epistemic gap, P2)
@@ -272,9 +272,22 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
             publications=pubs,
             release_events=release_events,
             receipts=receipts,
-            grants=grants + [AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "DENY")],
+            grants=grants + [AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "DENY", recorded_at_utc="2026-06-15T00:00:00Z")],
         )
         self.assertEqual(denied["status"], "UNRESOLVED")
+
+        # Omitted grant recorded_at_utc MUST fail closed (never infer historical permission)
+        unrecorded_grant = select_reader_as_of(
+            subject_key="LOT:CRUDE-2026-009",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T10:00:00Z",
+            publications=pubs,
+            release_events=release_events,
+            receipts=receipts,
+            grants=[AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW")],
+        )
+        self.assertEqual(unrecorded_grant["status"], "UNRESOLVED")
 
         unmapped_rel = select_reader_as_of(
             subject_key="LOT:CRUDE-2026-009",
