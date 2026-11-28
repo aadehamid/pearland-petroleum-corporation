@@ -47,9 +47,11 @@ buckets:
     isolation_boundary: "restricted_canonical_world_and_blind_evaluation_only"
     must_deny_access_to_buckets:
       - "pearland-petroleum-corp"
+    # Policy declaration per ADR-0053, ADR-0057, and ADR-0060 C5 (not an observed R2 property).
+    # PPC-PLAN-001 WP-1 authorizes generators/ as the canonical world publisher; WP-8B
+    # world_bundle hidden-truth publisher will be appended when that module path is defined.
     permitted_writers:
       - "generators/"
-      - "verification/"
     forbidden_consumers:
       - "integration_pipelines"
       - "operational_retrieval_agents"
