@@ -276,6 +276,7 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("unwrapped", double_bytes),
             ("gzip_nested", gzip.compress(double_bytes)),
             ("short_random_binary_16b", bytes.fromhex("67745c10595a149a95ac435eafe7d5ee")),
+            ("raw_deflate_fluke_12b", bytes.fromhex("8b163cb470eda47542917a80")),
         ):
             double_audit = audit_observable_for_hidden_leaks({f"double_{wrap_name}.zlib": wrapped})
             self.assertEqual(double_audit["leak_audit"]["status"], "FAILED", wrap_name)

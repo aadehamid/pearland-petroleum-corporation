@@ -164,7 +164,7 @@ def _is_printable_text(text: str) -> bool:
 def _is_clean_text(buf: bytes) -> bool:
     """Return True iff buf is clean printable UTF-8, BOM-tagged UTF-16 (any Unicode), BOM-less Latin-1 UTF-16, or UTF-32.
 
-    Per RFC 2781, BOM-less non-Latin-1 UTF-16 cannot be separated from arbitrary 16-bit binary bytes,
+    BOM-less non-Latin-1 UTF-16 cannot be reliably separated from arbitrary 16-bit binary bytes,
     so non-Latin-1 UTF-16 requires a UTF-16 BOM (0xFFFE / 0xFEFF) to pass as clean text while still
     being scanned for hidden-truth markers regardless of BOM.
     """
@@ -212,7 +212,8 @@ def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool,
     """Decompress gzip/zlib members (resuming after garbage gaps between intact gzip/zlib headers) and raw-deflate streams.
 
     Returns ([(buffer, is_speculative), ...], budget_exceeded, fully_decompressed_cleanly).
-    `fully_decompressed_cleanly` is True iff a gzip or zlib pass consumed `buf` cleanly to EOF with no errors.
+    `fully_decompressed_cleanly` is True iff a gzip or zlib pass consumed `buf` cleanly to EOF with no errors,
+    or a raw-deflate pass consumed `buf` cleanly to EOF and produced clean printable text.
     """
     results: list[tuple[bytes, bool]] = []
     budget_exceeded = False
@@ -290,7 +291,8 @@ def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool,
         if len(chunks) > 1:
             results.append((b"".join(chunks), is_raw_probe or had_error))
         if had_clean_member and not had_error and not rem:
-            fully_decompressed_cleanly = True
+            if not is_raw_probe or (chunks and _is_clean_text(b"".join(chunks))):
+                fully_decompressed_cleanly = True
     return results, budget_exceeded, fully_decompressed_cleanly
 
 
