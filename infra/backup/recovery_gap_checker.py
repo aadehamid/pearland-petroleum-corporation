@@ -24,7 +24,7 @@ def _require_nonempty_str(row: Mapping[str, Any], field: str) -> str:
     val = row.get(field)
     if val is None or not str(val).strip():
         raise ValueError(f"Row missing required non-empty binding field {field!r}: {dict(row)!r}")
-    return str(val).strip()
+    return str(val)
 
 
 def _stream_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -157,7 +157,9 @@ def check_recovery_gaps(
             )
             continue
 
-        if str(receipt.get("delivery_key")) != str(row.get("delivery_key")):
+        rec_dkey = _require_nonempty_str(receipt, "delivery_key")
+        rec_dig = _require_nonempty_str(receipt, "payload_digest")
+        if rec_dkey != dkey:
             conflicts.append(
                 {
                     "kind": "DELIVERY_KEY_MISMATCH",
@@ -165,11 +167,11 @@ def check_recovery_gaps(
                     "branch_id": branch,
                     "partition_key": part,
                     "source_sequence": seq,
-                    "outbox_delivery_key": row.get("delivery_key"),
-                    "inbox_delivery_key": receipt.get("delivery_key"),
+                    "outbox_delivery_key": dkey,
+                    "inbox_delivery_key": rec_dkey,
                 }
             )
-        if str(receipt.get("payload_digest")) != str(row.get("payload_digest")):
+        if rec_dig != dig:
             conflicts.append(
                 {
                     "kind": "PAYLOAD_DIGEST_CONFLICT",
@@ -177,15 +179,15 @@ def check_recovery_gaps(
                     "branch_id": branch,
                     "partition_key": part,
                     "source_sequence": seq,
-                    "outbox_digest": row.get("payload_digest"),
-                    "inbox_digest": receipt.get("payload_digest"),
+                    "outbox_digest": dig,
+                    "inbox_digest": rec_dig,
                 }
             )
 
     r2_hw = _normalize_r2_hw(r2_raw_high_water)
     restored_streams = set(outbox_seqs_by_stream) | set(inbox_seqs_by_stream)
     if expected_streams is None:
-        streams_to_check = restored_streams | {k for k, v in r2_hw.items() if v > 0}
+        streams_to_check = restored_streams | set(r2_hw)
         out_of_scope_r2_streams: list[str] = []
     else:
         scoped = {_validate_stream_tuple(s, "expected_streams") for s in expected_streams}
@@ -223,7 +225,7 @@ def check_recovery_gaps(
                     "missing_sequences": missing_in_outbox,
                 }
             )
-        if stream not in r2_hw:
+        if stream not in r2_hw or (r2_hw[stream] == 0 and max_out == 0):
             gaps.append(
                 {
                     "kind": "RECOVERY_GAP_MISSING_R2_EVIDENCE",
