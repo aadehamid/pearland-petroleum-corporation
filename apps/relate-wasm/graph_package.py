@@ -108,7 +108,8 @@ def build_filtered_graph_package(
             "id": node_id,
             "label": str(n["label"]),
             "name": safe_name,
-            "badge": str(n.get("badge", "POTENTIAL_EXPOSURE")),
+            # UX-001 / ADR-0052: graph path nodes ALWAYS carry POTENTIAL_EXPOSURE; never copy MODEL_QUANTIFIED
+            "badge": "POTENTIAL_EXPOSURE",
             "provenance_class": str(n.get("provenance_class", "SYNTHETIC")),
             "properties": clean_props,
         }
@@ -133,7 +134,8 @@ def build_filtered_graph_package(
                 "source": src,
                 "target": dst,
                 "type": str(e["type"]),
-                "badge": str(e.get("badge", "POTENTIAL_EXPOSURE")),
+                # UX-001 / ADR-0052: graph relationship paths ALWAYS carry POTENTIAL_EXPOSURE
+                "badge": "POTENTIAL_EXPOSURE",
                 "provenance_class": str(e.get("provenance_class", "SYNTHETIC")),
             }
         )

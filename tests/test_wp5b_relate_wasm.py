@@ -43,7 +43,7 @@ class TestWP5BRelateWasmExplorer(unittest.TestCase):
                 "branch_id": "baseline",
                 "published_at_utc": "2026-06-15T05:00:00.100000-05:00",  # exactly == 10:00:00.100000Z (inclusive)
                 "allowed_roles": ("Planner", "Executive"),
-                "badge": "POTENTIAL_EXPOSURE",
+                "badge": "MODEL_QUANTIFIED",  # caller badge spoof MUST be forced back to POTENTIAL_EXPOSURE!
             },
             {
                 "id": "STR-ROLE-LEAK",
@@ -97,6 +97,7 @@ class TestWP5BRelateWasmExplorer(unittest.TestCase):
                 "branch_id": "baseline",
                 "published_at_utc": "2026-06-15T08:16:00Z",
                 "allowed_roles": ("Planner", "Executive"),
+                "badge": "MODEL_QUANTIFIED",  # caller edge badge spoof MUST be forced back to POTENTIAL_EXPOSURE!
             },
             {
                 "source": "4B",
@@ -175,9 +176,11 @@ class TestWP5BRelateWasmExplorer(unittest.TestCase):
             self.assertNotIn(forbidden, raw_bytes)
 
         self.assertEqual([n["id"] for n in pkg["nodes"]], ["4B", "TK-301"])
+        self.assertTrue(all(n["badge"] == "POTENTIAL_EXPOSURE" for n in pkg["nodes"]))
         self.assertEqual(pkg["nodes"][0]["name"], "4B")
         self.assertEqual(pkg["nodes"][0]["properties"], {"unit_code": "4B"})
         self.assertEqual([(e["source"], e["type"], e["target"]) for e in pkg["edges"]], [("4B", "FEEDS", "TK-301")])
+        self.assertTrue(all(e["badge"] == "POTENTIAL_EXPOSURE" for e in pkg["edges"]))
         self.assertEqual([c["card_id"] for c in pkg["model_quantified_cards"]], ["CARD-1"])
         self.assertEqual(pkg["model_quantified_cards"][0]["badge"], "MODEL_QUANTIFIED")
         self.assertEqual(mod.reachable_exposure_ids(pkg, "4B"), ["TK-301"])
