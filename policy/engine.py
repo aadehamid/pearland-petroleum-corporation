@@ -231,11 +231,19 @@ class PolicyGateService:
                 "policy_version": self.policy_version,
             }
 
+        has_feed_target = (payload or {}).get("feed_bbl_per_day") is not None or metrics.get("feed_bbl_per_day") is not None
+        has_baseline_feed = (
+            (payload or {}).get("baseline_feed_bbl_per_day") is not None
+            or metrics.get("baseline_feed_bbl_per_day") is not None
+        )
+        unverifiable_feed_target = has_feed_target and not has_baseline_feed
+
         if action_type in classes["AUTO_EXECUTE"]["allowed_actions"]:
             auto_lim = classes["AUTO_EXECUTE"]["limits"]
             max_hr = int(auto_lim["max_executions_per_agent_per_logical_hour"])
             exceeds_auto_limits = (
-                abs(float(eff_metrics.get("volume_bbl_60f") or 0.0)) > float(auto_lim["max_volume_bbl_60f"])
+                unverifiable_feed_target
+                or abs(float(eff_metrics.get("volume_bbl_60f") or 0.0)) > float(auto_lim["max_volume_bbl_60f"])
                 or abs(float(eff_metrics.get("margin_effect_usd") or 0.0)) > float(auto_lim["max_margin_effect_usd"])
                 or abs(float(eff_metrics.get("notional_usd") or 0.0)) > float(auto_lim["max_notional_usd"])
                 or abs(float(eff_metrics.get("rate_change_bbl_per_day") or 0.0)) > 0.0
@@ -269,16 +277,9 @@ class PolicyGateService:
             # Exceeding AUTO_EXECUTE zero-effect limits falls through to higher-tier evaluation/escalation!
 
         required = REQUIRED_ACTION_METRICS.get(action_type, ("margin_effect_usd",))
-        has_feed_target = (payload or {}).get("feed_bbl_per_day") is not None or metrics.get("feed_bbl_per_day") is not None
-        has_baseline_feed = (
-            (payload or {}).get("baseline_feed_bbl_per_day") is not None
-            or metrics.get("baseline_feed_bbl_per_day") is not None
-        )
         # Under ADR-0056 global_invariants.missing_estimate_counts_as_exceeded, omitting baseline_feed_bbl_per_day
         # when feed_bbl_per_day is specified leaves the feed change magnitude (increase or cut) unverifiable.
-        missing_required = any(eff_metrics.get(k) is None for k in required) or (
-            has_feed_target and not has_baseline_feed
-        )
+        missing_required = any(eff_metrics.get(k) is None for k in required) or unverifiable_feed_target
 
         margin_usd = eff_metrics.get("margin_effect_usd")
         vol_bbl = eff_metrics.get("volume_bbl_60f")

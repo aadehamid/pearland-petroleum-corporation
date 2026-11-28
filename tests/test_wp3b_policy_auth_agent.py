@@ -372,10 +372,10 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 )
                 self.assertEqual(p_nobase_inc["authority_class"], "ESCALATE")
 
-                # Unverifiable cut (feed_bbl_per_day=3000 without baseline) AND non-feed action with attested 30%
-                # both preserve attested metrics and trigger missing_estimate_counts_as_exceeded -> ESCALATE!
-                p_nobase_cut = gate.submit_proposal(
-                    proposal_id="PROP-NO-BASELINE-CUT-3K",
+                # Small baseline-free feed_bbl_per_day=3000 is direction-blind (unverifiable magnitude), and
+                # non-feed or AUTO_EXECUTE actions carrying baseline-free feed_bbl_per_day also escalate!
+                p_nobase_small = gate.submit_proposal(
+                    proposal_id="PROP-NO-BASELINE-SMALL-3K",
                     branch_id="baseline",
                     action_type="feed_rate_change_inside_envelope",
                     proposer_id="usr-agent-1",
@@ -384,7 +384,19 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                     metrics={"margin_effect_usd": 5.0, "rate_change_bbl_per_day": 100.0, "rate_change_pct": 0.5},
                     now_utc=t0 + timedelta(minutes=12),
                 )
-                self.assertEqual(p_nobase_cut["authority_class"], "ESCALATE")
+                self.assertEqual(p_nobase_small["authority_class"], "ESCALATE")
+
+                p_auto_nobase = gate.submit_proposal(
+                    proposal_id="PROP-AUTO-NO-BASELINE-3K",
+                    branch_id="baseline",
+                    action_type="raise_alert",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"feed_bbl_per_day": 3000.0},
+                    metrics={},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_auto_nobase["authority_class"], "ESCALATE")
 
                 p_mode_nobase = gate.submit_proposal(
                     proposal_id="PROP-MODE-NO-BASELINE-3K",
