@@ -80,14 +80,24 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
         self.assertEqual(conflict["status"], "RECOVERY_GAP")
         self.assertEqual(conflict["conflicts"][0]["kind"], "PAYLOAD_DIGEST_CONFLICT")
 
+        # 8. Multi-partition streams (same source+branch, distinct partition_key) MUST pass CLEAN (PPC-INT-001 §2)
+        multi_part_outbox = [
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P1", "source_sequence": 1, "delivery_key": "k1:p1", "payload_digest": "d1"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P1", "source_sequence": 2, "delivery_key": "k2:p1", "payload_digest": "d2"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P2", "source_sequence": 1, "delivery_key": "k1:p2", "payload_digest": "d3"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P2", "source_sequence": 2, "delivery_key": "k2:p2", "payload_digest": "d4"},
+        ]
+        multi_part_inbox = [dict(r) for r in multi_part_outbox]
+        self.assertEqual(check_recovery_gaps(multi_part_outbox, multi_part_inbox)["status"], "CLEAN")
+
     def test_sqlite_stub_writer_corruption_and_restore_drill_passes(self):
         result = run_sqlite_stub_restore_drill(row_count=25)
         self.assertEqual(result["status"], "PASSED")
         self.assertEqual(result["provenance_class"], "SYNTHETIC")
         self.assertTrue(result["hash_equal"])
-        self.assertTrue(result["rto_within_1h_target"])
+        self.assertEqual(result["stub_drill_scope"], "sqlite_only_baseline_not_wp4b_live_rto_proof")
         self.assertEqual(result["recovery_gap_status"], "CLEAN")
-        self.assertLess(result["rto_seconds"], 60.0)
+        self.assertLess(result["stub_drill_elapsed_seconds"], 60.0)
 
 
 if __name__ == "__main__":

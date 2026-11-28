@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""WP-4A baseline per-store stub-writer backup and restore drill (ADR-0051, ADR-0055).
+"""WP-4A baseline SQLite-only stub-writer backup and restore drill (ADR-0051, ADR-0055).
 
 Creates a deterministic SQLite operational store with transactional outbox rows,
 snapshots it to a backup artifact, records pre-restore canonical SHA-256 state hash,
-corrupts the live DB file, restores from the backup artifact, measures RTO, and
-verifies exact pre/post state-hash parity plus zero RECOVERY_GAPs.
+corrupts the live DB file, restores from the backup artifact, times restore plus
+RECOVERY_GAP verification, and verifies exact pre/post state-hash parity. Full
+multi-store live RTO <= 1 hour qualification at Slice 1 data volume runs in WP-4B.
 """
 from __future__ import annotations
 
@@ -112,8 +113,8 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
             "pre_restore_sha256": pre_digest,
             "post_restore_sha256": post_digest,
             "hash_equal": pre_digest == post_digest,
-            "rto_seconds": round(rto_seconds, 6),
-            "rto_within_1h_target": rto_seconds <= 3600.0,
+            "stub_drill_elapsed_seconds": round(rto_seconds, 6),
+            "stub_drill_scope": "sqlite_only_baseline_not_wp4b_live_rto_proof",
             "recovery_gap_status": gap_report["status"],
             "status": "PASSED" if passed else "FAILED",
         }
