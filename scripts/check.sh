@@ -30,6 +30,7 @@ echo "== check guard and pre-push hook =="
 echo
 echo "== ADR graph =="
 (cd scripts && python3 -m unittest -q test_adr_graph)
+python3 scripts/adr_graph.py check
 python3 scripts/adr_graph.py summary
 
 echo
