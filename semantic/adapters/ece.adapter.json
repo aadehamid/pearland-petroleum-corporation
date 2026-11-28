@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "adapter_id": "ppc-adapter-ece",
+  "adapter_version": "0.1.0",
+  "upstream_short_name": "ECE",
+  "upstream_repo_slug": "aadehamid/enterprise-context-engineering",
+  "former_repo_slug": null,
+  "upstream_repo_url": "https://github.com/aadehamid/enterprise-context-engineering",
+  "pinned_commit": "750b398b6a50aedd552a72056d09cf1ccf6a296a",
+  "pinned_commit_date": "2026-11-08T08:11:16Z",
+  "aligned_main_commit": "9754af9a75412d0a544bc7a70a6e81b2b71e4d01",
+  "maturity_status": "PROVISIONAL_COMMIT_PIN",
+  "approved_upstream_release": null,
+  "pending_upstream_dependencies": [
+    "ECE published reusable JSON Schema package for evidence, claims, and decision dossiers"
+  ],
+  "qualification_cap": "QUALIFIED_PROVISIONAL",
+  "consumed_artifacts": [
+    {
+      "name": "EPM-ECE-PPC Operating Model",
+      "upstream_path": "docs/architecture/epm-ece-ppc-operating-model.md",
+      "contract_role": "Three-repository boundary and evidence/provenance authority",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "ECE Solution Architecture",
+      "upstream_path": "docs/architecture/solution-architecture.md",
+      "contract_role": "Evidence, epistemic status, temporal cutoff, and blind evaluation patterns",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "ECE Ontology Reuse Baseline",
+      "upstream_path": "docs/architecture/ontology-reuse-baseline.md",
+      "contract_role": "PROV-O and semantic provenance reuse conventions",
+      "status": "CONSUMED_PROVISIONAL"
+    }
+  ],
+  "ppc_owner_boundary": "PPC generates fictional Refinery A evidence corpora, role-scoped dossiers, and blind evaluation suites under INFO-001 §3 and PPC-EVID-001; ECE retains authority over reusable context-engineering patterns (PPC-016, ADR-0042, ADR-0053).",
+  "provenance_class": "OBSERVED"
+}

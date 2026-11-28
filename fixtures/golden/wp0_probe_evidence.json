@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0.0",
+  "probe_suite": "PPC-WP0-STORAGE-AND-PORTABILITY-PROBES",
+  "executed_at_utc": "2026-11-28T06:23:28Z",
+  "provenance_class": "OBSERVED",
+  "governing_adrs": [
+    "ADR-0045",
+    "ADR-0051",
+    "ADR-0053",
+    "ADR-0055",
+    "ADR-0057"
+  ],
+  "environment": {
+    "python_version": "3.12.13",
+    "platform": "macOS-27.2.1-arm64-i386-64bit"
+  },
+  "r2_two_bucket_isolation": {
+    "status": "PASSED",
+    "operational_bucket": "pearland-petroleum-corp",
+    "hidden_bucket": "pearland-petroleum-hidden",
+    "checks": [
+      {
+        "check": "hidden_token_put_get_hidden_bucket",
+        "result": "PASS"
+      },
+      {
+        "check": "standard_token_get_hidden_bucket",
+        "result": "PASS_DENIED",
+        "http_status": 403,
+        "error_code": "AccessDenied"
+      },
+      {
+        "check": "standard_token_list_hidden_bucket",
+        "result": "PASS_DENIED",
+        "http_status": 403,
+        "error_code": "AccessDenied"
+      },
+      {
+        "check": "standard_token_put_hidden_bucket",
+        "result": "PASS_DENIED",
+        "http_status": 403,
+        "error_code": "AccessDenied"
+      },
+      {
+        "check": "standard_token_put_get_standard_bucket",
+        "result": "PASS"
+      },
+      {
+        "check": "hidden_token_list_standard_bucket",
+        "result": "PASS_DENIED",
+        "http_status": 403,
+        "error_code": "AccessDenied"
+      },
+      {
+        "check": "hidden_token_put_standard_bucket",
+        "result": "PASS_DENIED",
+        "http_status": 403,
+        "error_code": "AccessDenied"
+      }
+    ]
+  },
+  "delta_rs_r2_and_duckdb": {
+    "table_uri_pattern": "s3://pearland-petroleum-corp/_probe/wp0_delta_<run_tag>/kpi_probe",
+    "aws_conditional_put": "etag",
+    "dagster_concurrency_pool_key": "ppc/delta_table",
+    "dagster_concurrency_pool_limit": 1,
+    "initial_version": 0,
+    "txn_app_id": "ppc-wp0-probe",
+    "txn_version": 1,
+    "duckdb_readonly_initial_parity": true,
+    "etag_if_none_match_conflict": {
+      "http_status": 412,
+      "error_code": "PreconditionFailed",
+      "target_key": "_probe/wp0_delta_e233d82d481a/kpi_probe/_delta_log/00000000000000000000.json"
+    },
+    "concurrent_overwrite_race": {
+      "max_commit_retries": 0,
+      "committed": 1,
+      "rejected": 1,
+      "outcomes": [
+        {
+          "writer_id": 1,
+          "status": "COMMITTED",
+          "detail": ""
+        },
+        {
+          "writer_id": 2,
+          "status": "REJECTED",
+          "detail": "CommitFailedError: Failed to commit transaction: 0"
+        }
+      ]
+    },
+    "final_version": 1,
+    "final_row_count": 3
+  },
+  "databricks_free_edition_sync": {
+    "status": "PASSED",
+    "mechanism": "duckdb_r2_delta_export_to_parquet -> databricks_files_api_uc_volume -> ctas_using_delta_read_files",
+    "workspace_host": "https://dbc-6bb444e3-168a.cloud.databricks.com",
+    "target_catalog": "workspace",
+    "probe_schema": "ppc_wp0_probe",
+    "files_api_put_http_status": 204,
+    "staged_parquet_bytes": 806,
+    "staged_parquet_sha256": "48fddcc2c38206eb2aa623aa57e3dd3c29f0b6f271b3ff7b2c51ae6d738b4e79",
+    "table_format": "delta",
+    "num_files": 1,
+    "row_count": 3,
+    "duckdb_to_databricks_row_parity": true,
+    "cleanup_completed": true
+  },
+  "evidence_sha256": "db7e0ef4bac279b71753813f6956142be6bcd700c86d8ff3119075c9b57e0ce9"
+}

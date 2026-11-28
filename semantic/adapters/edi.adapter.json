@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "adapter_id": "ppc-adapter-edi",
+  "adapter_version": "0.1.0",
+  "upstream_short_name": "EDI",
+  "upstream_repo_slug": "aadehamid/engineering-drawing-intelligence",
+  "former_repo_slug": "aadehamid/Engineering_Drawing_to_Graph",
+  "upstream_repo_url": "https://github.com/aadehamid/engineering-drawing-intelligence",
+  "pinned_commit": "12a4a6a6f715c7db76a26d763cb1938d6cf0cc05",
+  "pinned_commit_date": "2026-11-08T17:37:05Z",
+  "aligned_main_commit": "0757da0695ff953f97b702fde0f0b6dd2a76e558",
+  "maturity_status": "PROVISIONAL_COMMIT_PIN",
+  "approved_upstream_release": null,
+  "pending_upstream_dependencies": [
+    "EDI flat-drawing PDF/CAD extraction pipeline release (GAP-005)"
+  ],
+  "qualification_cap": "QUALIFIED_PROVISIONAL",
+  "consumed_artifacts": [
+    {
+      "name": "EDI Canonical Engineering World Schema",
+      "upstream_path": "schemas/canonical-world.schema.json",
+      "contract_role": "Structured DEXPI equipment, functional position, connector, and revision contract",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "EDI Data Contracts",
+      "upstream_path": "docs/LIONG-005-data-contracts.md",
+      "contract_role": "Engineering publication, review receipt, and directed topology boundary",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "EDI Transactional Outbox Contract",
+      "upstream_path": "schemas/outbox.sql",
+      "contract_role": "Structured revision publication outbox compatibility",
+      "status": "CONSUMED_PROVISIONAL"
+    }
+  ],
+  "ppc_owner_boundary": "PPC authors Refinery A baseline engineering configuration CFG-0 and owns branch-scoped configuration adoption receipts; EDI owns reusable structured DEXPI publication and drawing-extraction contracts (PPC-EDI-001, ADR-0042).",
+  "provenance_class": "OBSERVED"
+}

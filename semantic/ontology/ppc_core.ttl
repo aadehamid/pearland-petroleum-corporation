@@ -1,0 +1,65 @@
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix ppc:  <https://ppc.local/ontology/core#> .
+
+# PPC Core Ontology Scaffold (WP-0, ADR-0042, ADR-0044)
+# Formal semantic source of truth lives in Git Turtle validated by pyshacl before
+# projecting into Neo4j Community. Generic downstream business-process IRIs remain
+# explicitly pending until the separate upstream ds-business-process/1.0 release lands.
+
+<https://ppc.local/ontology/core>
+    a owl:Ontology ;
+    rdfs:label "Pearland Petroleum Corporation Core Ontology Scaffold"@en ;
+    owl:versionInfo "0.1.0-wp0-provisional" ;
+    rdfs:comment "WP-0 provisional semantic scaffold for Refinery A v1 entities and governance records. Does not redefine EPM performance meaning or claim approved DS_Business_Process bindings."@en .
+
+ppc:Site a owl:Class ;
+    rdfs:label "Site"@en ;
+    rdfs:comment "Physical downstream facility site (Refinery A in v1; additive site_id supports future Refinery B)."@en .
+
+ppc:ProcessUnit a owl:Class ;
+    rdfs:label "Process Unit"@en ;
+    rdfs:comment "Refinery processing unit or declared bounded Option A interface unit (ADR-0054)."@en .
+
+ppc:StorageTank a owl:Class ;
+    rdfs:label "Storage Tank"@en ;
+    rdfs:comment "Physical crude, intermediate, or finished product storage tank control volume."@en .
+
+ppc:SourceRecord a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Source Record"@en ;
+    rdfs:comment "Assertion recorded by an independent operational or business application at its own lifecycle stage."@en .
+
+ppc:ReleaseManifest a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Release Manifest"@en ;
+    rdfs:comment "Immutable record pinning world version, branch, source watermarks, Delta snapshots, and semantic digests."@en .
+
+ppc:DecisionDossier a owl:Class ;
+    rdfs:subClassOf prov:Entity ;
+    rdfs:label "Decision Dossier"@en ;
+    rdfs:comment "Historical decision record pinned to a reader-as-of knowledge cutoff, policy version, and evidence release."@en .
+
+ppc:siteId a owl:DatatypeProperty ;
+    rdfs:domain ppc:Site ;
+    rdfs:range xsd:string ;
+    rdfs:label "site identifier"@en .
+
+ppc:provenanceClass a owl:DatatypeProperty ;
+    rdfs:range xsd:string ;
+    rdfs:label "provenance class"@en ;
+    rdfs:comment "Allowed values: OBSERVED, DERIVED, ESTIMATED, SYNTHETIC, SCENARIO_ASSUMPTION."@en .
+
+ppc:locatedAtSite a owl:ObjectProperty ;
+    rdfs:domain ppc:ProcessUnit ;
+    rdfs:range ppc:Site ;
+    rdfs:label "located at site"@en .
+
+ppc:RefineryA a ppc:Site ;
+    rdfs:label "Refinery A"@en ;
+    ppc:siteId "SITE-REF-A" ;
+    ppc:provenanceClass "SYNTHETIC" .

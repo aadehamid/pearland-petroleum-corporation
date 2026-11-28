@@ -1,0 +1,123 @@
+# PPC Action Authority Policy Thresholds (ADR-0056 G3-b, G3-a)
+# Provenance: SYNTHETIC governance configuration locked by ADR-0056 (2026-11-26).
+# Enforced server-side in PostgreSQL ACID transactions; never delegated to an LLM prompt.
+
+policy_version: "1.0.0"
+effective_date: "2026-11-26"
+governing_adrs:
+  - "ADR-0048"
+  - "ADR-0055"
+  - "ADR-0056"
+  - "ADR-0057"
+provenance_class: "SYNTHETIC"
+
+measurement_basis:
+  volume_unit: "bbl_60F"
+  volume_reference_temperature_f: 60.0
+  volume_reference_pressure_psia: 14.696
+  currency: "USD"
+  margin_effect_source: "RELEASED_MODEL_RUN_ABSOLUTE_USD"
+  notional_value_formula: "volume_bbl_60F * pinned_price_usd_per_bbl"
+
+global_invariants:
+  proposer_cannot_approve: true
+  agent_cannot_approve: true
+  exceeding_any_limit_escalates_tier: true
+  missing_estimate_counts_as_exceeded: true
+  simulation_in_scenario_branch_is_read_class: true
+  confidence_score_never_resolves_identity_conflict: true
+  identity_steward_role: "IDENTITY_STEWARD"
+  identity_steward_holder: "PPC_OWNER_UNTIL_DELEGATED_IN_WRITING"
+  open_identity_conflict_result: "UNRESOLVED"
+
+authority_classes:
+  AUTO_EXECUTE:
+    outcome: "AUTO_EXECUTED"
+    preapproval_grant_id: "PG-A0-v1"
+    allowed_actions:
+      - "raise_alert"
+      - "open_draft_maintenance_notification"
+      - "request_lims_retest_leaving_hold_unchanged"
+      - "rerun_failed_quality_or_reconciliation_job"
+    limits:
+      max_volume_bbl_60f: 0
+      max_margin_effect_usd: 0
+      max_notional_usd: 0
+      allows_physical_effect: false
+      allows_commercial_effect: false
+      allows_quality_disposition_change: false
+      allows_financial_effect: false
+      max_executions_per_agent_per_logical_hour: 20
+    approver_roles: []
+    expiry_logical_minutes: null
+
+  REQUIRE_APPROVAL_TIER_1:
+    authority_class: "REQUIRE_APPROVAL"
+    tier: 1
+    allowed_actions:
+      - "feed_rate_change_inside_envelope"
+      - "unit_mode_change_inside_envelope"
+      - "cdu_vdu_cut_point_shift"
+      - "in_refinery_tank_transfer"
+    limits:
+      max_rate_change_pct: 10.0
+      max_rate_change_bbl_per_day: 4000
+      max_cut_point_shift_c: 5.0
+      max_transfer_volume_bbl_60f: 25000
+      max_margin_effect_usd: 250000
+    approver_roles:
+      default: "Shift Supervisor"
+    expiry_logical_minutes: 30
+
+  REQUIRE_APPROVAL_TIER_2:
+    authority_class: "REQUIRE_APPROVAL"
+    tier: 2
+    allowed_actions:
+      - "larger_feed_rate_change"
+      - "max_distillate_or_max_gasoline_mode_swing"
+      - "inter_terminal_transfer"
+      - "spot_purchase_or_sale"
+      - "delivery_reschedule"
+      - "reroute_held_lot_to_another_hold"
+    limits:
+      max_cut_point_shift_c: 15.0
+      max_volume_bbl_60f: 50000
+      max_notional_usd: 5000000
+      max_margin_effect_usd: 1000000
+      max_delivery_reschedule_hours: 72
+    approver_roles:
+      physical: "Refinery Operations Manager"
+      commercial: "Commercial Manager"
+    expiry_logical_minutes: 240
+
+  ESCALATE:
+    authority_class: "ESCALATE"
+    triggers:
+      - "exceeds_tier_2_limit"
+      - "contract_allocation"
+      - "force_majeure"
+      - "uncertainty_band_crosses_limit"
+      - "no_feasible_option"
+      - "approver_unavailable"
+    approver_roles:
+      default: "VP Supply and Operations"
+    requires_new_decision_id: true
+
+  PROHIBITED:
+    authority_class: "PROHIBITED"
+    policy_result: "DENIED"
+    agent_path_allowed: false
+    prohibited_actions:
+      - "release_lot_from_quality_hold"
+      - "override_lims_assay"
+      - "override_physical_bound_or_envelope"
+      - "write_ot_setpoint_interlock_or_alarm_limit"
+      - "change_identity_mappings"
+      - "change_authorization_grants"
+      - "change_policy_or_thresholds"
+      - "read_or_write_evaluation_hidden"
+      - "retract_analytical_release"
+      - "delete_raw_data"
+      - "execute_hedge_or_financial_posting"
+      - "reuse_approval_across_branches"
+      - "touch_real_external_system"

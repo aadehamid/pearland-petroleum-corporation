@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/source_event.schema.json",
+  "title": "PPC SourceEvent",
+  "description": "Immutable operational or business source event envelope carrying INFO-001 §3 publication/availability metadata and INT-001 §2 idempotency and partition ordering fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "publication_id",
+    "subject_scope",
+    "scoped_ordinal",
+    "supersedes_publication_id",
+    "event_id",
+    "source_system",
+    "source_incarnation",
+    "native_entity_key",
+    "source_revision",
+    "event_type",
+    "effective_at",
+    "recorded_at",
+    "published_at",
+    "branch_id",
+    "partition_key",
+    "source_sequence",
+    "provenance_class",
+    "access_label",
+    "availability_receipts",
+    "payload_ref",
+    "payload_digest",
+    "producer_identity",
+    "delivery_key",
+    "predecessor_event_id",
+    "correlation_id"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "publication_id": { "type": "string", "minLength": 1 },
+    "subject_scope": { "type": "string", "minLength": 1 },
+    "scoped_ordinal": { "type": "integer", "minimum": 0 },
+    "supersedes_publication_id": { "type": ["string", "null"], "minLength": 1 },
+    "event_id": { "type": "string", "minLength": 1 },
+    "source_system": {
+      "type": "string",
+      "enum": ["ot_historian", "refinery_lims", "commercial_ctrm", "logistics_mysql", "edi_engineering", "external_public"]
+    },
+    "source_incarnation": { "type": "string", "minLength": 1 },
+    "native_entity_key": { "type": "string", "minLength": 1 },
+    "source_revision": { "type": "integer", "minimum": 1 },
+    "event_type": { "type": "string", "minLength": 1 },
+    "effective_at": { "type": "string", "format": "date-time" },
+    "recorded_at": { "type": "string", "format": "date-time" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "partition_key": { "type": "string", "minLength": 1 },
+    "source_sequence": { "type": "integer", "minimum": 0 },
+    "provenance_class": {
+      "type": "string",
+      "enum": ["OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION"]
+    },
+    "access_label": { "type": "string", "minLength": 1 },
+    "availability_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receipt_id", "recipient_role", "channel", "available_at"],
+        "properties": {
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "recipient_role": { "type": "string", "minLength": 1 },
+          "channel": { "type": "string", "minLength": 1 },
+          "available_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "payload_ref": { "type": "string", "minLength": 1 },
+    "payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "producer_identity": { "type": "string", "minLength": 1 },
+    "delivery_key": { "type": "string", "minLength": 1 },
+    "predecessor_event_id": { "type": ["string", "null"], "minLength": 1 },
+    "correlation_id": { "type": "string", "minLength": 1 }
+  }
+}

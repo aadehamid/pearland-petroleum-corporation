@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/world_export_bundle.schema.json",
+  "title": "PPC WorldExportBundle",
+  "description": "Versioned cross-repository export package strictly partitioned into observable/ (for sister repositories ICE, EDI, EPM, ECE) and separately credentialed hidden_truth/ (stored only in the restricted hidden-truth bucket under evaluation/hidden/, ADR-0053, ADR-0057).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "bundle_id",
+    "bundle_version",
+    "world_version",
+    "branch_id",
+    "seed_policy",
+    "created_at",
+    "qualification_verdict",
+    "provenance_class",
+    "upstream_adapter_pins",
+    "observable",
+    "hidden_truth",
+    "leak_audit"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "bundle_id": { "type": "string", "minLength": 1 },
+    "bundle_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "world_version": { "type": "string", "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "seed_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prng_algorithm", "prng_version", "root_seed"],
+      "properties": {
+        "prng_algorithm": { "type": "string", "minLength": 1 },
+        "prng_version": { "type": "string", "minLength": 1 },
+        "root_seed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "qualification_verdict": {
+      "type": "string",
+      "enum": ["DRAFT", "QUALIFIED_PROVISIONAL", "QUALIFIED"]
+    },
+    "provenance_class": {
+      "type": "string",
+      "enum": ["SYNTHETIC", "DERIVED", "SCENARIO_ASSUMPTION"]
+    },
+    "upstream_adapter_pins": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["upstream_repo", "pinned_commit", "adapter_version", "maturity_status"],
+        "properties": {
+          "upstream_repo": { "type": "string", "minLength": 1 },
+          "pinned_commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+          "adapter_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "maturity_status": {
+            "type": "string",
+            "enum": ["PROVISIONAL_COMMIT_PIN", "APPROVED_UPSTREAM_RELEASE"]
+          }
+        }
+      }
+    },
+    "observable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "r2_bucket",
+        "r2_prefix",
+        "delta_tables",
+        "ice_ot_l0",
+        "edi_topology",
+        "epm_kpi_fixtures",
+        "ece_evidence_dossiers"
+      ],
+      "properties": {
+        "r2_bucket": { "type": "string", "minLength": 1, "not": { "pattern": "hidden" } },
+        "r2_prefix": { "type": "string", "pattern": "^exports/world_bundle/observable/.+" },
+        "delta_tables": { "$ref": "#/$defs/artifactRefList" },
+        "ice_ot_l0": { "$ref": "#/$defs/artifactRefList" },
+        "edi_topology": { "$ref": "#/$defs/artifactRefList" },
+        "epm_kpi_fixtures": { "$ref": "#/$defs/artifactRefList" },
+        "ece_evidence_dossiers": { "$ref": "#/$defs/artifactRefList" }
+      }
+    },
+    "hidden_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "r2_bucket",
+        "r2_prefix",
+        "separate_credential_boundary",
+        "canonical_world_snapshots",
+        "evaluation_scoring_keys"
+      ],
+      "properties": {
+        "r2_bucket": { "type": "string", "const": "pearland-petroleum-hidden" },
+        "r2_prefix": { "type": "string", "pattern": "^evaluation/hidden/.+" },
+        "separate_credential_boundary": { "const": true },
+        "canonical_world_snapshots": { "$ref": "#/$defs/artifactRefList" },
+        "evaluation_scoring_keys": { "$ref": "#/$defs/artifactRefList" }
+      }
+    },
+    "leak_audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "checked_at", "hidden_fields_found_in_observable", "audit_sha256"],
+      "properties": {
+        "status": { "type": "string", "enum": ["NOT_RUN", "PASSED", "FAILED"] },
+        "checked_at": { "type": ["string", "null"], "format": "date-time" },
+        "hidden_fields_found_in_observable": { "type": "integer", "minimum": 0 },
+        "audit_sha256": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "PASSED" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "hidden_fields_found_in_observable": { "const": 0 },
+              "checked_at": { "type": "string", "format": "date-time" },
+              "audit_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "hidden_fields_found_in_observable": { "minimum": 1 } },
+            "required": ["hidden_fields_found_in_observable"]
+          },
+          "then": {
+            "properties": { "status": { "const": "FAILED" } }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "qualification_verdict": { "const": "QUALIFIED" } },
+        "required": ["qualification_verdict"]
+      },
+      "then": {
+        "properties": {
+          "upstream_adapter_pins": {
+            "items": {
+              "properties": {
+                "maturity_status": { "const": "APPROVED_UPSTREAM_RELEASE" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifactRefList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path", "sha256", "size_bytes"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "size_bytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

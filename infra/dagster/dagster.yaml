@@ -1,0 +1,17 @@
+# PPC Dagster Instance Configuration (ADR-0045, ADR-0046, ADR-0055)
+# Enforces single-writer Delta concurrency pool = 1 per unique table tag value
+# (`ppc/delta_table`) and stores Dagster run/event/schedule metadata in PostgreSQL.
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 4
+    tag_concurrency_limits:
+      - key: "ppc/delta_table"
+        value:
+          applyLimitPerUniqueValue: true
+        limit: 1
+
+telemetry:
+  enabled: false

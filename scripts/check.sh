@@ -39,6 +39,17 @@ command -v relate >/dev/null 2>&1 || echo "  skip  relate not installed; the mem
 (cd scripts && python3 -m unittest test_memory)
 
 echo
+echo "== WP-0 contracts, schemas, adapters, semantic, and infra =="
+uv run --no-project --with jsonschema --with referencing --with pyyaml --with rdflib --with pyshacl \
+  python3 -m unittest tests/test_wp0_contracts.py
+
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  (cd infra && docker compose --profile all config -q) && echo "  ok  infra/docker-compose.yml parses"
+else
+  echo "  skip  docker compose not available; YAML structure tests above still read docker-compose.yml"
+fi
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"

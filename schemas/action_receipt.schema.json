@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/action_receipt.schema.json",
+  "title": "PPC ActionReceipt",
+  "description": "Idempotent consequential-action execution receipt committed in PostgreSQL ACID transaction with exact authorization basis (human ActionAuthorization ID or AUTO_EXECUTE preapproval grant PG-A0-v1) (PPC-AGENT-001 §1, ADR-0055 G2-c, PO-10).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "proposal_id",
+    "authorization_basis_kind",
+    "authorization_basis_id",
+    "idempotency_key",
+    "source_revisions",
+    "execution_status",
+    "executed_at",
+    "business_effect_id",
+    "blocked_reason",
+    "branch_id"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "receipt_id": { "type": "string", "minLength": 1 },
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "authorization_basis_kind": {
+      "type": "string",
+      "enum": ["HUMAN_AUTHORIZATION", "AUTO_EXECUTE_POLICY_GRANT"]
+    },
+    "authorization_basis_id": { "type": "string", "minLength": 1 },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "source_revisions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": ["EXECUTED", "AUTO_EXECUTED", "BLOCKED", "FAILED"]
+    },
+    "executed_at": { "type": "string", "format": "date-time" },
+    "business_effect_id": { "type": ["string", "null"], "minLength": 1 },
+    "blocked_reason": { "type": ["string", "null"], "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "execution_status": { "enum": ["EXECUTED", "AUTO_EXECUTED"] } } },
+      "then": {
+        "properties": {
+          "business_effect_id": { "type": "string", "minLength": 1 },
+          "blocked_reason": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "execution_status": { "enum": ["BLOCKED", "FAILED"] } } },
+      "then": {
+        "properties": {
+          "business_effect_id": { "type": "null" },
+          "blocked_reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  ]
+}

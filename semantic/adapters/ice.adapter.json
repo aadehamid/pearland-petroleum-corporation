@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0.0",
+  "adapter_id": "ppc-adapter-ice",
+  "adapter_version": "0.1.0",
+  "upstream_short_name": "ICE",
+  "upstream_repo_slug": "aadehamid/industrial-context-engineering",
+  "former_repo_slug": "aadehamid/scada_harmonization",
+  "upstream_repo_url": "https://github.com/aadehamid/industrial-context-engineering",
+  "pinned_commit": "1467e9278a9fa50d80618a296297eb40cd4416c2",
+  "pinned_commit_date": "2026-11-08T21:34:24Z",
+  "aligned_main_commit": "d54181e829dddda613498d201f3ac9f1fe51b286",
+  "maturity_status": "PROVISIONAL_COMMIT_PIN",
+  "approved_upstream_release": null,
+  "pending_upstream_dependencies": [
+    "ICE declarative tag-to-ISA-95 mapping YAML contract release",
+    "ICE Sparkplug B UNS publication contract release"
+  ],
+  "qualification_cap": "QUALIFIED_PROVISIONAL",
+  "consumed_artifacts": [
+    {
+      "name": "ICE Domain Model and L0 Contract",
+      "upstream_path": "docs/LSC-002_Domain_Model.md",
+      "contract_role": "Level-0 OT signal, quality flag, and 1 s machine / 180 s process telemetry cadence conventions",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "ICE Datagen Boundary Package",
+      "upstream_path": "src/scada_harmonizer/datagen/__init__.py",
+      "contract_role": "Reference L0 data shape for PPC synthetic OT publication",
+      "status": "CONSUMED_PROVISIONAL"
+    },
+    {
+      "name": "ICE Site Mapping Templates",
+      "upstream_path": "config/mappings/README.md",
+      "contract_role": "Declarative tag-to-asset mapping schema (pending upstream release)",
+      "status": "PENDING_UPSTREAM_RELEASE"
+    }
+  ],
+  "ppc_owner_boundary": "PPC generates Refinery A synthetic OT observations and native tag schedules (fixtures/golden/refinery_a_ot_tags.yaml) and publishes observable L0 streams in WorldExportBundle; ICE owns reusable L0 harmonization and UNS normalization contracts (ADR-0042, ADR-0046, ADR-0053).",
+  "provenance_class": "OBSERVED"
+}

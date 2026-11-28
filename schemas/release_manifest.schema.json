@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/release_manifest.schema.json",
+  "title": "PPC ReleaseManifest",
+  "description": "Immutable business-consistent analytical release manifest pinning world version, branch, source watermarks, Delta snapshots, semantic/mapping digests, and INFO-001 §3 publication/availability metadata (PPC-DATA-001 §2, PPC-ARCH-000 §8, ADR-0045).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_id",
+    "publication_id",
+    "subject_scope",
+    "scoped_ordinal",
+    "supersedes_release_id",
+    "branch_id",
+    "world_version",
+    "epm_release_id",
+    "status",
+    "source_recorded_at",
+    "published_at",
+    "authorization_label",
+    "access_scope",
+    "provenance_class",
+    "availability_receipts",
+    "table_snapshots",
+    "source_watermarks",
+    "semantic_digests",
+    "mapping_digests",
+    "model_version",
+    "reconciliation_report",
+    "approval_evidence"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "release_id": { "type": "string", "minLength": 1 },
+    "publication_id": { "type": "string", "minLength": 1 },
+    "subject_scope": { "type": "string", "minLength": 1 },
+    "scoped_ordinal": { "type": "integer", "minimum": 0 },
+    "supersedes_release_id": { "type": ["string", "null"], "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "world_version": { "type": "string", "minLength": 1 },
+    "epm_release_id": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["PREPARING", "VALIDATED", "PUBLISHED", "RETRACTED", "REJECTED"]
+    },
+    "source_recorded_at": { "type": "string", "format": "date-time" },
+    "published_at": { "type": ["string", "null"], "format": "date-time" },
+    "retracted_at": { "type": ["string", "null"], "format": "date-time" },
+    "authorization_label": { "type": "string", "minLength": 1 },
+    "access_scope": { "type": "string", "minLength": 1 },
+    "provenance_class": {
+      "type": "string",
+      "enum": ["OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION"]
+    },
+    "availability_receipts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["receipt_id", "recipient_role", "channel", "available_at"],
+        "properties": {
+          "receipt_id": { "type": "string", "minLength": 1 },
+          "recipient_role": { "type": "string", "minLength": 1 },
+          "channel": { "type": "string", "minLength": 1 },
+          "available_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "table_snapshots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["table_name", "delta_version", "r2_uri", "snapshot_sha256"],
+        "properties": {
+          "table_name": { "type": "string", "minLength": 1 },
+          "delta_version": { "type": "integer", "minimum": 0 },
+          "r2_uri": {
+            "type": "string",
+            "pattern": "^s3://[a-z0-9-]+/delta/.+",
+            "not": { "pattern": "hidden" }
+          },
+          "snapshot_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    },
+    "source_watermarks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source_system",
+          "captured_seq",
+          "durable_seq",
+          "applied_seq",
+          "published_seq",
+          "complete"
+        ],
+        "properties": {
+          "source_system": { "type": "string", "minLength": 1 },
+          "captured_seq": { "type": "integer", "minimum": 0 },
+          "durable_seq": { "type": "integer", "minimum": 0 },
+          "applied_seq": { "type": "integer", "minimum": 0 },
+          "published_seq": { "type": "integer", "minimum": 0 },
+          "complete": { "type": "boolean" }
+        }
+      }
+    },
+    "semantic_digests": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "mapping_digests": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+    },
+    "model_version": { "type": "string", "minLength": 1 },
+    "equation_set_version": { "type": "string", "minLength": 1 },
+    "reconciliation_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "report_ref", "report_sha256"],
+      "properties": {
+        "status": { "type": "string", "enum": ["PASSED", "FAILED", "INCOMPLETE"] },
+        "report_ref": { "type": "string", "minLength": 1 },
+        "report_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "rejection_reason": { "type": ["string", "null"] }
+      }
+    },
+    "approval_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence_ref"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PENDING", "QUALIFIED_PROVISIONAL", "QUALIFIED", "REJECTED"]
+        },
+        "evidence_ref": { "type": "string", "minLength": 1 },
+        "approved_by": { "type": ["string", "null"] },
+        "approved_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

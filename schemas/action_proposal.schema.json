@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ppc.local/schemas/action_proposal.schema.json",
+  "title": "PPC ActionProposal",
+  "description": "Immutable proposed operational or commercial action binding exact payload digest, target, quantity/unit, branch, source revisions, policy version, authority class, and one-time idempotency key (PPC-AGENT-001 §1, ADR-0056 G3-b).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "proposal_id",
+    "decision_id",
+    "payload_digest",
+    "status",
+    "authority_class",
+    "proposing_actor_id",
+    "knowledge_cutoff",
+    "measurement_basis",
+    "action_type",
+    "target_id",
+    "quantity",
+    "unit",
+    "branch_id",
+    "expected_source_revisions",
+    "policy_version",
+    "approver_role",
+    "evidence_release_id",
+    "expires_at",
+    "idempotency_key",
+    "provenance_class"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "decision_id": { "type": "string", "minLength": 1 },
+    "payload_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "DRAFT",
+        "POLICY_CHECKED",
+        "RECOMMENDED",
+        "RECOMMENDED_ONLY",
+        "APPROVED",
+        "DENIED",
+        "DEFERRED",
+        "ESCALATED",
+        "EXPIRED",
+        "EXECUTED",
+        "AUTO_EXECUTED",
+        "FAILED"
+      ]
+    },
+    "authority_class": {
+      "type": "string",
+      "enum": ["AUTO_EXECUTE", "REQUIRE_APPROVAL", "ESCALATE", "PROHIBITED"]
+    },
+    "approval_tier": { "type": ["integer", "null"], "enum": [1, 2, null] },
+    "proposing_actor_id": { "type": "string", "minLength": 1 },
+    "knowledge_cutoff": { "type": "string", "format": "date-time" },
+    "measurement_basis": { "type": "string", "minLength": 1 },
+    "action_type": { "type": "string", "minLength": 1 },
+    "target_id": { "type": "string", "minLength": 1 },
+    "quantity": { "type": "number", "minimum": 0 },
+    "unit": { "type": "string", "minLength": 1 },
+    "estimated_margin_effect_usd": { "type": ["number", "null"], "minimum": 0 },
+    "estimated_notional_usd": { "type": ["number", "null"], "minimum": 0 },
+    "model_run_id": { "type": ["string", "null"], "minLength": 1 },
+    "branch_id": { "type": "string", "minLength": 1 },
+    "expected_source_revisions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "policy_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "approver_role": {
+      "type": ["string", "null"],
+      "enum": [
+        "Shift Supervisor",
+        "Refinery Operations Manager",
+        "Commercial Manager",
+        "VP Supply and Operations",
+        null
+      ]
+    },
+    "evidence_release_id": { "type": "string", "minLength": 1 },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "idempotency_key": { "type": "string", "minLength": 1 },
+    "provenance_class": {
+      "type": "string",
+      "enum": ["OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION"]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "authority_class": { "const": "PROHIBITED" } } },
+      "then": {
+        "properties": {
+          "status": { "enum": ["DRAFT", "POLICY_CHECKED", "DENIED"] }
+        }
+      }
+    }
+  ]
+}
