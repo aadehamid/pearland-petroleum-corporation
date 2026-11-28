@@ -78,6 +78,14 @@ uv run --no-project --with pyyaml --with numpy --with z3-solver --with hypothesi
   python3 -m unittest tests/test_world_kernel.py verification/z3/test_proof_obligations.py
 
 echo
+echo "== WP-3B policy gate (ADR-0056), signed RBAC auth, and offline recorded-response agent (PO-10) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp3b_policy_auth_agent.py
+
+echo
+echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO-03) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
