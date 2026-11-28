@@ -15,7 +15,7 @@
 
 ## 1. Verdict
 
-The unit-level and conservation checks pass in all five operating modes. The plant-level `PO-12a` criterion fails in all five. The benchmark reports `all_holdout_gates_pass: false`, and that value is correct.
+The unit-level and conservation checks pass in all five operating modes. The plant-level `PO-12a` criterion fails in all five. The benchmark reports `all_holdout_gates_pass: false`, and that value is correct. (Dated note, 2026-11-28: this finding is against the original plant C5+ band of `+4%` to `+10%`. [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) restated the `PO-12a` plant criterion to plant C3+ volumetric gain `+2.5%` to `+4.5%` and recorded conditional acceptance pending the benchmark gate update in Section 6.)
 
 The following checks pass:
 
@@ -183,7 +183,7 @@ Plant C3+ gain adds LPG from the crude, the reformer, the FCC and the HCU. That 
 
 ### 5.3 The measurement basis of the PO-12a band
 
-`PPC-REVIEW-004` lists "EIA PADD 3 gain" among four benchmark sources for `PO-12a` alongside the +4 to +10 percent acceptance band without binding that band to a single source. The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
+`PPC-REVIEW-004` lists "EIA PADD 3 gain" among four benchmark sources for `PO-12a` alongside the +4 to +10 percent acceptance band without binding that band to a single source. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) updated `PPC-REVIEW-004` so the `+4%` to `+10%` band applies to unit-level HCU C5+ gain and restated the plant band to C3+ `+2.5%` to `+4.5%`.) The EIA glossary defines processing gain as "the volumetric amount by which total output is greater than input for a given period of time." Total output is a wider basis than C5+ liquids.
 
 The `PO-12a` text applies that band to C5+ liquids only. On that basis the v1 flowsheet cannot reach +4 percent without changing parameters that `ADR-0056` `G3-c` locks. I did not check which products EIA counts in total output beyond this definition. The owner decision in section 6 should confirm the basis before it is written into `PO-12a`. (Dated note, 2026-11-28: [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md) restated `PO-12a` to plant C3+ volumetric gain `+2.5%` to `+4.5%` and formally registered the unit-level HCU C5+ band `+4%` to `+10%`.)
 
@@ -223,7 +223,7 @@ This section is for Hamid Adesokan. `ADR-0056` `G3-d` and `ADR-0059` keep `PO-12
 | B | Keep the C5+ band and return `WP-1` for a flowsheet or parameter change. | The change must reopen ranges that `ADR-0056` `G3-c` locks, or add a unit to the v1 flowsheet in `ADR-0054`. |
 | C | Keep the C5+ band and accept the result as a recorded deviation for v1. | `PO-12a` closes with a known failure on its plant criterion. Later work packages inherit it. |
 
-I recommend option A. The unit models conserve mass and give ordinary yields, and section 5.3 shows that the band and its benchmark use different bases. Plant C3+ gain is also below +4 percent, so a change of basis to C3+ alone does not close the criterion. The new basis and band need the owner's choice.
+I recommend option A. The unit models conserve mass and give ordinary yields, and section 5.3 shows that the band and its benchmark use different bases. Plant C3+ gain is also below +4 percent, so a change of basis to C3+ alone does not close the criterion. The new basis and band need the owner's choice. (Dated note, 2026-11-28: Hamid Adesokan chose plant C3+ volumetric gain `+2.5%` to `+4.5%` and registered unit-level HCU C5+ gain `+4%` to `+10%` in Section 6 and [ADR-0062](../../adr/0062-po12a-signoff-openrouter-endpoint-and-local-hosting.md).)
 
 ### Decision 2. FCC gas yield at the high-severity holdout
 
