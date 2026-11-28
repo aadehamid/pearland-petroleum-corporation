@@ -39,13 +39,15 @@ VERBS = {"amends": "AMENDS", "clarifies": "CLARIFIES", "extends": "EXTENDS", "st
 PAST = {"amended": "AMENDS", "clarified": "CLARIFIES", "extended": "EXTENDS", "staged": "STAGES"}
 PAST_OF = {v: k for k, v in PAST.items()}
 LINKS = "AMENDS|CLARIFIES|EXTENDS|STAGES"
-ID = r"(?:ADR-\d{1,4}|[A-Z]+(?:-[A-Z]+)*-\d{3})"
-ID_RE = re.compile(r"\b" + ID + r"\b")
-ID_LIST = re.compile(r"^" + ID + r"(?:\s*(?:,|\band\b)\s*" + ID + r")*$")
-CLAUSE = re.compile(r"[;,]\s*(?=(?:amends|clarifies|extends|stages)\b)", re.IGNORECASE)
-NOTE = re.compile(r"\b(amended|clarified|extended|staged) by (" + ID + r"(?:\s*(?:,|\band\b)\s*" + ID + r")*)",
-                  re.IGNORECASE)
-ROW = re.compile(r"\| \[(ADR-\d{1,4})\]\(([^)]+)\) \| (.*) \| (.*?) \| (\d{4}-\d{2}-\d{2}) \| (.*?) \|")
+# Ids are upper case and end at a word boundary that is not a hyphen, so
+# ADR-0042a or ADR-0042-draft is not read as ADR-0042.
+ID = r"(?:ADR-\d{1,4}|[A-Z]+(?:-[A-Z]+)*-\d{3})(?![\w-])"
+ID_RE = re.compile(r"(?<![\w-])" + ID)
+SEP = r"\s*(?:,\s*and\b|,|\band\b)\s*"
+ID_LIST = re.compile(ID + r"(?:" + SEP + ID + r")*")
+CLAUSE = re.compile(r"[;,]\s*(?=(?i:amends|clarifies|extends|stages)\b)")
+NOTE = re.compile(r"\b((?i:amended|clarified|extended|staged)) by (" + ID + r"(?:" + SEP + ID + r")*)")
+ROW = re.compile(r"\| \[(ADR-\d{1,4})\]\(([^)|]+)\) \| ([^|]+) \| ([^|]+) \| (\d{4}-\d{2}-\d{2}) \| ([^|]*) \|")
 
 
 def read(root, rel):
@@ -115,7 +117,7 @@ def parse_index(text):
     rows, problems = {}, []
     for line in text.splitlines():
         line = line.strip()
-        if not line.startswith("| [ADR-"):
+        if not line.startswith("|") or re.fullmatch(r"\|[\s|:-]*\|", line) or line.startswith("| ADR | Title"):
             continue
         m = ROW.fullmatch(line)
         if not m:
@@ -126,7 +128,19 @@ def parse_index(text):
         links, unread = parse_links(relations)
         notes = [(PAST[v.lower()], norm(t)) for v, targets in NOTE.findall(status) for t in ID_RE.findall(targets)]
         if identifier in rows:
-            problems.append(f"{identifier}: the index has more than one row for it")
+            problems.append(f"{identifier}: the index has more than one row for it; the first is used")
+            continue
+        if int(identifier.split("-")[1]) < 40:
+            problems.append(f"{identifier}: a baseline decision belongs in {REGISTER}, not the index")
+            continue
+        seen, dupes = set(), []
+        for link in links:
+            if link in seen:
+                dupes.append(link)
+            seen.add(link)
+        for verb, target in dupes:
+            problems.append(f"{identifier}: the index lists {verb.lower()} {target} more than once")
+        links = list(dict.fromkeys(links))
         rows[identifier] = {"file": "docs/adr/" + file, "title": title, "status": status.split(" (")[0],
                             "date": date, "links": links, "unread": unread, "notes": notes}
     return rows, problems
@@ -134,11 +148,13 @@ def parse_index(text):
 
 def parse_frontmatter(text):
     """The leading --- block: simple `key: value` lines and `- item` lists. None if absent."""
-    m = re.match(r"---[ \t]*\n(.*?)\n---[ \t]*(\n|$)", text.replace("\r\n", "\n"), re.DOTALL)
+    m = re.match(r"---[ \t]*\n(.*?)^---[ \t]*$", text.replace("\r\n", "\n"), re.DOTALL | re.MULTILINE)
     if not m:
         return None
     fields, key = {}, None
     for line in m.group(1).splitlines():
+        if line.strip().startswith("#"):
+            continue
         item = re.fullmatch(r"\s*-\s+(.*)", line)
         if item and key:
             fields[key] = (fields[key] + ", " if fields[key] else "") + item.group(1).strip()
@@ -147,7 +163,13 @@ def parse_frontmatter(text):
             key = key.strip()
             fields[key] = value.strip().strip("'\"")
     amends = fields.get("amends", "")
-    fields["amends"] = [] if amends.lower() in ("", "none", "[]") else [norm(t) for t in ID_RE.findall(amends)]
+    fields["amends_unread"] = None
+    if amends.lower() in ("", "none", "[]"):
+        fields["amends"] = []
+    elif ID_LIST.fullmatch(amends):
+        fields["amends"] = [norm(t) for t in ID_RE.findall(amends)]
+    else:
+        fields["amends"], fields["amends_unread"] = [], amends
     return fields
 
 
@@ -201,6 +223,9 @@ def check(graph):
         if fm is None:
             findings.append(f"{identifier}: {row['file']} has no frontmatter")
             continue
+        if fm.get("amends_unread"):
+            findings.append(f"{identifier}: frontmatter amends not understood: {fm['amends_unread']!r}")
+            continue
         indexed = {t for v, t in row["links"] if v == "AMENDS"}
         for target in fm["amends"]:
             if target not in indexed:
@@ -251,7 +276,8 @@ def run_relate(graph, statement, params):
         args = ["relate", "query", "--database", db, "--read-only", "--mode", "jsonl", "--max-rows", "0"]
         for key, value in params.items():
             args += ["--param", f"{key}={json.dumps(value)}"]
-        p = subprocess.run(args + [statement], capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        # --command takes the statement as its value, so a statement starting with - is never a flag.
+        p = subprocess.run(args + ["--command", statement], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if p.returncode != 0:
         sys.stderr.write(p.stdout + p.stderr)
         sys.exit(p.returncode)
@@ -267,6 +293,8 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     cmd, args = (argv[0], argv[1:]) if argv else ("help", [])
     if cmd in ("help", "-h", "--help"):
+        if args:
+            return usage("help takes no arguments")
         print(__doc__.split("\n\nSources")[0].strip())
         return 0
     graph = build()
@@ -291,6 +319,8 @@ def main(argv=None):
         for row in run_relate(graph, args[0], {}):
             print(row)
         return 0
+    if cmd not in ("summary", "check", "export"):
+        return usage("changed|basis|summary|check|query|export, or help")
     if args:
         return usage(f"{cmd} takes no arguments")
     if cmd == "summary":

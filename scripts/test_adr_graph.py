@@ -109,11 +109,22 @@ class Parsing(Fixture):
             "Amends": ([], ["Amends"]),
             "Amends WP-0": ([], ["Amends WP-0"]),
             "Amends ADR-002, ADR-9 typo": ([], ["Amends ADR-002, ADR-9 typo"]),
+            "Amends ADR-0042a": ([], ["Amends ADR-0042a"]),
+            "Amends ADR-002, ADR-003, and ADR-004": ([("AMENDS", "ADR-002"), ("AMENDS", "ADR-003"), ("AMENDS", "ADR-004")], []),
             "Replaces ADR-002": ([], ["Replaces ADR-002"]),
         }
         for cell, expected in cases.items():
             with self.subTest(cell):
                 self.assertEqual(adr_graph.parse_links(cell), expected)
+
+    def test_status_note_ids_must_be_whole_and_upper_case(self):
+        for status, notes in (("Decided (amended by ADR-0042a)", []), ("Decided (amended by ADR-0042-draft)", []),
+                              ("Decided (amended by adr-0042)", []),
+                              ("Decided (amended by ADR-0041, ADR-0042, and ADR-0043)",
+                               [("AMENDS", "ADR-0041"), ("AMENDS", "ADR-0042"), ("AMENDS", "ADR-0043")])):
+            with self.subTest(status):
+                index, _ = adr_graph.parse_index(f"| [ADR-0048](x.md) | T | {status} | 2026-11-26 | None |")
+                self.assertEqual(index["ADR-0048"]["notes"], notes)
 
     def test_status_notes_ignore_case_and_stop_at_the_next_verb(self):
         index, _ = adr_graph.parse_index(
@@ -122,10 +133,21 @@ class Parsing(Fixture):
                          [("STAGES", "ADR-0055"), ("STAGES", "ADR-0056"), ("CLARIFIES", "ADR-0057")])
 
     def test_bad_and_duplicate_rows_are_problems(self):
-        _, problems = adr_graph.parse_index(INDEX + "| [ADR-0043](0043-d.md) | Fourth | Decided | 26-11-2026 | None |\n"
-                                            "| [ADR-0042](0042-c.md) | Again | Decided | 2026-11-27 | None |\n")
-        self.assertTrue(any("index row not understood" in p for p in problems), problems)
-        self.assertTrue(any("more than one row" in p for p in problems), problems)
+        extra = ("| [ADR-0043](0043-d.md) | Fourth | Decided | 26-11-2026 | None |\n"
+                 "| [ADR-0042](0042-c.md) | Again | Decided | 2026-11-27 | None |\n"
+                 "| ADR-0044 | No link | Decided | 2026-11-27 | None |\n"
+                 "| [ADR-0045](0045-e.md) | Title | Extra | Decided | 2026-11-27 | None |\n"
+                 "| [ADR-0007](0007-f.md) | Baseline here | Decided | 2026-11-27 | None |\n"
+                 "| [ADR-0046](0046-g.md) | Twice | Decided | 2026-11-27 | Amends ADR-001; amends ADR-001 |\n")
+        index, problems = adr_graph.parse_index(INDEX + extra)
+        for message in ("index row not understood: '| [ADR-0043]", "ADR-0042: the index has more than one row",
+                        "index row not understood: '| ADR-0044", "index row not understood: '| [ADR-0045]",
+                        "ADR-007: a baseline decision belongs in", "ADR-0046: the index lists amends ADR-001 more than once"):
+            with self.subTest(message):
+                self.assertTrue(any(message in p for p in problems), problems)
+        self.assertEqual(index["ADR-0042"]["title"], "Third decision", "the first row is kept")
+        self.assertEqual(index["ADR-0046"]["links"], [("AMENDS", "ADR-001")])
+        self.assertNotIn("ADR-007", index)
 
     def test_ids_have_one_spelling(self):
         self.assertEqual([adr_graph.norm(x) for x in ("ADR-7", "ADR-007", "ADR-0007", "ADR-40", "ADR-0040", "PPC-001")],
@@ -139,6 +161,9 @@ class Parsing(Fixture):
         self.assertEqual(parse("---\namends:\n  - ADR-004\n  - ADR-010\n---\n")["amends"], ["ADR-004", "ADR-010"])
         self.assertEqual(parse("---\nstatus: \"Decided\"\n---\n")["status"], "Decided")
         self.assertIsNone(parse("# No frontmatter\n"))
+        self.assertEqual(parse("---\n---\n# Body\n\n---\nstatus: x\n")["amends"], [])
+        self.assertEqual(parse("---\namends:\n  # note: see the index\n  - ADR-004\n---\n")["amends"], ["ADR-004"])
+        self.assertEqual(parse("---\namends: ADR-0040, ADR-00041\n---\n")["amends_unread"], "ADR-0040, ADR-00041")
 
     def test_graph_holds_every_decision_document_and_link(self):
         g = self.graph()
@@ -179,6 +204,8 @@ class Checking(Fixture):
             "frontmatter status 'Proposed', index status 'Decided'":
                 ("docs/adr/0040-a.md", FILES["0040-a.md"].replace("status: Decided", "status: Proposed")),
             "docs/adr/0040-a.md has no frontmatter": ("docs/adr/0040-a.md", "# ADR-0040\n"),
+            "ADR-0041: frontmatter amends not understood: 'ADR-002, WP-0'":
+                ("docs/adr/0041-b.md", FILES["0041-b.md"].replace("amends: ADR-002", "amends: ADR-002, WP-0")),
             "index points at docs/adr/0042-c.md, which does not exist": (None, None),
         }
         for message, (rel, text) in cases.items():
@@ -211,15 +238,19 @@ class Checking(Fixture):
         self.assertEqual(p.returncode, 1)
         self.assertIn("1 finding(s)", p.stderr)
         for args in (("summary", "x"), ("check", "--strict"), ("export", "--run"), ("changed",),
-                     ("changed", "ADR-9999"), ("query",), ("nonsense",)):
+                     ("changed", "ADR-9999"), ("query",), ("nonsense",), ("nonsense", "x"), ("help", "x")):
             with self.subTest(args):
                 self.assertEqual(self.cli(*args).returncode, 2, args)
 
     def test_real_repository_parses_cleanly(self):
-        index, problems = adr_graph.parse_index(adr_graph.read(adr_graph.ROOT, adr_graph.INDEX))
+        repo = os.path.dirname(HERE)
+        text = adr_graph.read(repo, adr_graph.INDEX)
+        index, problems = adr_graph.parse_index(text)
         self.assertEqual(problems, [])
+        self.assertEqual(len(index), sum(1 for line in text.splitlines() if line.startswith("| [ADR-")))
+        self.assertGreater(len(index), 0)
         self.assertEqual([i for i, r in index.items() if r["unread"]], [])
-        self.assertEqual(len(adr_graph.parse_register(adr_graph.read(adr_graph.ROOT, adr_graph.REGISTER))), 39)
+        self.assertEqual(len(adr_graph.parse_register(adr_graph.read(repo, adr_graph.REGISTER))), 39)
 
 
 @unittest.skipUnless(shutil.which("relate"), "relate is not installed")
@@ -241,6 +272,9 @@ class Queries(Fixture):
         self.assertNotEqual(p.returncode, 0)
         p = self.cli("query", "MATCH (d:Decision) RETURN count(d) AS n // trailing comment")
         self.assertEqual(json.loads(p.stdout.splitlines()[0]), {"n": 6})
+        p = self.cli("query", "--version")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertNotIn("Relate v", p.stdout, "a statement that looks like a flag is not passed as one")
 
     def test_export_loads_into_relate(self):
         rows = [json.loads(r) for r in adr_graph.run_relate(self.graph(), "MATCH ()-[r]->() RETURN count(r) AS n", {})]
