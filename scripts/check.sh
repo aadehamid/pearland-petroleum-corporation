@@ -95,6 +95,15 @@ uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
   python3 -m unittest tests/test_wp3a_planning_lp.py
 
 echo
+echo "== WP-6 Scenario B vertical slice (S2-* crude-quality rejection & delayed restatement) =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml \
+  python3 -m unittest tests/test_wp6_scenario_b.py
+
+echo
+echo "== WP-8A DuckDB-vs-Databricks KPI parity and WP-8B Certified WorldExportBundle v1 =="
+uv run --no-project --with jsonschema python3 -m unittest tests/test_wp8_parity_and_bundle.py
+
+echo
 echo "== WP-5 Scenario A vertical slice (SCN-A-T125 & SCN-A-H2CONT end-to-end) =="
 uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyomo --with highspy --with numpy --with pyyaml \
   python3 -m unittest tests/test_wp5_scenario_a.py
