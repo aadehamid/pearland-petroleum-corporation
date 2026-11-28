@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Transactional source-system stores with atomic OutboxEntry capture (WP-2, INT-001, ADR-0046).
+"""SQLite-backed transactional source store with atomic OutboxEntry capture (WP-2, INT-001, ADR-0046).
 
-Provides SQLite-backed Refinery/LIMS, PostgreSQL-compatible Commercial/CTRM, and
-MySQL-compatible Logistics/Movement stores. Every business mutation commits its
-native record and an OutboxEntry in ONE ACID transaction. No module in this package
-ever reads canonical hidden world truth.
+Provides a generic SQLite ACID `TransactionalOutboxSourceStore` used in Slice 1 tests for
+Refinery/LIMS and source-system outbox verification (commercial/logistics PostgreSQL/MySQL
+stores share the same outbox table schema contract). Every business mutation commits its
+native record and an OutboxEntry in ONE ACID transaction. No module in this package ever
+reads canonical hidden world truth.
 """
 from __future__ import annotations
 

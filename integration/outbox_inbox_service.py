@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Atomic Silver Staging + InboxReceipt Consumer and Idempotent Delta Publisher (WP-2, PO-03).
 
-Implements INT-001 §2 and ADR-0046:
+Implements INT-001 §2 and ADR-0046 in SQLite ACID transactions:
 - Commits Silver staging row + InboxReceipt in ONE ACID transaction (Crash Point 1 safe).
 - Identical duplicate delivery_key + payload_digest returns prior InboxReceipt (zero double effect).
-- Same delivery_key + DIFFERENT payload_digest routes to conflict_quarantine (IDENTITY_STEWARD).
-- Out-of-order source_revision enters revision_quarantine without inventing missing events.
-- Separate captured / durable / applied / published watermarks per (source_system, branch_id).
-- Crash Point 2 safe idempotent publish ledger keyed by (txn_app_id, txn_version).
+- Same delivery_key + DIFFERENT payload_digest routes idempotently to conflict_quarantine (IDENTITY_STEWARD).
+- Service-tracked per-partition `source_revision` monotonicity: both forward gaps (rev > last + 1)
+  and regressions/duplicates (rev <= last under a new delivery_key) quarantine idempotently.
+- Crash Point 2 safe idempotent publish ledger keyed by (txn_app_id, txn_version) with pre-pinned
+  `delta_publish_batches` row sets so rows staged during a crash window are never silently lost.
 - NEVER imports or queries hidden canonical world truth.
 """
 from __future__ import annotations
@@ -30,12 +31,12 @@ class ConsumeOutcome:
 
 
 class AtomicStagingInboxService:
-    """PostgreSQL-compatible ACID staging + InboxReceipt + conflict quarantine consumer."""
+    """SQLite ACID staging + InboxReceipt + idempotent quarantine consumer."""
 
     def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        self.conn = sqlite3.connect(str(self.db_path), isolation_level=None)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_schema()
@@ -84,7 +85,15 @@ class AtomicStagingInboxService:
                 incoming_digest TEXT NOT NULL,
                 incoming_payload_json TEXT NOT NULL,
                 resolution_status TEXT NOT NULL DEFAULT 'PENDING_IDENTITY_STEWARD',
-                quarantined_at_utc TEXT NOT NULL
+                quarantined_at_utc TEXT NOT NULL,
+                UNIQUE(delivery_key, reason, incoming_digest)
+            );
+            CREATE TABLE IF NOT EXISTS partition_revisions (
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                partition_key TEXT NOT NULL,
+                last_applied_revision INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (source_system, branch_id, partition_key)
             );
             CREATE TABLE IF NOT EXISTS source_watermarks (
                 source_system TEXT NOT NULL,
@@ -94,6 +103,16 @@ class AtomicStagingInboxService:
                 applied_seq INTEGER NOT NULL DEFAULT 0,
                 published_seq INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (source_system, branch_id)
+            );
+            CREATE TABLE IF NOT EXISTS delta_publish_batches (
+                txn_app_id TEXT NOT NULL,
+                txn_version INTEGER NOT NULL,
+                table_name TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                branch_id TEXT NOT NULL,
+                staging_ids_json TEXT NOT NULL,
+                pinned_at_utc TEXT NOT NULL,
+                PRIMARY KEY (txn_app_id, txn_version)
             );
             CREATE TABLE IF NOT EXISTS delta_publish_ledger (
                 txn_app_id TEXT NOT NULL,
@@ -105,7 +124,6 @@ class AtomicStagingInboxService:
             );
             """
         )
-        self.conn.commit()
 
     def _upsert_watermark(
         self, cur: sqlite3.Cursor, source_system: str, branch_id: str, column: str, seq: int
@@ -126,9 +144,8 @@ class AtomicStagingInboxService:
         event: Mapping[str, Any],
         *,
         inject_crash_after_staging_before_ack: bool = False,
-        expected_prev_revision: int | None = None,
     ) -> ConsumeOutcome:
-        """Apply one event atomically to Silver staging + InboxReceipt (PO-03 Crash Point 1 safe)."""
+        """Apply one event atomically to Silver staging + InboxReceipt with server-tracked revision checks."""
         dkey = str(event["delivery_key"])
         eid = str(event["event_id"])
         src = str(event["source_system"])
@@ -141,8 +158,8 @@ class AtomicStagingInboxService:
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
         try:
-            cur.execute("BEGIN IMMEDIATE")
             self._upsert_watermark(cur, src, branch, "captured_seq", seq)
             self._upsert_watermark(cur, src, branch, "durable_seq", seq)
 
@@ -152,7 +169,7 @@ class AtomicStagingInboxService:
             ).fetchone()
             if existing is not None:
                 if existing["payload_digest"] == digest:
-                    self.conn.commit()
+                    cur.execute("COMMIT")
                     return ConsumeOutcome(
                         status="IDEMPOTENT_DUPLICATE",
                         delivery_key=dkey,
@@ -161,14 +178,14 @@ class AtomicStagingInboxService:
                     )
                 cur.execute(
                     """
-                    INSERT INTO conflict_quarantine (
+                    INSERT OR IGNORE INTO conflict_quarantine (
                         delivery_key, event_id, branch_id, reason,
                         existing_digest, incoming_digest, incoming_payload_json, quarantined_at_utc
                     ) VALUES (?, ?, ?, 'CONFLICTING_PAYLOAD_DIGEST', ?, ?, ?, ?)
                     """,
                     (dkey, eid, branch, existing["payload_digest"], digest, payload_json, now_utc),
                 )
-                self.conn.commit()
+                cur.execute("COMMIT")
                 return ConsumeOutcome(
                     status="CONFLICT_QUARANTINED",
                     delivery_key=dkey,
@@ -177,24 +194,30 @@ class AtomicStagingInboxService:
                     reason="CONFLICTING_PAYLOAD_DIGEST",
                 )
 
-            # Out-of-order revision check (must not invent missing predecessor revisions)
-            if expected_prev_revision is not None and rev > expected_prev_revision + 1:
+            # Server-tracked bidirectional per-partition revision check (INT-001 §2)
+            rev_row = cur.execute(
+                "SELECT last_applied_revision FROM partition_revisions WHERE source_system = ? AND branch_id = ? AND partition_key = ?",
+                (src, branch, part),
+            ).fetchone()
+            last_rev = int(rev_row["last_applied_revision"]) if rev_row is not None else 0
+            if rev != last_rev + 1:
+                reason = "OUT_OF_ORDER_REVISION" if rev > last_rev + 1 else "STALE_OR_DUPLICATE_REVISION"
                 cur.execute(
                     """
-                    INSERT INTO conflict_quarantine (
+                    INSERT OR IGNORE INTO conflict_quarantine (
                         delivery_key, event_id, branch_id, reason,
                         existing_digest, incoming_digest, incoming_payload_json, quarantined_at_utc
-                    ) VALUES (?, ?, ?, 'OUT_OF_ORDER_REVISION', NULL, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?)
                     """,
-                    (dkey, eid, branch, digest, payload_json, now_utc),
+                    (dkey, eid, branch, reason, digest, payload_json, now_utc),
                 )
-                self.conn.commit()
+                cur.execute("COMMIT")
                 return ConsumeOutcome(
                     status="REVISION_QUARANTINED",
                     delivery_key=dkey,
                     event_id=eid,
                     payload_digest=digest,
-                    reason="OUT_OF_ORDER_REVISION",
+                    reason=reason,
                 )
 
             cur.execute(
@@ -233,14 +256,22 @@ class AtomicStagingInboxService:
                 """,
                 (dkey, eid, src, branch, part, seq, rev, digest, now_utc),
             )
+            cur.execute(
+                """
+                INSERT INTO partition_revisions (source_system, branch_id, partition_key, last_applied_revision)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(source_system, branch_id, partition_key)
+                DO UPDATE SET last_applied_revision = excluded.last_applied_revision
+                """,
+                (src, branch, part, rev),
+            )
             self._upsert_watermark(cur, src, branch, "applied_seq", seq)
-            self.conn.commit()
+            cur.execute("COMMIT")
         except Exception:
-            self.conn.rollback()
+            cur.execute("ROLLBACK")
             raise
 
         if inject_crash_after_staging_before_ack:
-            # Crash Point 1: DB commit succeeded, NATS ack lost -> redelivery MUST hit IDEMPOTENT_DUPLICATE
             raise RuntimeError("INJECTED_CRASH_POINT_1_BEFORE_NATS_ACK")
 
         return ConsumeOutcome(
@@ -261,7 +292,7 @@ class AtomicStagingInboxService:
         sink_commit_fn: Any,
         inject_crash_after_sink_before_mark: bool = False,
     ) -> dict[str, Any]:
-        """PO-03 Crash Point 2 safe idempotent publisher using (txnAppId, txnVersion)."""
+        """PO-03 Crash Point 2 safe idempotent publisher with pre-pinned batch row sets."""
         prior = self.conn.execute(
             "SELECT row_count FROM delta_publish_ledger WHERE txn_app_id = ? AND txn_version = ?",
             (txn_app_id, txn_version),
@@ -269,33 +300,71 @@ class AtomicStagingInboxService:
         if prior is not None:
             return {"status": "IDEMPOTENT_ALREADY_PUBLISHED", "row_count": int(prior["row_count"])}
 
+        # Pin exact staging_ids for (txn_app_id, txn_version) BEFORE calling sink so retries after
+        # Crash Point 2 NEVER swallow newly arrived staging rows into the crashed transaction!
+        cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            pinned = cur.execute(
+                "SELECT staging_ids_json FROM delta_publish_batches WHERE txn_app_id = ? AND txn_version = ?",
+                (txn_app_id, txn_version),
+            ).fetchone()
+            if pinned is not None:
+                ids = [int(i) for i in json.loads(pinned["staging_ids_json"])]
+            else:
+                pending_rows = cur.execute(
+                    """
+                    SELECT staging_id FROM silver_staging
+                    WHERE source_system = ? AND branch_id = ? AND delta_published = 0
+                    ORDER BY staging_id ASC
+                    """,
+                    (source_system, branch_id),
+                ).fetchall()
+                ids = [int(r["staging_id"]) for r in pending_rows]
+                if not ids:
+                    cur.execute("ROLLBACK")
+                    return {"status": "NO_PENDING_ROWS", "row_count": 0}
+                cur.execute(
+                    """
+                    INSERT INTO delta_publish_batches (
+                        txn_app_id, txn_version, table_name, source_system, branch_id,
+                        staging_ids_json, pinned_at_utc
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        txn_app_id,
+                        txn_version,
+                        table_name,
+                        source_system,
+                        branch_id,
+                        json.dumps(ids),
+                        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    ),
+                )
+            cur.execute("COMMIT")
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
+
+        placeholders = ",".join("?" for _ in ids)
         rows = [
             dict(r)
             for r in self.conn.execute(
-                """
-                SELECT * FROM silver_staging
-                WHERE source_system = ? AND branch_id = ? AND delta_published = 0
-                ORDER BY staging_id ASC
-                """,
-                (source_system, branch_id),
+                f"SELECT * FROM silver_staging WHERE staging_id IN ({placeholders}) ORDER BY staging_id ASC",
+                ids,
             ).fetchall()
         ]
-        if not rows:
-            return {"status": "NO_PENDING_ROWS", "row_count": 0}
 
-        # Sink itself must enforce idempotency on (txn_app_id, txn_version) just like delta-rs
         sink_commit_fn(table_name=table_name, rows=rows, txn_app_id=txn_app_id, txn_version=txn_version)
 
         if inject_crash_after_sink_before_mark:
-            # Crash Point 2: Delta committed on R2, worker died before updating staging published watermark
             raise RuntimeError("INJECTED_CRASH_POINT_2_BEFORE_STAGING_MARK")
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         max_seq = max(int(r["source_sequence"]) for r in rows)
-        ids = [int(r["staging_id"]) for r in rows]
         cur = self.conn.cursor()
+        cur.execute("BEGIN IMMEDIATE")
         try:
-            cur.execute("BEGIN IMMEDIATE")
             cur.executemany("UPDATE silver_staging SET delta_published = 1 WHERE staging_id = ?", [(i,) for i in ids])
             cur.execute(
                 """
@@ -305,9 +374,9 @@ class AtomicStagingInboxService:
                 (txn_app_id, txn_version, table_name, len(rows), now_utc),
             )
             self._upsert_watermark(cur, source_system, branch_id, "published_seq", max_seq)
-            self.conn.commit()
+            cur.execute("COMMIT")
         except Exception:
-            self.conn.rollback()
+            cur.execute("ROLLBACK")
             raise
         return {"status": "PUBLISHED", "row_count": len(rows), "published_seq": max_seq}
 
@@ -322,6 +391,9 @@ class AtomicStagingInboxService:
 
     def staging_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM silver_staging").fetchone()[0])
+
+    def unpublished_count(self) -> int:
+        return int(self.conn.execute("SELECT COUNT(*) FROM silver_staging WHERE delta_published = 0").fetchone()[0])
 
     def quarantine_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM conflict_quarantine").fetchone()[0])
