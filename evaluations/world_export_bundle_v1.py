@@ -8,8 +8,9 @@ schemas/world_export_bundle.schema.json, partitioning:
 - hidden_truth/ (evaluation/hidden/ in pearland-petroleum-hidden)
   under a separate credential boundary
 
-Runs automated field-level and path-level leak audits proving zero canonical
-hidden-truth fields or restricted paths appear inside observable/ payloads.
+Runs automated field-level and path-level leak audits over BOTH the observable
+manifest section itself and all supplied observable payloads, proving zero
+canonical hidden-truth fields or restricted paths appear inside observable/.
 """
 from __future__ import annotations
 
@@ -66,14 +67,33 @@ def assemble_world_export_bundle_v1(
     hidden_artifacts: Mapping[str, Sequence[Mapping[str, Any]]],
     observable_payloads_for_audit: Mapping[str, bytes | str],
     schema_path: str | Path,
+    created_at_utc: str | None = None,
 ) -> dict[str, Any]:
     """Assemble, leak-audit, and schema-validate WorldExportBundle v1."""
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    audit = audit_observable_for_hidden_leaks(observable_payloads_for_audit, checked_at_utc=now_utc)
+    if not adapter_pins:
+        raise ValueError("adapter_pins must declare at least one pinned upstream adapter")
+    now_utc = created_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    observable_section = {
+        "r2_bucket": "pearland-petroleum-corp",
+        "r2_prefix": f"exports/world_bundle/observable/{bundle_id}/",
+        "delta_tables": [dict(x) for x in observable_artifacts["delta_tables"]],
+        "ice_ot_l0": [dict(x) for x in observable_artifacts["ice_ot_l0"]],
+        "edi_topology": [dict(x) for x in observable_artifacts["edi_topology"]],
+        "epm_kpi_fixtures": [dict(x) for x in observable_artifacts["epm_kpi_fixtures"]],
+        "ece_evidence_dossiers": [dict(x) for x in observable_artifacts["ece_evidence_dossiers"]],
+    }
+    # Always audit BOTH the observable manifest section itself AND caller-supplied payload contents
+    combined_audit_inputs: dict[str, bytes | str] = {
+        "__observable_manifest__": json.dumps(observable_section, sort_keys=True),
+        **dict(observable_payloads_for_audit),
+    }
+    audit = audit_observable_for_hidden_leaks(combined_audit_inputs, checked_at_utc=now_utc)
     all_approved = all(p.get("maturity_status") == "APPROVED_UPSTREAM_RELEASE" for p in adapter_pins)
     # Provisional commit-pinned adapters cap verdict strictly at QUALIFIED_PROVISIONAL (VERIFY-001 §3)
-    verdict = "QUALIFIED" if (all_approved and audit["leak_audit"]["status"] == "PASSED") else (
-        "QUALIFIED_PROVISIONAL" if audit["leak_audit"]["status"] == "PASSED" else "DRAFT"
+    verdict = (
+        "QUALIFIED"
+        if (all_approved and audit["leak_audit"]["status"] == "PASSED")
+        else ("QUALIFIED_PROVISIONAL" if audit["leak_audit"]["status"] == "PASSED" else "DRAFT")
     )
 
     bundle: dict[str, Any] = {
@@ -91,15 +111,7 @@ def assemble_world_export_bundle_v1(
         "qualification_verdict": verdict,
         "provenance_class": "SYNTHETIC",
         "upstream_adapter_pins": [dict(p) for p in adapter_pins],
-        "observable": {
-            "r2_bucket": "pearland-petroleum-corp",
-            "r2_prefix": f"exports/world_bundle/observable/{bundle_id}/",
-            "delta_tables": [dict(x) for x in observable_artifacts["delta_tables"]],
-            "ice_ot_l0": [dict(x) for x in observable_artifacts["ice_ot_l0"]],
-            "edi_topology": [dict(x) for x in observable_artifacts["edi_topology"]],
-            "epm_kpi_fixtures": [dict(x) for x in observable_artifacts["epm_kpi_fixtures"]],
-            "ece_evidence_dossiers": [dict(x) for x in observable_artifacts["ece_evidence_dossiers"]],
-        },
+        "observable": observable_section,
         "hidden_truth": {
             "r2_bucket": "pearland-petroleum-hidden",
             "r2_prefix": f"evaluation/hidden/world_bundle/{bundle_id}/",
