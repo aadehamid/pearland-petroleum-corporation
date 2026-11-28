@@ -73,6 +73,10 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
 
 echo
+echo "== WP-3B policy gate (ADR-0056), signed RBAC auth, and offline recorded-response agent (PO-10) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp3b_policy_auth_agent.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
