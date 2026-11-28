@@ -214,11 +214,14 @@ def step_tank_with_exact_crossing(
 
     if crossing_bound == "MAX":
         if rule == "block":
-            # Stop inflow completely over [t*, dt_s); outflow continues if mass stays >= min
+            # Stop inflow completely over [t*, dt_s); cap combined drain so tank cannot cross below min_mass_kg
             in_2 = 0.0
-            out_2 = outflow_rate_kg_s * dt_rem
-            loss_2 = loss_rate_kg_s * dt_rem
-            diverted = inflow_rate_kg_s * dt_rem
+            avail_drain = max(0.0, max_mass_kg - min_mass_kg)
+            req_drain = (outflow_rate_kg_s + loss_rate_kg_s) * dt_rem
+            scale = min(1.0, avail_drain / req_drain) if req_drain > 0.0 else 1.0
+            out_2 = outflow_rate_kg_s * dt_rem * scale
+            loss_2 = loss_rate_kg_s * dt_rem * scale
+            diverted = inflow_rate_kg_s * dt_rem + (outflow_rate_kg_s * dt_rem - out_2)
         else:
             # throttle or divert excess inflow so mass rides exactly on max_mass_kg
             cap_in_rate = min(inflow_rate_kg_s, outflow_rate_kg_s + loss_rate_kg_s)
@@ -227,16 +230,17 @@ def step_tank_with_exact_crossing(
             loss_2 = loss_rate_kg_s * dt_rem
             diverted = (inflow_rate_kg_s - cap_in_rate) * dt_rem
     else:  # MIN bound
+        eff_loss_rate = min(loss_rate_kg_s, inflow_rate_kg_s)
         if rule == "block":
             in_2 = inflow_rate_kg_s * dt_rem
             out_2 = 0.0
-            loss_2 = loss_rate_kg_s * dt_rem
+            loss_2 = eff_loss_rate * dt_rem
             diverted = outflow_rate_kg_s * dt_rem
         else:
-            cap_out_rate = max(0.0, inflow_rate_kg_s - loss_rate_kg_s)
+            cap_out_rate = max(0.0, inflow_rate_kg_s - eff_loss_rate)
             in_2 = inflow_rate_kg_s * dt_rem
             out_2 = cap_out_rate * dt_rem
-            loss_2 = loss_rate_kg_s * dt_rem
+            loss_2 = eff_loss_rate * dt_rem
             diverted = (outflow_rate_kg_s - cap_out_rate) * dt_rem
 
     acc_in = in_1 + in_2

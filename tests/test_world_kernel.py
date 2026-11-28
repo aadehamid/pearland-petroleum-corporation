@@ -403,11 +403,59 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         # Tank stepped via EQ-02 exact intra-step t* split and rode exactly at max 12,000 bbl without exceeding
         self.assertAlmostEqual(k.state.tanks["TK-TEST"].volume_bbl, 12000.0, places=6)
 
-        # W2-07: Corrupted checkpoint MUST fail integrity verification
+        # W2-07: Corrupted state (including tank loss_kg_s) OR corrupted pending event MUST fail integrity check
         ckpt = k.checkpoint()
-        ckpt["state"].smr_h2_t_per_day = 55.0
+        ckpt_bad_smr = k.checkpoint()
+        ckpt_bad_smr["state"].smr_h2_t_per_day = 55.0
         with self.assertRaises(ValueError):
-            RefineryWorldKernel.from_checkpoint(ckpt)
+            RefineryWorldKernel.from_checkpoint(ckpt_bad_smr)
+
+        ckpt_bad_loss = k.checkpoint()
+        ckpt_bad_loss["state"].tanks["TK-TEST"].loss_kg_s = 5.0
+        with self.assertRaises(ValueError):
+            RefineryWorldKernel.from_checkpoint(ckpt_bad_loss)
+
+        k_sched = RefineryWorldKernel.from_checkpoint(ckpt)
+        k_sched.schedule_event(WorldEvent("EVT-FUT", datetime(2026, 6, 15, 8, 30, tzinfo=timezone.utc), "SMR_TURNDOWN", {"smr_h2_t_per_day": 80.0}))
+        ckpt_sched = k_sched.checkpoint()
+        ckpt_sched["scheduled"][0].payload["smr_h2_t_per_day"] = 55.0
+        with self.assertRaises(ValueError):
+            RefineryWorldKernel.from_checkpoint(ckpt_sched)
+
+        # EQ-02 MIN-bound with declared loss > inflow MUST ride strictly on min_mass_kg without going negative or crashing kernel
+        loss_only = eq.step_tank_with_exact_crossing(
+            opening_mass_kg=eq.volume_bbl_to_mass_kg(2000.0, sg),
+            min_mass_kg=eq.volume_bbl_to_mass_kg(1000.0, sg),
+            max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
+            inflow_rate_kg_s=0.0,
+            outflow_rate_kg_s=0.0,
+            loss_rate_kg_s=eq.volume_bbl_to_mass_kg(200.0, sg) / 3600.0,
+            dt_s=86400.0,
+            rule="throttle",
+        )
+        self.assertAlmostEqual(eq.mass_kg_to_volume_bbl(loss_only.closing_mass_kg, sg), 1000.0, places=6)
+        self.assertAlmostEqual(loss_only.mass_residual_kg, 0.0, places=12)
+
+        k_loss = RefineryWorldKernel(
+            WorldState(
+                "world-v1.0.0",
+                "loss-test",
+                42,
+                t0,
+                tanks={"TK-LOSS": TankState("TK-LOSS", 1000.0, 12000.0, sg, eq.volume_bbl_to_mass_kg(1200.0, sg))},
+            ),
+            step_seconds=60,
+        )
+        k_loss.schedule_event(
+            WorldEvent(
+                "EVT-LOSS",
+                t0,
+                "TANK_FLOW_SCHEDULE",
+                {"tank_id": "TK-LOSS", "inflow_kg_s": 0.0, "outflow_kg_s": 0.0, "loss_kg_s": eq.volume_bbl_to_mass_kg(400.0, sg) / 3600.0},
+            )
+        )
+        k_loss.advance_to(datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc))
+        self.assertAlmostEqual(k_loss.state.tanks["TK-LOSS"].volume_bbl, 1000.0, places=6)
 
     def test_coupled_plant_snapshot_and_eng_v07_benchmark_transparency(self):
         design_basis = yaml.safe_load(DESIGN_BASIS_PATH.read_text(encoding="utf-8"))

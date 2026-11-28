@@ -142,6 +142,7 @@ class WorldState:
                     "mass_kg": round(t.mass_kg, 6),
                     "inflow_kg_s": round(t.inflow_kg_s, 9),
                     "outflow_kg_s": round(t.outflow_kg_s, 9),
+                    "loss_kg_s": round(t.loss_kg_s, 9),
                 }
                 for tid, t in sorted(self.tanks.items())
             },
@@ -168,13 +169,29 @@ class RefineryWorldKernel:
             key=lambda e: (e.effective_at_utc, EVENT_ORDER_PRIORITY.get(e.event_type, 1), e.event_id)
         )
 
+    @staticmethod
+    def _scheduled_digest(events: list[WorldEvent]) -> str:
+        canonical = [
+            {
+                "event_id": e.event_id,
+                "effective_at_utc": e.effective_at_utc.isoformat(),
+                "event_type": e.event_type,
+                "payload_digest": e.payload_digest(),
+                "provenance_class": e.provenance_class,
+            }
+            for e in events
+        ]
+        return hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
     def checkpoint(self) -> dict[str, Any]:
-        """Return an immutable deep-copied checkpoint with SHA-256 digest."""
+        """Return an immutable deep-copied checkpoint with SHA-256 state and schedule digests."""
         snap = copy.deepcopy(self.state)
+        sched = copy.deepcopy(self._scheduled)
         return {
             "state": snap,
-            "scheduled": copy.deepcopy(self._scheduled),
+            "scheduled": sched,
             "state_digest": snap.digest(),
+            "scheduled_digest": self._scheduled_digest(sched),
             "step_seconds": self.step_seconds,
             "fixture_mode": self.fixture_mode,
             "provenance_class": "SYNTHETIC",
@@ -182,12 +199,18 @@ class RefineryWorldKernel:
 
     @classmethod
     def from_checkpoint(cls, ckpt: Mapping[str, Any], branch_id: str | None = None) -> "RefineryWorldKernel":
-        """Restore a kernel from checkpoint after verifying SHA-256 integrity (WORLD-002 §4 / W2-07)."""
+        """Restore a kernel from checkpoint after verifying SHA-256 integrity of state and pending events (W2-07)."""
         restored_state: WorldState = copy.deepcopy(ckpt["state"])
         actual_digest = restored_state.digest()
         if str(ckpt.get("state_digest", "")) != actual_digest:
             raise ValueError(
                 f"Checkpoint integrity violation (W2-07): recorded digest {ckpt.get('state_digest')!r} != actual {actual_digest!r}"
+            )
+        restored_sched: list[WorldEvent] = copy.deepcopy(ckpt["scheduled"])
+        actual_sched_digest = cls._scheduled_digest(restored_sched)
+        if str(ckpt.get("scheduled_digest", "")) != actual_sched_digest:
+            raise ValueError(
+                f"Checkpoint schedule integrity violation (W2-07): recorded digest {ckpt.get('scheduled_digest')!r} != actual {actual_sched_digest!r}"
             )
         if branch_id is not None:
             restored_state.branch_id = branch_id
@@ -196,7 +219,7 @@ class RefineryWorldKernel:
             step_seconds=int(ckpt["step_seconds"]),
             fixture_mode=bool(ckpt["fixture_mode"]),
         )
-        kernel._scheduled = copy.deepcopy(ckpt["scheduled"])
+        kernel._scheduled = restored_sched
         return kernel
 
     def _apply_event(self, ev: WorldEvent) -> dict[str, Any]:

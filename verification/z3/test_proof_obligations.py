@@ -46,23 +46,27 @@ class TestZ3SymbolicProofs(unittest.TestCase):
         m = s.model()
         self.assertEqual(m[t_star].as_fraction(), Fraction(1, 2))
 
-        # Prove exact two-segment analytic split at t* (NOT forbidden end-of-step clipping!):
-        # For ALL valid opening stock in [m_min, m_max], ALL non-negative rates, and ANY interior
-        # instant tau in [0, dt]: splitting at exact t* = (m_max - m0)/(r_in - r_out) when rising
-        # past m_max (throttling r_in := r_out on [t*, dt]) or t* = (m0 - m_min)/(r_out - r_in) when
-        # falling past m_min (throttling r_out := r_in on [t*, dt]) keeps m(tau) in [m_min, m_max]
-        # everywhere on [0, dt], with zero intermediate excursion.
+        # Prove exact two-segment analytic split at t* WITH explicit non-negative loss rate r_loss >= 0:
+        # For ALL valid opening stock in [m_min, m_max], ALL non-negative (r_in, r_out, r_loss), and ANY
+        # interior instant tau in [0, dt]:
+        # - On MAX crossing, r_in is throttled to min(r_in, r_out + r_loss) over [t*, dt] -> net_2 == 0.
+        # - On MIN crossing, eff_loss = min(r_loss, r_in) and r_out is throttled to max(0, r_in - eff_loss)
+        #   over [t*, dt] -> net_2 == 0 (never falls below m_min even when r_loss > r_in!).
         s2 = z3.Solver()
-        m0, m_min, m_max, r_in, r_out, dt, tau = z3.Reals("m0 m_min m_max r_in r_out dt tau")
-        s2.add(m_min >= 0, m_max > m_min, m0 >= m_min, m0 <= m_max, r_in >= 0, r_out >= 0, dt > 0)
-        s2.add(tau >= 0, tau <= dt)
-        net = r_in - r_out
+        m0, m_min, m_max, r_in, r_out, r_loss, dt, tau = z3.Reals("m0 m_min m_max r_in r_out r_loss dt tau")
+        s2.add(m_min >= 0, m_max > m_min, m0 >= m_min, m0 <= m_max)
+        s2.add(r_in >= 0, r_out >= 0, r_loss >= 0, dt > 0, tau >= 0, tau <= dt)
+        net = r_in - r_out - r_loss
         unconstrained = m0 + net * dt
-        # Two-segment analytic trajectory m(tau) with exact crossing time t*
         t_star_hi = z3.If(net > 0, (m_max - m0) / net, dt)
         t_star_lo = z3.If(net < 0, (m0 - m_min) / (-net), dt)
-        m_hi_split = z3.If(tau <= t_star_hi, m0 + net * tau, m0 + net * t_star_hi)
-        m_lo_split = z3.If(tau <= t_star_lo, m0 + net * tau, m0 + net * t_star_lo)
+        cap_in = z3.If(r_in <= r_out + r_loss, r_in, r_out + r_loss)
+        net_hi_2 = cap_in - r_out - r_loss
+        eff_loss_lo = z3.If(r_loss <= r_in, r_loss, r_in)
+        cap_out_lo = z3.If(r_in - eff_loss_lo >= 0, r_in - eff_loss_lo, 0)
+        net_lo_2 = r_in - cap_out_lo - eff_loss_lo
+        m_hi_split = z3.If(tau <= t_star_hi, m0 + net * tau, m0 + net * t_star_hi + net_hi_2 * (tau - t_star_hi))
+        m_lo_split = z3.If(tau <= t_star_lo, m0 + net * tau, m0 + net * t_star_lo + net_lo_2 * (tau - t_star_lo))
         m_tau = z3.If(
             unconstrained > m_max,
             m_hi_split,
@@ -115,14 +119,18 @@ class TestZ3SymbolicProofs(unittest.TestCase):
 
 
 class TestHypothesisPhysicalInvariants(unittest.TestCase):
-    @settings(max_examples=60)
+    @settings(max_examples=80)
     @given(
         open_bbl=st.floats(min_value=1000.0, max_value=12000.0, allow_nan=False, allow_infinity=False),
         in_bbl_h=st.floats(min_value=0.0, max_value=2000.0, allow_nan=False, allow_infinity=False),
         out_bbl_h=st.floats(min_value=0.0, max_value=2000.0, allow_nan=False, allow_infinity=False),
-        dt_s=st.floats(min_value=1.0, max_value=3600.0, allow_nan=False, allow_infinity=False),
+        loss_bbl_h=st.floats(min_value=0.0, max_value=500.0, allow_nan=False, allow_infinity=False),
+        dt_s=st.floats(min_value=1.0, max_value=86400.0, allow_nan=False, allow_infinity=False),
+        rule=st.sampled_from(["throttle", "divert", "block"]),
     )
-    def test_po01_po02_tank_step_never_escapes_bounds_and_conserves_mass(self, open_bbl, in_bbl_h, out_bbl_h, dt_s):
+    def test_po01_po02_tank_step_never_escapes_bounds_and_conserves_mass(
+        self, open_bbl, in_bbl_h, out_bbl_h, loss_bbl_h, dt_s, rule
+    ):
         sg = 0.840
         res = eq.step_tank_with_exact_crossing(
             opening_mass_kg=eq.volume_bbl_to_mass_kg(open_bbl, sg),
@@ -130,8 +138,9 @@ class TestHypothesisPhysicalInvariants(unittest.TestCase):
             max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
             inflow_rate_kg_s=eq.volume_bbl_to_mass_kg(in_bbl_h, sg) / 3600.0,
             outflow_rate_kg_s=eq.volume_bbl_to_mass_kg(out_bbl_h, sg) / 3600.0,
+            loss_rate_kg_s=eq.volume_bbl_to_mass_kg(loss_bbl_h, sg) / 3600.0,
             dt_s=dt_s,
-            rule="throttle",
+            rule=rule,
         )
         close_bbl = eq.mass_kg_to_volume_bbl(res.closing_mass_kg, sg)
         self.assertGreaterEqual(close_bbl, 1000.0 - 1e-6)
