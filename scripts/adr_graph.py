@@ -5,8 +5,8 @@ Usage:
   scripts/adr_graph.py changed ADR-0045     later decisions that changed it, through any chain
   scripts/adr_graph.py basis ADR-0055       what it builds on, through any chain
   scripts/adr_graph.py summary              counts of decisions, documents and links
-  scripts/adr_graph.py check                where the three records disagree (exit 1 if they do)
-  scripts/adr_graph.py query 'CYPHER'       any read-only Cypher over the graph
+  scripts/adr_graph.py check                where the records disagree or cannot be read (exit 1 if so)
+  scripts/adr_graph.py query 'CYPHER'       any Cypher, run on a read-only copy of the graph
   scripts/adr_graph.py export               the graph as a Cypher script for relate or Neo4j
 
 Sources, read every run, so the graph never goes stale:
@@ -18,10 +18,11 @@ Sources, read every run, so the graph never goes stale:
 The graph has (:Decision {id, title, status, date, authority, baseline, file}),
 (:Document {id}) for records such as PPC-001, and links named for the index's
 verbs: (:Decision)-[:AMENDS|CLARIFIES|EXTENDS|STAGES]->(:Decision|:Document).
-The index is the source of the links. The "amended by" notes in its status
-column and each file's `amends:` frontmatter are only compared with it, by
-`check`. `changed`, `basis`, `query` and `export --run` need relate;
-`summary`, `check` and plain `export` do not.
+The index is the only source of links; a link to a decision no record defines
+stays out of the graph and is reported by check. The status column's notes
+("amended by ADR-0054") and each file's `amends:` frontmatter are only compared
+with the links, by check. changed, basis and query need relate; summary, check
+and export do not. ADR_GRAPH_ROOT points the tool at another checkout.
 """
 import json
 import os
@@ -31,19 +32,25 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.environ.get("ADR_GRAPH_ROOT") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGISTER = "docs/PPC-REG-001_Architecture_Decision_Register.md"
 INDEX = "docs/adr/README.md"
 VERBS = {"amends": "AMENDS", "clarifies": "CLARIFIES", "extends": "EXTENDS", "stages": "STAGES"}
 PAST = {"amended": "AMENDS", "clarified": "CLARIFIES", "extended": "EXTENDS", "staged": "STAGES"}
-ID = re.compile(r"\b(ADR-\d{3,4}|[A-Z]+-\d{3})\b")
-LINKS = "AMENDS|CLARIFIES|EXTENDS|STAGES"
 PAST_OF = {v: k for k, v in PAST.items()}
+LINKS = "AMENDS|CLARIFIES|EXTENDS|STAGES"
+ID = r"(?:ADR-\d{1,4}|[A-Z]+(?:-[A-Z]+)*-\d{3})"
+ID_RE = re.compile(r"\b" + ID + r"\b")
+ID_LIST = re.compile(r"^" + ID + r"(?:\s*(?:,|\band\b)\s*" + ID + r")*$")
+CLAUSE = re.compile(r"[;,]\s*(?=(?:amends|clarifies|extends|stages)\b)", re.IGNORECASE)
+NOTE = re.compile(r"\b(amended|clarified|extended|staged) by (" + ID + r"(?:\s*(?:,|\band\b)\s*" + ID + r")*)",
+                  re.IGNORECASE)
+ROW = re.compile(r"\| \[(ADR-\d{1,4})\]\(([^)]+)\) \| (.*) \| (.*?) \| (\d{4}-\d{2}-\d{2}) \| (.*?) \|")
 
 
 def read(root, rel):
     with open(os.path.join(root, rel), encoding="utf-8") as fh:
-        return fh.read()
+        return fh.read().replace("\r\n", "\n")
 
 
 def norm(identifier):
@@ -85,45 +92,69 @@ def parse_register(text):
     return decisions
 
 
+def parse_links(cell):
+    """The "Amends / clarifies" cell: clauses that each start with a verb and list ids."""
+    links, unread = [], []
+    if cell.strip().lower() in ("", "none"):
+        return links, unread
+    for part in re.split(r";", cell):
+        for clause in CLAUSE.split(part):
+            clause = clause.strip()
+            if not clause:
+                continue
+            verb, _, rest = clause.partition(" ")
+            if verb.lower() in VERBS and ID_LIST.fullmatch(rest.strip()):
+                links += [(VERBS[verb.lower()], norm(t)) for t in ID_RE.findall(rest)]
+            else:
+                unread.append(clause)
+    return links, unread
+
+
 def parse_index(text):
     """ADR-0040 onward from the index table: one row per decision."""
-    rows = {}
+    rows, problems = {}, []
     for line in text.splitlines():
-        m = re.fullmatch(r"\| \[(ADR-\d{4})\]\(([^)]+)\) \| (.*?) \| (.*?) \| (\d{4}-\d{2}-\d{2}) \| (.*?) \|", line.strip())
+        line = line.strip()
+        if not line.startswith("| [ADR-"):
+            continue
+        m = ROW.fullmatch(line)
         if not m:
+            problems.append(f"index row not understood: {line[:80]!r}")
             continue
         identifier, file, title, status, date, relations = m.groups()
-        links = []
-        for part in relations.split(";"):
-            part = part.strip()
-            verb = part.split(" ", 1)[0].lower()
-            if verb in VERBS:
-                links += [(VERBS[verb], norm(t)) for t in ID.findall(part)]
-            elif part and part.lower() != "none":
-                links.append(("UNPARSED", part))
-        notes = []
-        for verb, targets in re.findall(r"\b(amended|clarified|extended|staged) by ([^;)]*)", status):
-            notes += [(PAST[verb], norm(t)) for t in ID.findall(targets)]
+        identifier = norm(identifier)
+        links, unread = parse_links(relations)
+        notes = [(PAST[v.lower()], norm(t)) for v, targets in NOTE.findall(status) for t in ID_RE.findall(targets)]
+        if identifier in rows:
+            problems.append(f"{identifier}: the index has more than one row for it")
         rows[identifier] = {"file": "docs/adr/" + file, "title": title, "status": status.split(" (")[0],
-                            "status_text": status, "date": date, "links": links, "notes": notes}
-    return rows
+                            "date": date, "links": links, "unread": unread, "notes": notes}
+    return rows, problems
 
 
 def parse_frontmatter(text):
-    m = re.match(r"---\n(.*?)\n---\n", text, re.DOTALL)
-    fields = {}
-    for line in (m.group(1).splitlines() if m else []):
-        if ":" in line:
+    """The leading --- block: simple `key: value` lines and `- item` lists. None if absent."""
+    m = re.match(r"---[ \t]*\n(.*?)\n---[ \t]*(\n|$)", text.replace("\r\n", "\n"), re.DOTALL)
+    if not m:
+        return None
+    fields, key = {}, None
+    for line in m.group(1).splitlines():
+        item = re.fullmatch(r"\s*-\s+(.*)", line)
+        if item and key:
+            fields[key] = (fields[key] + ", " if fields[key] else "") + item.group(1).strip()
+        elif ":" in line:
             key, value = line.split(":", 1)
-            fields[key.strip()] = value.strip()
+            key = key.strip()
+            fields[key] = value.strip().strip("'\"")
     amends = fields.get("amends", "")
-    fields["amends"] = [] if amends.lower() in ("", "none") else [norm(t) for t in ID.findall(amends)]
+    fields["amends"] = [] if amends.lower() in ("", "none", "[]") else [norm(t) for t in ID_RE.findall(amends)]
     return fields
 
 
 def build(root=ROOT):
     baseline = parse_register(read(root, REGISTER))
-    index = parse_index(read(root, INDEX))
+    index, problems = parse_index(read(root, INDEX))
+    known = set(baseline) | set(index)
     nodes, documents, edges = [], set(), []
     for identifier, d in sorted(baseline.items()):
         nodes.append({"id": identifier, "title": d["title"], "status": "Decided", "date": None,
@@ -131,64 +162,68 @@ def build(root=ROOT):
     frontmatter = {}
     for identifier, row in sorted(index.items()):
         path = os.path.join(root, row["file"])
-        fm = parse_frontmatter(read(root, row["file"])) if os.path.exists(path) else {}
+        fm = parse_frontmatter(read(root, row["file"])) if os.path.exists(path) else None
         frontmatter[identifier] = fm
         nodes.append({"id": identifier, "title": row["title"], "status": row["status"], "date": row["date"],
-                      "authority": fm.get("authority"), "baseline": False, "file": row["file"]})
+                      "authority": (fm or {}).get("authority"), "baseline": False, "file": row["file"]})
         for verb, target in row["links"]:
-            if verb == "UNPARSED":
-                continue
+            if target.startswith("ADR-") and target not in known:
+                continue  # reported by check; kept out so summary, export and queries agree
             edges.append({"source": identifier, "verb": verb, "target": target})
             if not target.startswith("ADR-"):
                 documents.add(target)
     return {"root": root, "nodes": nodes, "documents": sorted(documents), "edges": edges,
-            "index": index, "frontmatter": frontmatter, "baseline": baseline}
+            "index": index, "problems": problems, "frontmatter": frontmatter, "baseline": baseline}
 
 
 def check(graph):
-    """Each place where the index links, the status notes and the frontmatter disagree."""
-    findings = []
+    """Each place where the records cannot be read, or the index links, status notes and frontmatter disagree."""
+    findings = list(graph["problems"])
     known = {n["id"] for n in graph["nodes"]}
-    links = {(e["source"], e["verb"], e["target"]) for e in graph["edges"]}
+    links = {(s, v, t) for s, row in graph["index"].items() for v, t in row["links"]}
+    mismatched = set()
     for identifier, row in sorted(graph["index"].items()):
-        for verb, text in row["links"]:
-            if verb == "UNPARSED":
-                findings.append(f"{identifier}: index link not understood: {text!r}")
+        for text in row["unread"]:
+            findings.append(f"{identifier}: index link not understood: {text!r}")
         for verb, target in row["links"]:
-            if verb != "UNPARSED" and target.startswith("ADR-") and target not in known:
+            if target.startswith("ADR-") and target not in known:
                 findings.append(f"{identifier}: links to {target}, which no record defines")
         for verb, source in row["notes"]:
             said = sorted(v for s, v, t in links if s == source and t == identifier)
             if verb not in said:
+                mismatched.add((source, identifier))
                 findings.append(f"{identifier}: status says {PAST_OF[verb]} by {source}, but {source}'s index "
                                 f"row says it {', '.join(v.lower() for v in said) or 'does nothing to'} {identifier}")
+        fm = graph["frontmatter"].get(identifier)
         if not os.path.exists(os.path.join(graph["root"], row["file"])):
             findings.append(f"{identifier}: index points at {row['file']}, which does not exist")
-        fm = graph["frontmatter"].get(identifier, {})
+            continue
+        if fm is None:
+            findings.append(f"{identifier}: {row['file']} has no frontmatter")
+            continue
         indexed = {t for v, t in row["links"] if v == "AMENDS"}
-        for target in fm.get("amends", []):
+        for target in fm["amends"]:
             if target not in indexed:
                 other = sorted(v.lower() for v, t in row["links"] if t == target)
                 findings.append(f"{identifier}: frontmatter amends {target}, but the index says it "
                                 f"{', '.join(other) or 'does nothing to'} {target}")
-        for target in sorted(indexed - set(fm.get("amends", []))):
+        for target in sorted(indexed - set(fm["amends"])):
             findings.append(f"{identifier}: index amends {target}, but the frontmatter does not list it")
-        if fm and fm.get("status") and fm["status"] != row["status"]:
+        if fm.get("status") and fm["status"] != row["status"]:
             findings.append(f"{identifier}: frontmatter status {fm['status']!r}, index status {row['status']!r}")
-        if fm and fm.get("date") and fm["date"] != row["date"]:
+        if fm.get("date") and fm["date"] != row["date"]:
             findings.append(f"{identifier}: frontmatter date {fm['date']}, index date {row['date']}")
-    for e in graph["edges"]:
-        if e["target"].startswith("ADR-") and e["target"] in graph["index"]:
-            notes = graph["index"][e["target"]]["notes"]
-            # A note from the same source with another verb is already reported above.
-            if not any(source == e["source"] for _, source in notes):
-                findings.append(f"{e['target']}: {e['source']} {e['verb'].lower()} it, but its status does not say so")
+    for source, verb, target in sorted(links):
+        if target in graph["index"] and (verb, source) not in graph["index"][target]["notes"] \
+                and (source, target) not in mismatched:
+            findings.append(f"{target}: {source} {verb.lower()} it, but its status does not say so")
     return findings
 
 
 def cypher_seed(graph):
-    """The graph as one Cypher script with literal values."""
-    lit = lambda v: json.dumps(v) if v is not None else "null"
+    """The graph as one Cypher script with literal values, one statement per line."""
+    def lit(v):
+        return "null" if v is None else json.dumps(v, ensure_ascii=False)
     out = ["CREATE CONSTRAINT decision_id IF NOT EXISTS FOR (d:Decision) REQUIRE d.id IS UNIQUE;",
            "CREATE CONSTRAINT document_id IF NOT EXISTS FOR (d:Document) REQUIRE d.id IS UNIQUE;"]
     for n in graph["nodes"]:
@@ -203,37 +238,46 @@ def cypher_seed(graph):
 
 
 def run_relate(graph, statement, params):
+    """Load the graph into a scratch store, then run the statement on it read-only."""
     if not shutil.which("relate"):
         sys.exit("adr_graph: relate is not installed. Install it with: curl -sSfL https://relatedb.ai/install.sh | bash")
     with tempfile.TemporaryDirectory() as tmp:
-        script = os.path.join(tmp, "graph.cypher")
-        with open(script, "w", encoding="utf-8") as fh:
-            fh.write(cypher_seed(graph) + statement.rstrip().rstrip(";") + ";\n")
-        args = ["relate", "query", "--database", ":memory:", "--mode", "jsonl", "--max-rows", "0"]
+        db = os.path.join(tmp, "graph")
+        seed = subprocess.run(["relate", "query", "--database", db, "--mode", "jsonl"],
+                              input=cypher_seed(graph), capture_output=True, text=True)
+        if seed.returncode != 0:
+            sys.stderr.write(seed.stdout + seed.stderr)
+            sys.exit(seed.returncode)
+        args = ["relate", "query", "--database", db, "--read-only", "--mode", "jsonl", "--max-rows", "0"]
         for key, value in params.items():
             args += ["--param", f"{key}={json.dumps(value)}"]
-        with open(script, encoding="utf-8") as fh:
-            p = subprocess.run(args, stdin=fh, capture_output=True, text=True)
+        p = subprocess.run(args + [statement], capture_output=True, text=True, stdin=subprocess.DEVNULL)
     if p.returncode != 0:
         sys.stderr.write(p.stdout + p.stderr)
         sys.exit(p.returncode)
     return [line for line in p.stdout.splitlines() if line.startswith("{")]
 
 
+def usage(text):
+    print("usage: scripts/adr_graph.py " + text, file=sys.stderr)
+    return 2
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    cmd = argv[0] if argv else "help"
+    cmd, args = (argv[0], argv[1:]) if argv else ("help", [])
+    if cmd in ("help", "-h", "--help"):
+        print(__doc__.split("\n\nSources")[0].strip())
+        return 0
     graph = build()
-    known = {n["id"] for n in graph["nodes"]}
     if cmd in ("changed", "basis"):
-        if len(argv) != 2:
-            print(f"usage: scripts/adr_graph.py {cmd} ADR-NNNN", file=sys.stderr)
-            return 2
-        target = norm(argv[1].upper())
-        if target not in known:
+        if len(args) != 1:
+            return usage(f"{cmd} ADR-NNNN")
+        target = norm(args[0].upper())
+        if target not in {n["id"] for n in graph["nodes"]}:
             print(f"adr_graph: no decision {target} in the register or the index", file=sys.stderr)
             return 2
-        arrow = ("<-[r:%s*1..]-(x)" if cmd == "changed" else "-[r:%s*1..]->(x)") % LINKS
+        arrow = ("<-[:%s*1..]-(x)" if cmd == "changed" else "-[:%s*1..]->(x)") % LINKS
         statement = (f"MATCH p = (d:Decision {{id: $id}}){arrow} "
                      "RETURN x.id AS id, coalesce(x.title, '') AS title, length(p) AS hops, "
                      "[rel IN relationships(p) | type(rel)] AS via, "
@@ -242,15 +286,13 @@ def main(argv=None):
             print(row)
         return 0
     if cmd == "query":
-        if len(argv) != 2:
-            print("usage: scripts/adr_graph.py query 'CYPHER'", file=sys.stderr)
-            return 2
-        if re.search(r"\b(CREATE|MERGE|DELETE|SET|REMOVE|DROP|LOAD)\b", argv[1], re.IGNORECASE):
-            print("adr_graph: query is read-only; the graph is rebuilt from the records each run", file=sys.stderr)
-            return 2
-        for row in run_relate(graph, argv[1], {}):
+        if len(args) != 1:
+            return usage("query 'CYPHER'")
+        for row in run_relate(graph, args[0], {}):
             print(row)
         return 0
+    if args:
+        return usage(f"{cmd} takes no arguments")
     if cmd == "summary":
         verbs = {}
         for e in graph["edges"]:
@@ -263,14 +305,15 @@ def main(argv=None):
         findings = check(graph)
         for f in findings:
             print("adr_graph: " + f, file=sys.stderr)
-        if not findings:
+        if findings:
+            print(f"adr_graph: {len(findings)} finding(s)", file=sys.stderr)
+        else:
             print("adr_graph: the index links, status notes and frontmatter agree")
         return 1 if findings else 0
     if cmd == "export":
         sys.stdout.write(cypher_seed(graph))
         return 0
-    print(__doc__.split("\n\nSources")[0].strip())
-    return 0 if cmd in ("help", "-h", "--help") else 2
+    return usage("changed|basis|summary|check|query|export, or help")
 
 
 if __name__ == "__main__":
