@@ -10,7 +10,7 @@
     "start_date": "2024-01-01",
     "end_date": "2025-12-31"
   },
-  "captured_at_utc": "2026-11-28T07:17:47Z",
+  "captured_at_utc": "2026-11-28T07:21:19Z",
   "governing_adrs": [
     "ADR-0051",
     "ADR-0057"
@@ -413,5 +413,5 @@
       "provenance_class": "OBSERVED"
     }
   ],
-  "manifest_sha256": "1e0d8bb04c9044e744a26a6d715ea63cb02e2fda615813080b0f9ee7bc949955"
+  "manifest_sha256": "f0224da8c0b3747fce9bfb06b10e6dfa6940929ff4b1816b5888505d27a1a20c"
 }

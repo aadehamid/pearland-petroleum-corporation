@@ -58,6 +58,16 @@ class TestPublicIngest(unittest.TestCase):
         missing_total = json.dumps({"response": {"data": [{"period": "2025-01-02", "value": "70.0"}]}}).encode("utf-8")
         with self.assertRaises(ValueError):
             public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: missing_total)
+        # Truncated pagination (total=100, page 1 returns 1 row, page 2 returns []) must raise loudly
+        pages = iter([
+            json.dumps({"response": {"total": "100", "data": [{"period": "2025-01-02", "value": "70.0"}]}}).encode("utf-8"),
+            json.dumps({"response": {"total": "100", "data": []}}).encode("utf-8"),
+        ])
+        with self.assertRaises(ValueError):
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: next(pages), sleep_seconds=0.0)
+        # Malformed HURDAT2 row (<8 cols) must fail closed
+        with self.assertRaises(ValueError):
+            public_ingest.parse_hurdat2_storms("AL092017, HARVEY, 1,\n20170825, 1800, , HU, 27.3N\n", min_year=0)
         sanitized = public_ingest.sanitize_url_for_logs("https://api.eia.gov/v2/x?api_key=SUPERSECRET123&length=5000")
         self.assertNotIn("SUPERSECRET123", sanitized)
         self.assertIn("api_key=REDACTED", sanitized)

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """WP-1a public data ingestion landing pinned OBSERVED vintages to Cloudflare R2 raw/.
 
-Ingests verified primary public observations (EIA Open Data API v2 PADD 3 stocks,
-inputs, and USGC spot prices; NOAA NHC HURDAT2 Atlantic best-track archive;
-EPA Envirofacts GHGRP facility registry PUB_DIM_FACILITY NAICS 324110 TX/LA
-subset of PADD 3; and PHMSA hazardous liquid accident ZIP archives) into the
-operational R2 bucket under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/`
-and writes a secret-free `OBSERVED` vintage manifest.
+Ingests verified primary public observations (EIA Open Data API v2 PADD 3 stocks
+and inputs, USGC refined-product spot prices, WTI Cushing, Europe Brent, and
+Henry Hub natural gas; NOAA NHC HURDAT2 Atlantic best-track archive; EPA
+Envirofacts GHGRP facility registry PUB_DIM_FACILITY NAICS 324110 TX/LA subset
+of PADD 3; and PHMSA hazardous liquid accident ZIP archives) into the operational
+R2 bucket under `raw/external/{eia,noaa,epa,phmsa}/vintage=<date>/` and writes a
+secret-free `OBSERVED` vintage manifest.
 
 Governing authorities: PPC-WORLD-001 §4, PPC-PLAN-001 WP-1, PPC-013, ADR-0051, ADR-0057.
 Never commits or prints API keys or R2 credentials.
@@ -38,7 +39,7 @@ PHMSA_ARCHIVE_URL = (
     "accident_hazardous_liquid_jan2010_present.zip"
 )
 
-# Live-verified EIA Open Data API v2 PADD 3 (duoarea=R30) and USGC benchmark series
+# Live-verified EIA Open Data API v2 benchmark catalog (queried by facets[series][])
 EIA_SERIES_CATALOG: tuple[dict[str, str], ...] = (
     {
         "series_id": "WCRRIP32",
@@ -234,14 +235,20 @@ def fetch_eia_series(
         rows.extend(batch)
         total = int(resp["total"])
         offset += len(batch)
-        if not batch or offset >= total:
+        if offset >= total:
             break
+        if not batch:
+            raise ValueError(
+                f"EIA series {entry['series_id']} truncated at {offset} of {total} rows (empty page before total)"
+            )
         if sleep_seconds > 0:
             time.sleep(sleep_seconds)
     if not rows:
         raise ValueError(
             f"EIA series {entry['series_id']} returned 0 rows for window {start_date}..{end_date}"
         )
+    if len(rows) < total:
+        raise ValueError(f"EIA series {entry['series_id']} returned {len(rows)} rows, fewer than total={total}")
     return rows
 
 
@@ -291,7 +298,7 @@ def parse_hurdat2_storms(raw_text: str, min_year: int = 2010) -> list[dict[str, 
             for tline in track_lines:
                 cols = [c.strip() for c in tline.split(",")]
                 if len(cols) < 8:
-                    continue
+                    raise ValueError(f"Malformed HURDAT2 track row for {storm_id} (<8 columns): {tline!r}")
                 statuses.add(cols[3])
                 wind = int(cols[6])
                 if wind > max_wind_kt:
@@ -423,9 +430,14 @@ def run_public_ingest(
         r2_key = f"raw/external/{source}/vintage={vintage}/{rel_key}"
         uploaded = upload_fn is not None
         etag: str | None = None
+        expected_md5 = hashlib.md5(payload).hexdigest()
         if upload_fn is not None:
             raw_etag = upload_fn(r2_key, payload, content_type)
             etag = str(raw_etag).strip('"') if raw_etag else None
+            if not etag or etag != expected_md5:
+                raise RuntimeError(
+                    f"R2 upload ETag verification failed for {r2_key}: expected md5={expected_md5}, got {etag!r}"
+                )
         ingested.append(
             IngestedObject(
                 source=source,
@@ -513,7 +525,7 @@ def run_public_ingest(
         separators=(",", ":"),
     ).encode("utf-8")
     unique_facilities = {
-        (r.get("facility_id") if r.get("facility_id") is not None else r.get("FACILITY_ID"))
+        str(r.get("facility_id") if r.get("facility_id") is not None else r.get("FACILITY_ID")).strip()
         for r in epa_records
         if (r.get("facility_id") is not None or r.get("FACILITY_ID") is not None)
     }
