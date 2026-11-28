@@ -162,17 +162,40 @@ def _is_printable_text(text: str) -> bool:
 
 
 def _is_clean_text(buf: bytes) -> bool:
-    """Return True iff buf is clean printable UTF-8, BOM-tagged UTF-16 (any Unicode), BOM-less Latin-1 UTF-16, or UTF-32.
+    """Return True iff buf is clean printable UTF-8, BOM-tagged UTF-16/UTF-32 (any Unicode), or BOM-less Latin-1 UTF-16/UTF-32.
 
-    BOM-less non-Latin-1 UTF-16 cannot be reliably separated from arbitrary 16-bit binary bytes,
-    so non-Latin-1 UTF-16 requires a UTF-16 BOM (0xFFFE / 0xFEFF) to pass as clean text while still
-    being scanned for hidden-truth markers regardless of BOM.
+    BOM-less non-Latin-1 UTF-16 and UTF-32 cannot be reliably separated from arbitrary binary bytes,
+    so non-Latin-1 UTF-16/UTF-32 requires a BOM to pass as clean text while still being scanned for
+    hidden-truth markers regardless of BOM.
     """
     try:
         if _is_printable_text(buf.decode("utf-8", errors="strict")):
             return True
     except UnicodeDecodeError:
         pass
+    if len(buf) >= 4 and len(buf) % 4 == 0:
+        if buf.startswith(b"\xff\xfe\x00\x00"):
+            try:
+                text = buf.decode("utf-32-le", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        elif buf.startswith(b"\x00\x00\xfe\xff"):
+            try:
+                text = buf.decode("utf-32-be", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        else:
+            for enc in ("utf-32-le", "utf-32-be"):
+                try:
+                    text = buf.decode(enc, errors="strict")
+                    if text and _is_printable_text(text) and all(ord(c) < 0x0100 for c in text):
+                        return True
+                except UnicodeDecodeError:
+                    pass
     if len(buf) >= 2 and len(buf) % 2 == 0 and not buf.startswith(_COMPRESSED_MAGIC_PREFIXES):
         if buf.startswith(b"\xff\xfe"):
             try:
@@ -197,14 +220,6 @@ def _is_clean_text(buf: bytes) -> bool:
                         return True
                 except UnicodeDecodeError:
                     pass
-    if len(buf) >= 4 and len(buf) % 4 == 0:
-        for enc in ("utf-32-le", "utf-32-be"):
-            try:
-                text = buf.decode(enc, errors="strict")
-                if text and _is_printable_text(text):
-                    return True
-            except UnicodeDecodeError:
-                pass
     return False
 
 
@@ -213,7 +228,7 @@ def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool,
 
     Returns ([(buffer, is_speculative), ...], budget_exceeded, fully_decompressed_cleanly).
     `fully_decompressed_cleanly` is True iff a gzip or zlib pass consumed `buf` cleanly to EOF with no errors,
-    or a raw-deflate pass consumed `buf` cleanly to EOF and produced clean printable text.
+    or a raw-deflate pass consumed `buf` cleanly to EOF and produced at least 8 bytes of clean printable text.
     """
     results: list[tuple[bytes, bool]] = []
     budget_exceeded = False
@@ -291,8 +306,12 @@ def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool,
         if len(chunks) > 1:
             results.append((b"".join(chunks), is_raw_probe or had_error))
         if had_clean_member and not had_error and not rem:
-            if not is_raw_probe or (chunks and _is_clean_text(b"".join(chunks))):
+            if not is_raw_probe:
                 fully_decompressed_cleanly = True
+            elif chunks:
+                raw_joined = b"".join(chunks)
+                if len(raw_joined) >= 8 and _is_clean_text(raw_joined):
+                    fully_decompressed_cleanly = True
     return results, budget_exceeded, fully_decompressed_cleanly
 
 

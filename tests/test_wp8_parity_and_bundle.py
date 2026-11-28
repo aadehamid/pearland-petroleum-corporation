@@ -277,6 +277,9 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("gzip_nested", gzip.compress(double_bytes)),
             ("short_random_binary_16b", bytes.fromhex("67745c10595a149a95ac435eafe7d5ee")),
             ("raw_deflate_fluke_12b", bytes.fromhex("8b163cb470eda47542917a80")),
+            ("raw_deflate_tiny_3b", bytes.fromhex("ab03d4")),
+            ("utf32be_random_4b", bytes.fromhex("0002be3f")),
+            ("utf32le_random_4b", bytes.fromhex("2f350000")),
         ):
             double_audit = audit_observable_for_hidden_leaks({f"double_{wrap_name}.zlib": wrapped})
             self.assertEqual(double_audit["leak_audit"]["status"], "FAILED", wrap_name)
@@ -302,6 +305,8 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("utf16be_bom_cjk", "\ufeff清洁精炼厂运行摘要".encode("utf-16-be")),
             ("utf16le_bom_multiscript", "\ufeffRésumé Привет 中文 العربية".encode("utf-16-le")),
             ("utf32le_clean", "clean refinery operational summary".encode("utf-32-le")),
+            ("utf32le_bom_cjk", "\ufeff清洁精炼厂运行摘要".encode("utf-32-le")),
+            ("utf32be_bom_multiscript", "\ufeffRésumé Привет 中文 العربية".encode("utf-32-be")),
             ("alnum_word_clean", b"operationalreport12345678"),
             ("alnum_24_clean", b"operationalreport1234567"),
             ("camelcase_24_clean", b"CleanRefineryReport20240"),
