@@ -47,6 +47,9 @@ buckets:
     isolation_boundary: "restricted_canonical_world_and_blind_evaluation_only"
     must_deny_access_to_buckets:
       - "pearland-petroleum-corp"
+    permitted_writers:
+      - "generators/"
+      - "verification/"
     forbidden_consumers:
       - "integration_pipelines"
       - "operational_retrieval_agents"
