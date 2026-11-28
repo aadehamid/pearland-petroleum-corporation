@@ -64,43 +64,61 @@ def _text_views_from_bytes(buf: bytes) -> list[str]:
     return views
 
 
-def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
-    """Produce decoded text views across UTF-8, UTF-16/32 (with byte offsets), gzip/zlib, base64, and hex."""
-    raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
-    byte_candidates: list[bytes] = [raw_bytes]
-
-    # Try tolerant gzip / zlib decompression (ignores trailing non-member padding bytes)
+def _decompress_all_members(buf: bytes) -> list[bytes]:
+    """Decompress single- and multi-member gzip/zlib/raw-deflate streams tolerating trailing non-member bytes."""
+    results: list[bytes] = []
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
-        try:
-            dobj = zlib.decompressobj(wbits)
-            unpacked = dobj.decompress(raw_bytes) + dobj.flush()
-            if unpacked:
-                byte_candidates.append(unpacked)
-        except Exception:
-            pass
+        rem = buf
+        chunks: list[bytes] = []
+        for _ in range(16):
+            if not rem:
+                break
+            try:
+                dobj = zlib.decompressobj(wbits)
+                part = dobj.decompress(rem) + dobj.flush()
+                if part:
+                    chunks.append(part)
+                    results.append(part)
+                nxt = dobj.unused_data
+                if not nxt or len(nxt) >= len(rem):
+                    break
+                rem = nxt
+            except Exception:
+                break
+        if len(chunks) > 1:
+            results.append(b"".join(chunks))
     for decompressor in (gzip.decompress, zlib.decompress):
         try:
-            unpacked = decompressor(raw_bytes)
+            unpacked = decompressor(buf)
             if unpacked:
-                byte_candidates.append(unpacked)
+                results.append(unpacked)
         except Exception:
             pass
+    return results
 
-    # Try standard & URL-safe base64 (including stripped padding) over full buffer and embedded ASCII tokens
+
+def _decode_one_layer(raw_bytes: bytes) -> list[bytes]:
+    """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1)."""
+    out: list[bytes] = []
+    out.extend(_decompress_all_members(raw_bytes))
+
     stripped = re.sub(rb"\s+", b"", raw_bytes)
     for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
-        if len(token) >= 16:
-            norm = token.replace(b"-", b"+").replace(b"_", b"/").rstrip(b"=")
-            if len(norm) % 4 != 1:
-                padded = norm + b"=" * ((-len(norm)) % 4)
-                try:
-                    decoded = base64.b64decode(padded, validate=True)
-                    if decoded:
-                        byte_candidates.append(decoded)
-                except Exception:
-                    pass
+        for offset in (0, 1, 2, 3):
+            sub = token[offset:]
+            if len(sub) < 16:
+                continue
+            norm = sub.replace(b"-", b"+").replace(b"_", b"/").rstrip(b"=")
+            if len(norm) % 4 == 1:
+                continue
+            padded = norm + b"=" * ((-len(norm)) % 4)
+            try:
+                decoded = base64.b64decode(padded, validate=True)
+                if decoded:
+                    out.append(decoded)
+            except Exception:
+                pass
 
-    # Try hex decoding at both nibble alignments (offset 0 and offset 1)
     for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
         for offset in (0, 1):
             sub = token[offset:]
@@ -109,9 +127,29 @@ def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
                 try:
                     decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
                     if decoded:
-                        byte_candidates.append(decoded)
+                        out.append(decoded)
                 except Exception:
                     pass
+    return out
+
+
+def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> list[str]:
+    """Produce decoded text views recursively (up to max_depth layers) across UTF-8/16/32, gzip/zlib, base64, hex."""
+    raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
+    seen: set[bytes] = {raw_bytes}
+    byte_candidates: list[bytes] = [raw_bytes]
+    frontier: list[bytes] = [raw_bytes]
+    for _ in range(max_depth):
+        next_frontier: list[bytes] = []
+        for buf in frontier:
+            for child in _decode_one_layer(buf):
+                if child not in seen and len(seen) < 64:
+                    seen.add(child)
+                    byte_candidates.append(child)
+                    next_frontier.append(child)
+        if not next_frontier:
+            break
+        frontier = next_frontier
 
     views: list[str] = []
     if isinstance(raw, str):
