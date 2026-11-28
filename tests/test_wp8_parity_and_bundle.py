@@ -6,6 +6,7 @@ import base64
 import gzip
 import hashlib
 import unittest
+import zlib
 from pathlib import Path
 
 from evaluations.world_export_bundle_v1 import (
@@ -164,6 +165,10 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                     + base64.b64encode(base64.b64encode(gzip.compress(b"evaluation/hidden/keys.json"))).decode("ascii")
                     + '"}'
                 ).encode("utf-8"),
+            ),
+            (
+                "zlib_bomb_exceeding_budget_fails_closed",
+                zlib.compress(b"\x00" * (65 * 1024 * 1024)) + zlib.compress(b"evaluation/hidden/keys.json") + b"\x00pad",
             ),
             ("base64_leak", base64.b64encode(b"evaluation/hidden/score.key")),
             ("base64_urlsafe", base64.urlsafe_b64encode(b"\x01\x9c" + b"hidden_truth" + b"\xff")),

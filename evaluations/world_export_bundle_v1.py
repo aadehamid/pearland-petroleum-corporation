@@ -67,9 +67,10 @@ def _text_views_from_bytes(buf: bytes) -> list[str]:
 _MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024
 
 
-def _decompress_all_members(buf: bytes) -> list[bytes]:
-    """Decompress all members of gzip/zlib/raw-deflate streams tolerating trailing non-member bytes."""
+def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
+    """Decompress all members of gzip/zlib/raw-deflate streams; returns (buffers, budget_exceeded)."""
     results: list[bytes] = []
+    budget_exceeded = False
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
         rem = buf
         chunks: list[bytes] = []
@@ -77,13 +78,22 @@ def _decompress_all_members(buf: bytes) -> list[bytes]:
         while rem:
             try:
                 dobj = zlib.decompressobj(wbits)
-                part = dobj.decompress(rem, _MAX_DECOMPRESSED_BYTES - total_out) + dobj.flush()
+                remaining_budget = _MAX_DECOMPRESSED_BYTES - total_out
+                if remaining_budget <= 0:
+                    budget_exceeded = True
+                    break
+                part = dobj.decompress(rem, remaining_budget)
+                if dobj.unconsumed_tail:
+                    budget_exceeded = True
+                    if part:
+                        chunks.append(part)
+                        results.append(part)
+                    break
+                part += dobj.flush()
                 if part:
                     total_out += len(part)
                     chunks.append(part)
                     results.append(part)
-                    if total_out >= _MAX_DECOMPRESSED_BYTES:
-                        break
                 nxt = dobj.unused_data
                 if not nxt or len(nxt) >= len(rem):
                     break
@@ -99,13 +109,12 @@ def _decompress_all_members(buf: bytes) -> list[bytes]:
                 results.append(unpacked)
         except Exception:
             pass
-    return results
+    return results, budget_exceeded
 
 
-def _decode_one_layer(raw_bytes: bytes) -> list[bytes]:
+def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool]:
     """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1)."""
-    out: list[bytes] = []
-    out.extend(_decompress_all_members(raw_bytes))
+    out, budget_exceeded = _decompress_all_members(raw_bytes)
 
     stripped = re.sub(rb"\s+", b"", raw_bytes)
     for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
@@ -135,19 +144,22 @@ def _decode_one_layer(raw_bytes: bytes) -> list[bytes]:
                         out.append(decoded)
                 except Exception:
                     pass
-    return out
+    return out, budget_exceeded
 
 
-def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> list[str]:
-    """Produce decoded text views recursively (up to max_depth layers) across UTF-8/16/32, gzip/zlib, base64, hex."""
+def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[list[str], bool]:
+    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget_exceeded flag."""
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
     seen: set[bytes] = {raw_bytes}
     byte_candidates: list[bytes] = [raw_bytes]
     frontier: list[bytes] = [raw_bytes]
+    budget_exceeded = False
     for _ in range(max_depth):
         next_frontier: list[bytes] = []
         for buf in frontier:
-            for child in _decode_one_layer(buf):
+            children, exceeded = _decode_one_layer(buf)
+            budget_exceeded = budget_exceeded or exceeded
+            for child in children:
                 if child not in seen:
                     seen.add(child)
                     byte_candidates.append(child)
@@ -161,7 +173,7 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> list[str]
         views.append(raw.lower())
     for cand in byte_candidates:
         views.extend(_text_views_from_bytes(cand))
-    return views
+    return views, budget_exceeded
 
 
 def audit_observable_for_hidden_leaks(
@@ -179,7 +191,9 @@ def audit_observable_for_hidden_leaks(
 
     findings: list[dict[str, str]] = []
     for name, raw in items:
-        views = _decode_variants_for_scan(raw)
+        views, budget_exceeded = _decode_variants_for_scan(raw)
+        if budget_exceeded:
+            findings.append({"artifact": name, "marker": "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED"})
         for marker in FORBIDDEN_OBSERVABLE_MARKERS:
             if any(marker in v for v in views):
                 findings.append({"artifact": name, "marker": marker})
