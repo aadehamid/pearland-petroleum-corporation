@@ -72,9 +72,46 @@ class TestZ3SymbolicProofs(unittest.TestCase):
             m_hi_split,
             z3.If(unconstrained < m_min, m_lo_split, m0 + net * tau),
         )
-        # Negation: can ANY interior instant tau in [0, dt] ever escape [m_min, m_max]? Must be UNSAT!
+        # Negation: can ANY interior instant tau in [0, dt] ever escape [m_min, m_max] under throttle/divert? Must be UNSAT!
         s2.add(z3.Or(m_tau < m_min, m_tau > m_max))
         self.assertEqual(s2.check(), z3.unsat)
+
+        # Prove `block` rule as well (BOTH MAX-crossing drain cap and MIN-crossing refill cap, with r_loss >= 0):
+        # On MAX crossing: in_2 = 0, drain (out_2 + loss_2) scaled by min(1, (m_max-m_min)/((r_out+r_loss)*dt_rem))
+        #   so over [t*, dt], m(tau) decreases linearly from m_max to at lowest m_min.
+        # On MIN crossing: out_2 = 0, eff_loss = min(r_loss, r_in), in_2 = min(r_in*dt_rem, (m_max-m_min) + eff_loss*dt_rem)
+        #   so over [t*, dt], m(tau) rises linearly from m_min to at highest m_max.
+        s3 = z3.Solver()
+        bm0, bmin, bmax, br_in, br_out, br_loss, bdt, btau = z3.Reals(
+            "bm0 bmin bmax br_in br_out br_loss bdt btau"
+        )
+        s3.add(bmin >= 0, bmax > bmin, bm0 >= bmin, bm0 <= bmax)
+        s3.add(br_in >= 0, br_out >= 0, br_loss >= 0, bdt > 0, btau >= 0, btau <= bdt)
+        bnet = br_in - br_out - br_loss
+        buncon = bm0 + bnet * bdt
+        bt_hi = z3.If(bnet > 0, (bmax - bm0) / bnet, bdt)
+        bt_lo = z3.If(bnet < 0, (bm0 - bmin) / (-bnet), bdt)
+        bdt_rem_hi = bdt - bt_hi
+        bdt_rem_lo = bdt - bt_lo
+        bavail = bmax - bmin
+        # MAX block: total drain over dt_rem is min((r_out + r_loss)*dt_rem, avail)
+        breq_drain = (br_out + br_loss) * bdt_rem_hi
+        bdrain_total = z3.If(breq_drain <= bavail, breq_drain, bavail)
+        bfrac_hi = z3.If(bdt_rem_hi > 0, (btau - bt_hi) / bdt_rem_hi, 0)
+        bm_hi_block = z3.If(btau <= bt_hi, bm0 + bnet * btau, bmax - bdrain_total * bfrac_hi)
+        # MIN block: net refill over dt_rem is min((r_in - eff_loss)*dt_rem, avail)
+        beff_loss = z3.If(br_loss <= br_in, br_loss, br_in)
+        breq_fill = (br_in - beff_loss) * bdt_rem_lo
+        bfill_total = z3.If(breq_fill <= bavail, breq_fill, bavail)
+        bfrac_lo = z3.If(bdt_rem_lo > 0, (btau - bt_lo) / bdt_rem_lo, 0)
+        bm_lo_block = z3.If(btau <= bt_lo, bm0 + bnet * btau, bmin + bfill_total * bfrac_lo)
+        bm_tau = z3.If(
+            buncon > bmax,
+            bm_hi_block,
+            z3.If(buncon < bmin, bm_lo_block, bm0 + bnet * btau),
+        )
+        s3.add(z3.Or(bm_tau < bmin, bm_tau > bmax))
+        self.assertEqual(s3.check(), z3.unsat)
 
     def test_po04_z3_proves_shared_h2_no_double_allocation_and_h2cont_counterexample(self):
         """PO-04: Prove shared H2 cannot be double-allocated and verify SCN-A-H2CONT 75 t/day cap."""
@@ -119,7 +156,7 @@ class TestZ3SymbolicProofs(unittest.TestCase):
 
 
 class TestHypothesisPhysicalInvariants(unittest.TestCase):
-    @settings(max_examples=80)
+    @settings(max_examples=300)
     @given(
         open_bbl=st.floats(min_value=1000.0, max_value=12000.0, allow_nan=False, allow_infinity=False),
         in_bbl_h=st.floats(min_value=0.0, max_value=2000.0, allow_nan=False, allow_infinity=False),
@@ -132,20 +169,29 @@ class TestHypothesisPhysicalInvariants(unittest.TestCase):
         self, open_bbl, in_bbl_h, out_bbl_h, loss_bbl_h, dt_s, rule
     ):
         sg = 0.840
+        in_kg_s = eq.volume_bbl_to_mass_kg(in_bbl_h, sg) / 3600.0
+        out_kg_s = eq.volume_bbl_to_mass_kg(out_bbl_h, sg) / 3600.0
+        loss_kg_s = eq.volume_bbl_to_mass_kg(loss_bbl_h, sg) / 3600.0
         res = eq.step_tank_with_exact_crossing(
             opening_mass_kg=eq.volume_bbl_to_mass_kg(open_bbl, sg),
             min_mass_kg=eq.volume_bbl_to_mass_kg(1000.0, sg),
             max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
-            inflow_rate_kg_s=eq.volume_bbl_to_mass_kg(in_bbl_h, sg) / 3600.0,
-            outflow_rate_kg_s=eq.volume_bbl_to_mass_kg(out_bbl_h, sg) / 3600.0,
-            loss_rate_kg_s=eq.volume_bbl_to_mass_kg(loss_bbl_h, sg) / 3600.0,
+            inflow_rate_kg_s=in_kg_s,
+            outflow_rate_kg_s=out_kg_s,
+            loss_rate_kg_s=loss_kg_s,
             dt_s=dt_s,
             rule=rule,
         )
         close_bbl = eq.mass_kg_to_volume_bbl(res.closing_mass_kg, sg)
         self.assertGreaterEqual(close_bbl, 1000.0 - 1e-6)
         self.assertLessEqual(close_bbl, 12000.0 + 1e-6)
-        self.assertLessEqual(abs(res.mass_residual_kg), 1e-9 * max(1.0, res.opening_mass_kg + res.accepted_inflow_kg))
+        # Independent stream conservation check: requested (in + out)*dt == accepted_in + accepted_out + diverted_or_blocked
+        req_stream_kg = (in_kg_s + out_kg_s) * dt_s
+        acct_stream_kg = res.accepted_inflow_kg + res.accepted_outflow_kg + res.diverted_or_blocked_kg
+        self.assertLessEqual(abs(acct_stream_kg - req_stream_kg), 1e-9 * max(1.0, req_stream_kg))
+        # Independent control-volume mass balance check against opening/closing
+        expected_close = res.opening_mass_kg + res.accepted_inflow_kg - res.accepted_outflow_kg - res.loss_kg
+        self.assertLessEqual(abs(res.closing_mass_kg - expected_close), 1e-9 * max(1.0, res.opening_mass_kg + res.accepted_inflow_kg))
 
     @settings(max_examples=50)
     @given(

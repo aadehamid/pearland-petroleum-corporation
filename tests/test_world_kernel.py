@@ -457,6 +457,24 @@ class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
         k_loss.advance_to(datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc))
         self.assertAlmostEqual(k_loss.state.tanks["TK-LOSS"].volume_bbl, 1000.0, places=6)
 
+        # EQ-02 MIN-bound `block` rule MUST NOT re-cross above max_mass_kg over long dt_s
+        min_block_long = eq.step_tank_with_exact_crossing(
+            opening_mass_kg=eq.volume_bbl_to_mass_kg(1001.0, sg),
+            min_mass_kg=eq.volume_bbl_to_mass_kg(1000.0, sg),
+            max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
+            inflow_rate_kg_s=eq.volume_bbl_to_mass_kg(1900.0, sg) / 3600.0,
+            outflow_rate_kg_s=eq.volume_bbl_to_mass_kg(2000.0, sg) / 3600.0,
+            loss_rate_kg_s=0.0,
+            dt_s=86400.0,
+            rule="block",
+        )
+        self.assertAlmostEqual(eq.mass_kg_to_volume_bbl(min_block_long.closing_mass_kg, sg), 12000.0, places=6)
+        self.assertAlmostEqual(
+            min_block_long.accepted_inflow_kg + min_block_long.accepted_outflow_kg + min_block_long.diverted_or_blocked_kg,
+            eq.volume_bbl_to_mass_kg(3900.0, sg) * 24.0,
+            places=4,
+        )
+
     def test_coupled_plant_snapshot_and_eng_v07_benchmark_transparency(self):
         design_basis = yaml.safe_load(DESIGN_BASIS_PATH.read_text(encoding="utf-8"))
         # Normal snapshot

@@ -232,10 +232,13 @@ def step_tank_with_exact_crossing(
     else:  # MIN bound
         eff_loss_rate = min(loss_rate_kg_s, inflow_rate_kg_s)
         if rule == "block":
-            in_2 = inflow_rate_kg_s * dt_rem
-            out_2 = 0.0
+            # Stop outflow over [t*, dt_s); cap post-t* refill so tank cannot re-cross above max_mass_kg
+            avail_fill = max(0.0, max_mass_kg - min_mass_kg)
             loss_2 = eff_loss_rate * dt_rem
-            diverted = outflow_rate_kg_s * dt_rem
+            req_in_2 = inflow_rate_kg_s * dt_rem
+            in_2 = min(req_in_2, avail_fill + loss_2)
+            out_2 = 0.0
+            diverted = outflow_rate_kg_s * dt_rem + (req_in_2 - in_2)
         else:
             cap_out_rate = max(0.0, inflow_rate_kg_s - eff_loss_rate)
             in_2 = inflow_rate_kg_s * dt_rem
