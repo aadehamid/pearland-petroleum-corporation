@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "adapter_mode": "OFFLINE_RECORDED_FIXTURE_ONLY",
+  "live_llm_status": "DEFERRED_PENDING_OWNER_CHOICE_ADR_0059",
+  "provenance_class": "SYNTHETIC",
+  "cases": {
+    "SCN-A-T125": {
+      "potential_exposure_paths": [
+        {
+          "badge": "POTENTIAL_EXPOSURE",
+          "source_unit": "4B",
+          "target_tank": "TK-301",
+          "affected_terminal": "TERM-01",
+          "note": "Graph reachability only; not model-quantified margin."
+        }
+      ],
+      "model_quantified_cards": [
+        {
+          "badge": "MODEL_QUANTIFIED",
+          "model_run_id": "LP-SCN-A-001",
+          "binding_constraint": "compressor_circulation_cap",
+          "max_hcu_feed_bbl_per_day": 30000.0,
+          "estimated_margin_effect_usd": 185000.0
+        }
+      ],
+      "recommended_action": {
+        "action_type": "feed_rate_change_inside_envelope",
+        "target_unit": "4B",
+        "requested_feed_bbl_per_day": 28500.0,
+        "rate_change_bbl_per_day": 1500.0,
+        "margin_effect_usd": 185000.0
+      }
+    }
+  }
+}
