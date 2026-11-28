@@ -117,6 +117,17 @@ class TestWP1bDesignBasis(unittest.TestCase):
         one_sec = [t for t in self.ot["tags"] if t["sample_seconds"] == 1]
         self.assertGreaterEqual(len(one_sec), 3)
 
+    def test_commercial_rfg_rvp_and_premium_cap_comply_with_adr0056(self):
+        # Houston RFG terminals (TERM-01, TERM-03) must keep E10 RVP <= 7.4 psi (40 CFR 1090.215)
+        for term in self.db["terminals"]:
+            if term["id"] in ("TERM-01", "TERM-03"):
+                self.assertLessEqual(term["rfg_summer_bob_rvp_max_psi"] + term["ethanol_rvp_bump_psi"], 7.4 + 1e-9)
+        # Premium gasoline share must be <= 10% of total gasoline pool (ADR-0056 G3-c)
+        gas_custs = [c for c in self.db["customers"] if c["product"].startswith("E10_")]
+        prem_bpd = sum(c["contract_bbl_per_day"] for c in gas_custs if c["product"] == "E10_PREM")
+        tot_gas_bpd = sum(c["contract_bbl_per_day"] for c in gas_custs)
+        self.assertLessEqual(prem_bpd / tot_gas_bpd, 0.10)
+
 
 if __name__ == "__main__":
     unittest.main()

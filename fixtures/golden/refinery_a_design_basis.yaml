@@ -56,13 +56,13 @@ crude_assays:
       - [95.0, 620.0]
       - [100.0, 710.0]
     cuts:
-      - {name: "LPG", vol_pct: 3.0, sg_60_60: 0.54467, sulfur_wt_pct: 0.00075, mid_bp_c: 0.0}
-      - {name: "LSR", vol_pct: 9.0, sg_60_60: 0.67460, sulfur_wt_pct: 0.00566, mid_bp_c: 57.5}
-      - {name: "HEAVY_NAPHTHA", vol_pct: 17.0, sg_60_60: 0.75455, sulfur_wt_pct: 0.02263, mid_bp_c: 130.0}
-      - {name: "KEROSENE", vol_pct: 13.0, sg_60_60: 0.81151, sulfur_wt_pct: 0.09428, mid_bp_c: 207.5}
-      - {name: "AGO", vol_pct: 21.0, sg_60_60: 0.85449, sulfur_wt_pct: 0.24512, mid_bp_c: 300.0}
-      - {name: "VGO", vol_pct: 27.0, sg_60_60: 0.90446, sulfur_wt_pct: 0.54680, mid_bp_c: 462.5}
-      - {name: "VACUUM_RESIDUE", vol_pct: 10.0, sg_60_60: 0.95443, sulfur_wt_pct: 0.98047, mid_bp_c: 625.0}
+      - {name: "LPG", vol_pct: 3.0, sg_60_60: 0.54467, sulfur_wt_pct: 0.00077, mid_bp_c: 0.0}
+      - {name: "LSR", vol_pct: 9.0, sg_60_60: 0.67460, sulfur_wt_pct: 0.00578, mid_bp_c: 57.5}
+      - {name: "HEAVY_NAPHTHA", vol_pct: 17.0, sg_60_60: 0.75455, sulfur_wt_pct: 0.02312, mid_bp_c: 130.0}
+      - {name: "KEROSENE", vol_pct: 13.0, sg_60_60: 0.81151, sulfur_wt_pct: 0.09632, mid_bp_c: 207.5}
+      - {name: "AGO", vol_pct: 21.0, sg_60_60: 0.85449, sulfur_wt_pct: 0.25042, mid_bp_c: 300.0}
+      - {name: "VGO", vol_pct: 27.0, sg_60_60: 0.90446, sulfur_wt_pct: 0.55863, mid_bp_c: 462.5}
+      - {name: "VACUUM_RESIDUE", vol_pct: 10.0, sg_60_60: 0.95443, sulfur_wt_pct: 1.00168, mid_bp_c: 625.0}
 
   - id: "ASSAY-MEDIUM-SOUR"
     name: "USGC Medium Sour Synthetic Analog"
@@ -293,25 +293,26 @@ streams:
   - {id: "STR-BL-FINISHED-FT", source: "BL", destination: "FT", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
 
 # 3 distribution terminals (Terminal ethanol 10.0 vol% enters strictly inside terminals, ADR-0054)
+# Houston RFG summer E10 cap is 7.4 psi (40 CFR 1090.215) -> 6.4 psi BOB cap before +1.0 psi ethanol bump.
 terminals:
-  - {id: "TERM-01", name: "Houston Ship Channel Rack", mode: ["pipeline", "truck", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.8, storage_ulsd_max_bbl: 180000.0, storage_bob_max_bbl: 200000.0, provenance_class: "SYNTHETIC"}
-  - {id: "TERM-02", name: "Beaumont Products Terminal", mode: ["pipeline", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 7.8, storage_ulsd_max_bbl: 150000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
-  - {id: "TERM-03", name: "Pasadena Distribution Rack", mode: ["pipeline", "truck"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.8, storage_ulsd_max_bbl: 140000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
+  - {id: "TERM-01", name: "Houston Ship Channel Rack", mode: ["pipeline", "truck", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.4, storage_ulsd_max_bbl: 180000.0, storage_bob_max_bbl: 200000.0, provenance_class: "SYNTHETIC"}
+  - {id: "TERM-02", name: "Beaumont Products Terminal", mode: ["pipeline", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.8, storage_ulsd_max_bbl: 150000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
+  - {id: "TERM-03", name: "Pasadena Distribution Rack", mode: ["pipeline", "truck"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.4, storage_ulsd_max_bbl: 140000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
 
-# 12 synthetic commercial customers (PPC-WORLD-001 §1, PPC-PLAN-001 WP-1)
+# 12 synthetic commercial customers (PPC-WORLD-001 §1, PPC-PLAN-001 WP-1; premium share <= 10% per ADR-0056 G3-c)
 customers:
   - {id: "CUST-01", name: "Bayou Fleet Fuels LLC", segment: "commercial_diesel", primary_terminal: "TERM-01", product: "ULSD", contract_bbl_per_day: 8500.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 8.50, provenance_class: "SYNTHETIC"}
   - {id: "CUST-02", name: "Gulf Corridor Jobbers Inc", segment: "wholesale_rack", primary_terminal: "TERM-01", product: "E10_REG", contract_bbl_per_day: 11000.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.00, provenance_class: "SYNTHETIC"}
   - {id: "CUST-03", name: "Sabine Marine Bunkers Co", segment: "marine_wholesale", primary_terminal: "TERM-02", product: "ULSD", contract_bbl_per_day: 7500.0, delivery_mode: "marine", penalty_usd_per_bbl: 11.00, provenance_class: "SYNTHETIC"}
   - {id: "CUST-04", name: "Lone Star Retail Brands", segment: "branded_retail", primary_terminal: "TERM-03", product: "E10_REG", contract_bbl_per_day: 12000.0, delivery_mode: "truck", penalty_usd_per_bbl: 7.50, provenance_class: "SYNTHETIC"}
-  - {id: "CUST-05", name: "Lone Star Premium Supply", segment: "branded_retail", primary_terminal: "TERM-03", product: "E10_PREM", contract_bbl_per_day: 4200.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-05", name: "Lone Star Premium Supply", segment: "branded_retail", primary_terminal: "TERM-03", product: "E10_PREM", contract_bbl_per_day: 2500.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.00, provenance_class: "SYNTHETIC"}
   - {id: "CUST-06", name: "Coastal Freight Logistics", segment: "commercial_diesel", primary_terminal: "TERM-01", product: "ULSD", contract_bbl_per_day: 9000.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 9.50, provenance_class: "SYNTHETIC"}
   - {id: "CUST-07", name: "Brazos Valley Distributors", segment: "wholesale_rack", primary_terminal: "TERM-03", product: "ULSD", contract_bbl_per_day: 6500.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.50, provenance_class: "SYNTHETIC"}
   - {id: "CUST-08", name: "Neches Valley Transport", segment: "commercial_diesel", primary_terminal: "TERM-02", product: "ULSD", contract_bbl_per_day: 6000.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 8.00, provenance_class: "SYNTHETIC"}
   - {id: "CUST-09", name: "Galveston Bay Jobbers", segment: "wholesale_rack", primary_terminal: "TERM-01", product: "E10_REG", contract_bbl_per_day: 9500.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.25, provenance_class: "SYNTHETIC"}
   - {id: "CUST-10", name: "Port Arthur Terminal Partners", segment: "marine_wholesale", primary_terminal: "TERM-02", product: "E10_REG", contract_bbl_per_day: 8000.0, delivery_mode: "marine", penalty_usd_per_bbl: 7.00, provenance_class: "SYNTHETIC"}
   - {id: "CUST-11", name: "I-10 Energy Marketing", segment: "wholesale_rack", primary_terminal: "TERM-03", product: "ULSD", contract_bbl_per_day: 5500.0, delivery_mode: "truck", penalty_usd_per_bbl: 7.25, provenance_class: "SYNTHETIC"}
-  - {id: "CUST-12", name: "Houston Metro Rack Supply", segment: "branded_retail", primary_terminal: "TERM-01", product: "E10_PREM", contract_bbl_per_day: 2300.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.50, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-12", name: "Houston Metro Rack Supply", segment: "branded_retail", primary_terminal: "TERM-01", product: "E10_PREM", contract_bbl_per_day: 1800.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.50, provenance_class: "SYNTHETIC"}
 
 # Priced refinery-gate boundary sinks (G1-6: market indicators, no customer contracts in v1)
 priced_boundary_sinks:
