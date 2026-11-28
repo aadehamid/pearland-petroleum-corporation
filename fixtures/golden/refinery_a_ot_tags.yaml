@@ -20,9 +20,9 @@ tags:
   - {tag_id: "REFA.HCU.FI_4101.PV", equipment_id: "4B", property: "vgo_feed_flow", native_unit: "bbl/h", sample_seconds: 60, eu_range: [0.0, 2000.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
   - {tag_id: "REFA.HCU.TI_4102.PV", equipment_id: "4B", property: "reactor_wabt_temp", native_unit: "degC", sample_seconds: 60, eu_range: [340.0, 440.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
   - {tag_id: "REFA.HCU.PI_4103.PV", equipment_id: "4B", property: "h2_partial_pressure", native_unit: "bar", sample_seconds: 60, eu_range: [60.0, 200.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
-  - {tag_id: "REFA.HCU.K201.SI_4110.PV", equipment_id: "4B", property: "recycle_compressor_speed_pct", native_unit: "pct", sample_seconds: 1, eu_range: [0.0, 110.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
-  - {tag_id: "REFA.HCU.K201.FI_4111.PV", equipment_id: "4B", property: "recycle_h2_mass_flow", native_unit: "t/day", sample_seconds: 1, eu_range: [0.0, 500.0], deadband_pct: 0.15, provenance_class: "SYNTHETIC"}
-  - {tag_id: "REFA.HCU.K201.VI_4112.PV", equipment_id: "4B", property: "compressor_bearing_vibration", native_unit: "mm/s", sample_seconds: 1, eu_range: [0.0, 25.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.SI_4110.PV", equipment_id: "K-201", parent_unit: "4B", property: "recycle_compressor_speed_pct", native_unit: "pct", sample_seconds: 1, eu_range: [0.0, 110.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.FI_4111.PV", equipment_id: "K-201", parent_unit: "4B", property: "recycle_h2_mass_flow", native_unit: "t/day", sample_seconds: 1, eu_range: [0.0, 500.0], deadband_pct: 0.15, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.VI_4112.PV", equipment_id: "K-201", parent_unit: "4B", property: "compressor_bearing_vibration", native_unit: "mm/s", sample_seconds: 1, eu_range: [0.0, 25.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
   - {tag_id: "REFA.SMR.FI_6001.PV", equipment_id: "6", property: "smr_h2_production", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 130.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
   - {tag_id: "REFA.DHT.FI_5101.PV", equipment_id: "5A", property: "dht_h2_draw", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 80.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
   - {tag_id: "REFA.NHT.FI_5401.PV", equipment_id: "5D", property: "nht_h2_draw", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 20.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}

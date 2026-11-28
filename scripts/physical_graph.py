@@ -332,6 +332,7 @@ DOCKER_COMPOSE = "infra/docker-compose.yml"
 
 # Planned WP-1+ sources (detected automatically when present; reported as pending until then)
 DESIGN_BASIS = "fixtures/golden/refinery_a_design_basis.yaml"
+CFG0_TOPOLOGY = "fixtures/golden/cfg0_dexpi_topology.json"
 OT_TAGS = "fixtures/golden/refinery_a_ot_tags.yaml"
 EPM_KPI_BINDINGS = "semantic/mappings/epm_kpi_bindings.yaml"
 
@@ -1108,6 +1109,13 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.node("Unit", uid, DESIGN_BASIS)
                     if u.get("facility"):
                         graph.link(uid, "LOCATED_AT", u["facility"], DESIGN_BASIS)
+                    comp_id = u.get("recycle_compressor_id")
+                    if comp_id:
+                        graph.node("Equipment", comp_id, DESIGN_BASIS, parent_unit=uid)
+                        graph.link(comp_id, "PART_OF", uid, DESIGN_BASIS)
+                        if u.get("facility"):
+                            graph.link(comp_id, "LOCATED_AT", u["facility"], DESIGN_BASIS)
+                        _check_provenance(graph, legal_classes, DESIGN_BASIS, comp_id, u.get("provenance_class"))
                     _check_provenance(graph, legal_classes, DESIGN_BASIS, uid, u.get("provenance_class"))
 
             for t in db.get("tanks", []):
@@ -1175,6 +1183,60 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     f"Customer: {DESIGN_BASIS} defines {len(customers)}, "
                     f"but {PPC_WORLD_001} promises {world_promises['customers']}"
                 )
+
+    # 1b. CFG-0 DEXPI topology JSON (WP-1)
+    cfg0_abs = os.path.join(graph.root, CFG0_TOPOLOGY)
+    if os.path.isfile(cfg0_abs):
+        graph.meta["modes"]["cfg0_topology"] = "built"
+        try:
+            cfg0 = json.loads(read(graph.root, CFG0_TOPOLOGY))
+        except json.JSONDecodeError as exc:
+            graph.problem(f"{CFG0_TOPOLOGY}: invalid JSON ({exc})")
+            cfg0 = None
+        if isinstance(cfg0, dict):
+            _check_provenance(graph, legal_classes, CFG0_TOPOLOGY, CFG0_TOPOLOGY, cfg0.get("provenance_class"))
+            cfg0_tags = set()
+            for eq in cfg0.get("equipment", []):
+                tag = eq.get("tag")
+                if not tag:
+                    continue
+                cfg0_tags.add(tag)
+                cls_name = eq.get("class", "")
+                if tag in graph.nodes:
+                    label = graph.nodes[tag]["label"]
+                elif cls_name in ("StorageTank", "SegregatedHoldTank"):
+                    label = "Tank"
+                elif cls_name == "CentrifugalPump":
+                    label = "Pump"
+                elif cls_name == "DistributionTerminal":
+                    label = "Terminal"
+                elif eq.get("parent_unit"):
+                    label = "Equipment"
+                else:
+                    label = "Unit"
+                graph.node(label, tag, CFG0_TOPOLOGY)
+                if eq.get("parent_unit"):
+                    graph.link(tag, "PART_OF", eq["parent_unit"], CFG0_TOPOLOGY)
+            for conn in cfg0.get("piping_connections", []):
+                cid = conn.get("id")
+                src = conn.get("from")
+                dst = conn.get("to")
+                if not cid:
+                    continue
+                if src not in cfg0_tags:
+                    graph.problem(f"{CFG0_TOPOLOGY}: piping connection {cid!r} has dangling 'from' endpoint {src!r}")
+                if dst not in cfg0_tags:
+                    graph.problem(f"{CFG0_TOPOLOGY}: piping connection {cid!r} has dangling 'to' endpoint {dst!r}")
+                graph.node("TransferLine", cid, CFG0_TOPOLOGY)
+                if src:
+                    graph.link(cid, "CONNECTS_FROM", src, CFG0_TOPOLOGY)
+                if dst:
+                    graph.link(cid, "CONNECTS_TO", dst, CFG0_TOPOLOGY)
+                for pid in conn.get("pumps", []):
+                    if pid not in cfg0_tags:
+                        graph.problem(f"{CFG0_TOPOLOGY}: piping connection {cid!r} references undeclared pump {pid!r}")
+                    else:
+                        graph.link(pid, "DRIVES", cid, CFG0_TOPOLOGY)
 
     # 2. OT tags YAML (WP-1)
     if not os.path.isfile(os.path.join(graph.root, OT_TAGS)):

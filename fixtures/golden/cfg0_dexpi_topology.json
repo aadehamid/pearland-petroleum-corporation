@@ -41,7 +41,10 @@
     {"tag": "P-302B", "class": "CentrifugalPump", "line_id": "LINE-BOB-DISP", "site_id": "SITE-REF-A"},
     {"tag": "P-401A", "class": "CentrifugalPump", "line_id": "LINE-JET-EXP", "site_id": "SITE-REF-A"},
     {"tag": "P-401B", "class": "CentrifugalPump", "line_id": "LINE-JET-EXP", "site_id": "SITE-REF-A"},
-    {"tag": "P-402", "class": "CentrifugalPump", "line_id": "LINE-RESID-EXP", "site_id": "SITE-REF-A"}
+    {"tag": "P-402", "class": "CentrifugalPump", "line_id": "LINE-RESID-EXP", "site_id": "SITE-REF-A"},
+    {"tag": "TERM-01", "class": "DistributionTerminal", "site_id": "TERM-01"},
+    {"tag": "TERM-02", "class": "DistributionTerminal", "site_id": "TERM-02"},
+    {"tag": "TERM-03", "class": "DistributionTerminal", "site_id": "TERM-03"}
   ],
   "piping_connections": [
     {"id": "LINE-CRUDE-CHG", "from": "TK-102", "to": "CDU", "pumps": ["P-101A", "P-101B"]},

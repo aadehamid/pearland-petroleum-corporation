@@ -1,6 +1,9 @@
 # Refinery A v1 Authoritative Design Basis, Tank Register, Hydraulics, Assays, and Commercial World
 # Governing ADRs: ADR-0040, ADR-0043, ADR-0049, ADR-0054 (Option A), ADR-0056 (G3-c), ADR-0060
-# Primary verification report: ppc_wp1_deep_research_report.md (2026-11-28)
+# Authoritative in-repo sources: docs/enterprise-architecture/independent-review/PPC-REVIEW-002_Governing_Refinery_Equations_and_Balances.md,
+#   docs/adr/0054-refinery-a-flowsheet-closure-option-a-and-design-basis.md, docs/adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md.
+# Regulatory basis for summer RFG E10 RVP caps: 40 CFR 1090.215 (7.4 psi Houston RFG E10 less ~1.0 psi ethanol bump -> 6.4 psi BOB; 7.8 psi ozone nonattainment E10 -> 6.8 psi BOB).
+# Transfer-line hydraulics and pump curves are WP-1 design-basis parameters populated per ADR-0054 / PPC-REVIEW-002 B5.
 # All fictional refinery capacities, assays, parameters, terminals, and customers are SYNTHETIC.
 
 schema_version: "1.0.0"
@@ -227,7 +230,7 @@ units:
 tanks:
   - {id: "TK-101", service: "Paper arithmetic / active crude test tank", working_min_bbl: 1000.0, working_max_bbl: 12000.0, initial_bbl: 10000.0, ref_sg_60_60: 0.840, provenance_class: "SYNTHETIC"}
   - {id: "TK-101H", service: "Segregated crude receipt hold tank", working_min_bbl: 0.0, working_max_bbl: 150000.0, initial_bbl: 0.0, ref_sg_60_60: 0.871, provenance_class: "SYNTHETIC"}
-  - {id: "TK-102", service: "Active crude blend charge tank 1", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 180000.0, ref_sg_60_60: 0.830, provenance_class: "SYNTHETIC"}
+  - {id: "TK-102", service: "Active crude blend charge tank 1", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 180000.0, ref_sg_60_60: 0.866, provenance_class: "SYNTHETIC"}
   - {id: "TK-103", service: "Active crude blend charge tank 2", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 210000.0, ref_sg_60_60: 0.871, provenance_class: "SYNTHETIC"}
   - {id: "TK-104", service: "Active crude blend charge tank 3", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 150000.0, ref_sg_60_60: 0.910, provenance_class: "SYNTHETIC"}
   - {id: "TK-201", service: "VGO intermediate feed tank", working_min_bbl: 15000.0, working_max_bbl: 150000.0, initial_bbl: 90000.0, ref_sg_60_60: 0.910, provenance_class: "SYNTHETIC"}
@@ -255,7 +258,7 @@ pumps:
 
 # 6 EQ-03 hydraulic transfer paths (commercial steel roughness 0.046 mm)
 transfer_lines:
-  - {id: "LINE-CRUDE-CHG", source: "TK-102", destination: "CDU", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.4572, length_m: 650.0, roughness_m: 0.000046, k_fittings: 14.0, delta_z_m: 8.0, delta_p_pa: 250000.0, nominal_flow_bbl_per_day: 180000.0, fluid_sg: 0.871, fluid_viscosity_pa_s: 0.012, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-CRUDE-CHG", source: "TK-102", destination: "CDU", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.4572, length_m: 650.0, roughness_m: 0.000046, k_fittings: 14.0, delta_z_m: 8.0, delta_p_pa: 250000.0, nominal_flow_bbl_per_day: 180000.0, fluid_sg: 0.866, fluid_viscosity_pa_s: 0.012, provenance_class: "SYNTHETIC"}
   - {id: "LINE-VGO-HCU", source: "TK-201", destination: "4B", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.2540, length_m: 420.0, roughness_m: 0.000046, k_fittings: 12.0, delta_z_m: 6.0, delta_p_pa: 180000.0, nominal_flow_bbl_per_day: 36000.0, fluid_sg: 0.910, fluid_viscosity_pa_s: 0.008, provenance_class: "SYNTHETIC"}
   - {id: "LINE-ULSD-DISP", source: "TK-301", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.3048, length_m: 1200.0, roughness_m: 0.000046, k_fittings: 16.0, delta_z_m: 4.0, delta_p_pa: 200000.0, nominal_flow_bbl_per_day: 55000.0, fluid_sg: 0.840, fluid_viscosity_pa_s: 0.0032, provenance_class: "SYNTHETIC"}
   - {id: "LINE-BOB-DISP", source: "TK-303", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.3048, length_m: 1200.0, roughness_m: 0.000046, k_fittings: 16.0, delta_z_m: 4.0, delta_p_pa: 220000.0, nominal_flow_bbl_per_day: 65000.0, fluid_sg: 0.742, fluid_viscosity_pa_s: 0.0006, provenance_class: "SYNTHETIC"}
