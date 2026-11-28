@@ -15,10 +15,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import pyomo.environ as pyo
+
+ALLOWED_PROVENANCE_CLASSES = frozenset(
+    {"OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION"}
+)
+
+
+def _require_finite_number(name: str, value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        raise ValueError(f"{name} must be a finite number, got {value!r}")
+    return float(value)
 
 
 @dataclass(frozen=True)
@@ -66,9 +77,64 @@ class PlanningLPInputs:
     demand_ulsd_max_bpd: float = 85000.0
     demand_bob_max_bpd: float = 95000.0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_id, str) or not self.case_id.strip():
+            raise ValueError("case_id must be a non-empty string")
+        if not isinstance(self.branch_id, str) or not self.branch_id.strip():
+            raise ValueError("branch_id must be a non-empty string")
+        if self.provenance_class not in ALLOWED_PROVENANCE_CLASSES:
+            raise ValueError(
+                f"provenance_class must be one of {sorted(ALLOWED_PROVENANCE_CLASSES)}, got {self.provenance_class!r}"
+            )
+        non_negative_fields = (
+            "price_crude_light",
+            "price_crude_med",
+            "price_crude_heavy",
+            "price_bob",
+            "price_ulsd",
+            "price_jet",
+            "price_resid",
+            "price_butane",
+            "cost_h2_per_t",
+            "cost_var_cdu_per_bbl",
+            "cost_var_hcu_per_bbl",
+            "cost_var_fcc_per_bbl",
+            "cdu_min_bpd",
+            "cdu_max_bpd",
+            "hcu_max_bpd",
+            "hcu_min_bpd",
+            "fcc_max_bpd",
+            "h2_hcu_headroom_t_per_day",
+            "hcu_ulsd_yield_vol",
+            "hcu_jet_yield_vol",
+            "hcu_naphtha_yield_vol",
+            "fcc_naphtha_yield_vol",
+            "fcc_lco_yield_vol",
+            "fcc_slurry_yield_vol",
+            "bob_rvp_max_psi",
+            "bob_aki_min",
+            "butane_max_vol_frac",
+            "demand_ulsd_max_bpd",
+            "demand_bob_max_bpd",
+        )
+        for field_name in non_negative_fields:
+            val = _require_finite_number(field_name, getattr(self, field_name))
+            if val < 0.0:
+                raise ValueError(f"{field_name} must be non-negative, got {val!r}")
+        if _require_finite_number("hcu_h2_intensity_t_per_kbbl", self.hcu_h2_intensity_t_per_kbbl) <= 0.0:
+            raise ValueError("hcu_h2_intensity_t_per_kbbl must be positive")
+        if self.butane_max_vol_frac > 1.0:
+            raise ValueError("butane_max_vol_frac must be <= 1.0")
+        if self.cdu_min_bpd > self.cdu_max_bpd:
+            raise ValueError("cdu_min_bpd must be <= cdu_max_bpd")
+        if self.hcu_min_bpd > self.hcu_max_bpd:
+            raise ValueError("hcu_min_bpd must be <= hcu_max_bpd")
+        if self.fixed_hcu_bpd is not None:
+            _require_finite_number("fixed_hcu_bpd", self.fixed_hcu_bpd)
+
     def input_digest(self) -> str:
         return hashlib.sha256(
-            json.dumps(self.__dict__, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(asdict(self), sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
         ).hexdigest()
 
 
@@ -160,12 +226,21 @@ def solve_planning_lp(inputs: PlanningLPInputs) -> dict[str, Any]:
 
     term = str(res.solver.termination_condition)
     if res.solver.termination_condition != pyo.TerminationCondition.optimal:
+        if res.solver.termination_condition in (
+            pyo.TerminationCondition.infeasible,
+            pyo.TerminationCondition.infeasibleOrUnbounded,
+        ):
+            status = "INFEASIBLE"
+        elif res.solver.termination_condition == pyo.TerminationCondition.unbounded:
+            status = "UNBOUNDED"
+        else:
+            status = "NON_OPTIMAL"
         return {
             "case_id": inputs.case_id,
             "branch_id": inputs.branch_id,
             "method_class": "PLANNING_LP",
             "output_provenance_class": "ESTIMATED",
-            "feasibility_status": "INFEASIBLE",
+            "feasibility_status": status,
             "termination_condition": term,
             "margin_usd_per_day": None,
             "setpoints": None,

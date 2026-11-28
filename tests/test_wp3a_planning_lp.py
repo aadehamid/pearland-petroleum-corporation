@@ -100,6 +100,23 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
         )
         self.assertTrue(recal_cl["closed_loop_feasible"], recal_cl["violations"])
 
+    def test_input_validation_rejects_non_finite_booleans_and_bad_bounds(self):
+        with self.assertRaises(ValueError):
+            PlanningLPInputs(case_id="BAD-NAN", branch_id="b1", price_ulsd=float("nan"))
+        with self.assertRaises(ValueError):
+            PlanningLPInputs(case_id="BAD-BOOL", branch_id="b1", hcu_max_bpd=True)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            PlanningLPInputs(case_id="BAD-BOUNDS", branch_id="b1", hcu_min_bpd=50000.0, hcu_max_bpd=30000.0)
+        with self.assertRaises(ValueError):
+            PlanningLPInputs(case_id="BAD-PROV", branch_id="b1", provenance_class="UNKNOWN")
+        with self.assertRaises(ValueError):
+            evaluate_lp_setpoints_in_wp1_physics(
+                {"feasibility_status": "FEASIBLE", "setpoints": {}},
+                PlanningLPInputs(case_id="OK", branch_id="b1"),
+                compressor_circ_fraction=1.5,
+                h2_allocable_t_per_day=125.0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
