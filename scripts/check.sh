@@ -95,6 +95,11 @@ uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
   python3 -m unittest tests/test_wp3a_planning_lp.py
 
 echo
+echo "== WP-6 Scenario B vertical slice (S2-* crude-quality rejection & delayed restatement) =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml \
+  python3 -m unittest tests/test_wp6_scenario_b.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
