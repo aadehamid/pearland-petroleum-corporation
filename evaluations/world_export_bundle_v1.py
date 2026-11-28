@@ -1,0 +1,555 @@
+#!/usr/bin/env python3
+"""WP-8B Certified WorldExportBundle v1 Assembler & Automated Leak Auditor (UC-6, ADR-0053, B13).
+
+Assembles a strict WorldExportBundle v1 manifest conforming to
+schemas/world_export_bundle.schema.json, partitioning:
+- observable/ (exports/world_bundle/observable/ in pearland-petroleum-corp)
+  for sister repositories ICE, EDI, EPM, and ECE
+- hidden_truth/ (evaluation/hidden/ in pearland-petroleum-hidden)
+  under a separate credential boundary
+
+Scans both the observable manifest metadata and supplied observable payloads
+across UTF-8, UTF-16LE/BE (even and odd byte offsets), UTF-32LE/BE, gzip/zlib,
+base64, and hex encodings for declared hidden-truth markers (ADR-0053, B13).
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import re
+import unicodedata
+import zlib
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Mapping, Sequence
+
+import jsonschema
+
+FORBIDDEN_OBSERVABLE_MARKERS: tuple[str, ...] = (
+    "evaluation/hidden",
+    "pearland-petroleum-hidden",
+    "hidden_truth",
+    "canonical_world_snapshots",
+    "evaluation_scoring_keys",
+    "separate_credential_boundary",
+    "canonical_world_truth",
+    "hidden_scoring_key",
+    "root_seed_secret",
+)
+
+_B64_TOKEN_RE = re.compile(rb"[A-Za-z0-9+/=_-]{16,}")
+_HEX_TOKEN_RE = re.compile(rb"[0-9a-fA-F]{16,}")
+
+
+def _text_views_from_bytes(buf: bytes) -> list[str]:
+    views = [
+        buf.decode("utf-8", errors="replace").lower(),
+        buf.decode("utf-8", errors="ignore").lower(),
+    ]
+    for offset in (0, 1):
+        sliced = buf[offset:]
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                views.append(sliced.decode(enc, errors="ignore").lower())
+            except UnicodeError:
+                pass
+    for offset in (0, 1, 2, 3):
+        sliced = buf[offset:]
+        for enc in ("utf-32-le", "utf-32-be"):
+            try:
+                views.append(sliced.decode(enc, errors="ignore").lower())
+            except UnicodeError:
+                pass
+    return views
+
+
+_MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024
+
+
+_COMPRESSED_MAGIC_PREFIXES: tuple[bytes, ...] = (b"\x1f\x8b", b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda")
+
+
+def _find_next_magic_offset(buf: bytes) -> int | None:
+    """Return earliest offset > 0 of an embedded gzip/zlib header inside buf, or None."""
+    best: int | None = None
+    for magic in _COMPRESSED_MAGIC_PREFIXES:
+        idx = buf.find(magic, 1)
+        if idx != -1 and (best is None or idx < best):
+            best = idx
+    return best
+
+
+def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> tuple[bytes, bool, bool]:
+    """Recover as much decompressed output as possible before a corrupt trailer or mid-stream error.
+
+    Returns (recovered_bytes, budget_hit, reached_eof).
+    """
+    if remaining_budget <= 0 or not data:
+        return b"", False, False
+    dobj = zlib.decompressobj(wbits)
+    out = bytearray()
+    budget_hit = False
+    chunk_size = 1024
+    pos = 0
+    n = len(data)
+    while pos < n:
+        rem_cap = remaining_budget - len(out)
+        if rem_cap <= 0:
+            budget_hit = True
+            break
+        end = min(pos + chunk_size, n)
+        try:
+            piece = dobj.decompress(data[pos:end], rem_cap)
+            if piece:
+                out.extend(piece)
+            if dobj.unconsumed_tail:
+                budget_hit = True
+                break
+            if dobj.eof:
+                break
+            pos = end
+        except zlib.error:
+            if chunk_size > 1:
+                # Re-attempt byte-by-byte inside the failing block with a fresh decompressor
+                # replayed cleanly up to `pos`, so everything before the bad byte/trailer is kept.
+                dobj = zlib.decompressobj(wbits)
+                out = bytearray()
+                try:
+                    if pos > 0:
+                        prefix_piece = dobj.decompress(data[:pos], remaining_budget)
+                        out.extend(prefix_piece)
+                except zlib.error:
+                    break
+                for b_idx in range(pos, end):
+                    rem_cap = remaining_budget - len(out)
+                    if rem_cap <= 0:
+                        budget_hit = True
+                        break
+                    try:
+                        piece = dobj.decompress(data[b_idx : b_idx + 1], rem_cap)
+                        if piece:
+                            out.extend(piece)
+                        if dobj.unconsumed_tail:
+                            budget_hit = True
+                            break
+                        if dobj.eof:
+                            break
+                    except zlib.error:
+                        break
+            break
+    try:
+        rem_cap = remaining_budget - len(out)
+        if rem_cap > 0 and not budget_hit:
+            flushed = dobj.flush(rem_cap)
+            if flushed:
+                out.extend(flushed[:rem_cap])
+    except zlib.error:
+        pass
+    return bytes(out), budget_hit, bool(dobj.eof)
+
+
+def _is_printable_text(text: str) -> bool:
+    for idx, ch in enumerate(text):
+        if ch in ("\t", "\n", "\r"):
+            continue
+        if idx == 0 and ch == "\ufeff":
+            continue
+        cat = unicodedata.category(ch)
+        if cat in ("Cc", "Cf", "Cs", "Co", "Cn"):
+            return False
+    return True
+
+
+def _is_clean_text(buf: bytes) -> bool:
+    """Return True iff buf is clean printable UTF-8, BOM-tagged UTF-16/UTF-32 (any Unicode), or BOM-less Latin-1 UTF-16/UTF-32.
+
+    BOM-less non-Latin-1 UTF-16 and UTF-32 cannot be reliably separated from arbitrary binary bytes,
+    so non-Latin-1 UTF-16/UTF-32 requires a BOM to pass as clean text while still being scanned for
+    hidden-truth markers regardless of BOM.
+    """
+    try:
+        if _is_printable_text(buf.decode("utf-8", errors="strict")):
+            return True
+    except UnicodeDecodeError:
+        pass
+    if len(buf) >= 4 and len(buf) % 4 == 0:
+        if buf.startswith(b"\xff\xfe\x00\x00"):
+            try:
+                text = buf.decode("utf-32-le", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        elif buf.startswith(b"\x00\x00\xfe\xff"):
+            try:
+                text = buf.decode("utf-32-be", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        else:
+            for enc in ("utf-32-le", "utf-32-be"):
+                try:
+                    text = buf.decode(enc, errors="strict")
+                    if text and _is_printable_text(text) and all(ord(c) < 0x0100 for c in text):
+                        return True
+                except UnicodeDecodeError:
+                    pass
+    if len(buf) >= 2 and len(buf) % 2 == 0 and not buf.startswith(_COMPRESSED_MAGIC_PREFIXES):
+        if buf.startswith(b"\xff\xfe"):
+            try:
+                text = buf.decode("utf-16-le", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        elif buf.startswith(b"\xfe\xff"):
+            try:
+                text = buf.decode("utf-16-be", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        else:
+            # BOM-less UTF-16: accept only null-interleaved Latin-1 (ord < 0x0100) so random binary cannot pass.
+            for enc in ("utf-16-le", "utf-16-be"):
+                try:
+                    text = buf.decode(enc, errors="strict")
+                    if text and _is_printable_text(text) and all(ord(c) < 0x0100 for c in text):
+                        return True
+                except UnicodeDecodeError:
+                    pass
+    return False
+
+
+def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool, bool]:
+    """Decompress gzip/zlib members (resuming after garbage gaps between intact gzip/zlib headers) and raw-deflate streams.
+
+    Returns ([(buffer, is_speculative), ...], budget_exceeded, fully_decompressed_cleanly).
+    `fully_decompressed_cleanly` is True iff a gzip or zlib pass consumed `buf` cleanly to EOF with no errors,
+    or a raw-deflate pass consumed `buf` cleanly to EOF and produced at least 8 bytes of clean printable text.
+    """
+    results: list[tuple[bytes, bool]] = []
+    budget_exceeded = False
+    fully_decompressed_cleanly = False
+    for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
+        rem = buf
+        chunks: list[bytes] = []
+        total_out = 0
+        had_error = False
+        had_clean_member = False
+        is_raw_probe = wbits == -zlib.MAX_WBITS
+        while rem:
+            remaining_budget = _MAX_DECOMPRESSED_BYTES - total_out
+            if remaining_budget <= 0:
+                budget_exceeded = True
+                had_error = True
+                break
+            try:
+                dobj = zlib.decompressobj(wbits)
+                part = dobj.decompress(rem, remaining_budget)
+                if dobj.unconsumed_tail:
+                    budget_exceeded = True
+                    had_error = True
+                    if part:
+                        chunks.append(part)
+                        results.append((part, True))
+                    break
+                part += dobj.flush()
+                if not dobj.eof:
+                    # Truncated stream without reaching deflate EOF
+                    had_error = True
+                    if part:
+                        total_out += len(part)
+                        chunks.append(part)
+                        results.append((part, True))
+                    break
+                if part:
+                    total_out += len(part)
+                    chunks.append(part)
+                    results.append((part, is_raw_probe))
+                had_clean_member = True
+                nxt = dobj.unused_data
+                if not nxt:
+                    rem = b""
+                    break
+                if len(nxt) >= len(rem):
+                    had_error = True
+                    break
+                rem = nxt
+            except zlib.error:
+                had_error = True
+                # Recover any bytes decompressed before a corrupt trailer or mid-stream error
+                # instead of silently discarding them; also probe past corrupt 2-byte zlib / 10-byte gzip headers.
+                partial, partial_budget, _ = _recover_partial_stream(wbits, rem, remaining_budget)
+                header_skip_partial = b""
+                if not partial and wbits == zlib.MAX_WBITS and len(rem) > 2:
+                    cand, skip_budget, _ = _recover_partial_stream(-zlib.MAX_WBITS, rem[2:], remaining_budget)
+                    header_skip_partial = cand
+                    partial_budget = partial_budget or skip_budget
+                elif not partial and wbits == 16 + zlib.MAX_WBITS and len(rem) > 10:
+                    cand, skip_budget, _ = _recover_partial_stream(-zlib.MAX_WBITS, rem[10:], remaining_budget)
+                    header_skip_partial = cand
+                    partial_budget = partial_budget or skip_budget
+                recovered = partial or header_skip_partial
+                if partial_budget:
+                    budget_exceeded = True
+                if recovered:
+                    total_out += len(recovered)
+                    chunks.append(recovered)
+                    results.append((recovered, True))
+                next_off = _find_next_magic_offset(rem)
+                if next_off is None:
+                    break
+                rem = rem[next_off:]
+        if len(chunks) > 1:
+            results.append((b"".join(chunks), is_raw_probe or had_error))
+        if had_clean_member and not had_error and not rem:
+            if not is_raw_probe:
+                fully_decompressed_cleanly = True
+            elif chunks:
+                raw_joined = b"".join(chunks)
+                if len(raw_joined) >= 8 and _is_clean_text(raw_joined):
+                    fully_decompressed_cleanly = True
+    return results, budget_exceeded, fully_decompressed_cleanly
+
+
+def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tuple[bytes, bool]], bool, bool]:
+    """Decode one layer of gzip/zlib/raw-deflate, base64 (offsets 0..3), and hex (offsets 0..1).
+
+    Returns ([(child_bytes, child_is_speculative), ...], budget_exceeded, corrupt_unscanned).
+    Direct observable payloads and cleanly decompressed archive members (`speculative=False`) must be
+    either clean UTF-8/16/32 text or cleanly decompressed to EOF, otherwise they fail closed with
+    `DECOMPRESSION_ERROR_UNSCANNED`. Base64 and hex decodings of text are marked `speculative=True`:
+    they are still scanned recursively for hidden-truth markers and decompression bombs, but do not
+    raise `DECOMPRESSION_ERROR_UNSCANNED` (because plain ASCII identifiers such as CamelCase or
+    snake_case tokens are syntactically indistinguishable from unpadded base64 of random binary bytes).
+    """
+    decompressed, budget_exceeded, cleanly_decompressed = _decompress_all_members(raw_bytes)
+    out: list[tuple[bytes, bool]] = [(buf, speculative or child_spec) for buf, child_spec in decompressed]
+
+    corrupt_unscanned = (
+        (not speculative)
+        and bool(raw_bytes)
+        and (not _is_clean_text(raw_bytes))
+        and (not cleanly_decompressed)
+    )
+
+    stripped = re.sub(rb"\s+", b"", raw_bytes)
+    for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
+        for offset in (0, 1, 2, 3):
+            sub = token[offset:]
+            if len(sub) < 16:
+                continue
+            norm = sub.replace(b"-", b"+").replace(b"_", b"/").rstrip(b"=")
+            if len(norm) % 4 == 1:
+                continue
+            padded = norm + b"=" * ((-len(norm)) % 4)
+            try:
+                decoded = base64.b64decode(padded, validate=True)
+                if decoded:
+                    out.append((decoded, True))
+            except Exception:
+                pass
+
+    for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
+        for offset in (0, 1):
+            sub = token[offset:]
+            even_len = len(sub) - (len(sub) % 2)
+            if even_len >= 16:
+                try:
+                    decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
+                    if decoded:
+                        out.append((decoded, True))
+                except Exception:
+                    pass
+    return out, budget_exceeded, corrupt_unscanned
+
+
+def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 8) -> tuple[list[str], bool, bool, bool]:
+    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget/corrupt/depth flags."""
+    raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
+    # Track best (least-speculative) state seen per byte buffer so a non-speculative path is never shadowed
+    seen: dict[bytes, bool] = {raw_bytes: False}
+    byte_candidates: list[bytes] = [raw_bytes]
+    frontier: list[tuple[bytes, bool]] = [(raw_bytes, False)]
+    budget_exceeded = False
+    corrupt_unscanned = False
+    depth_exceeded = False
+    for depth in range(max_depth + 1):
+        next_frontier: list[tuple[bytes, bool]] = []
+        for buf, is_spec in frontier:
+            children, exceeded, corrupt = _decode_one_layer(buf, speculative=is_spec)
+            budget_exceeded = budget_exceeded or exceeded
+            corrupt_unscanned = corrupt_unscanned or corrupt
+            for child, child_spec in children:
+                prev_spec = seen.get(child)
+                if prev_spec is None:
+                    if depth == max_depth:
+                        # An additional decodable layer exists beyond max_depth: fail closed instead of certifying PASSED
+                        depth_exceeded = True
+                        continue
+                    seen[child] = child_spec
+                    byte_candidates.append(child)
+                    next_frontier.append((child, child_spec))
+                elif prev_spec and not child_spec:
+                    if depth == max_depth:
+                        depth_exceeded = True
+                        continue
+                    seen[child] = False
+                    next_frontier.append((child, False))
+        if not next_frontier:
+            break
+        frontier = next_frontier
+
+    views: list[str] = []
+    if isinstance(raw, str):
+        views.append(raw.lower())
+    for cand in byte_candidates:
+        views.extend(_text_views_from_bytes(cand))
+    return views, budget_exceeded, corrupt_unscanned, depth_exceeded
+
+
+def audit_observable_for_hidden_leaks(
+    observable_payloads: Mapping[str, bytes | str],
+    checked_at_utc: str | None = None,
+    manifest_json: str | None = None,
+    observable_refs: Sequence[Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Scan observable manifest metadata and supplied observable payloads for hidden-truth markers.
+
+    When `observable_refs` is supplied, every declared observable artifact must have a matching
+    payload body (keyed by `path` or `name`) whose byte length and SHA-256 digest match the manifest.
+    """
+    ts = checked_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    items: list[tuple[str, bytes | str]] = []
+    if manifest_json is not None:
+        items.append(("manifest:__observable_manifest__", manifest_json))
+    for name, raw in sorted(observable_payloads.items()):
+        items.append((f"payload:{name}", raw))
+
+    findings: list[dict[str, str]] = []
+    if observable_refs is not None:
+        for ref in observable_refs:
+            ref_path = str(ref.get("path", ""))
+            ref_name = str(ref.get("name", ""))
+            raw_val: bytes | str | None = None
+            if ref_path and ref_path in observable_payloads:
+                raw_val = observable_payloads[ref_path]
+            elif ref_name and ref_name in observable_payloads:
+                raw_val = observable_payloads[ref_name]
+            label = f"ref:{ref_path or ref_name}"
+            if raw_val is None:
+                findings.append({"artifact": label, "marker": "MISSING_OBSERVABLE_PAYLOAD_UNSCANNED"})
+                continue
+            raw_b = raw_val.encode("utf-8") if isinstance(raw_val, str) else raw_val
+            expected_size = int(ref["size_bytes"])
+            expected_sha = str(ref["sha256"]).lower()
+            if len(raw_b) != expected_size:
+                findings.append({"artifact": label, "marker": "OBSERVABLE_SIZE_MISMATCH_UNSCANNED"})
+            if hashlib.sha256(raw_b).hexdigest() != expected_sha:
+                findings.append({"artifact": label, "marker": "OBSERVABLE_SHA256_MISMATCH_UNSCANNED"})
+
+    for name, raw in items:
+        views, budget_exceeded, corrupt_unscanned, depth_exceeded = _decode_variants_for_scan(raw)
+        if budget_exceeded:
+            findings.append({"artifact": name, "marker": "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED"})
+        if corrupt_unscanned:
+            findings.append({"artifact": name, "marker": "DECOMPRESSION_ERROR_UNSCANNED"})
+        if depth_exceeded:
+            findings.append({"artifact": name, "marker": "DECODING_DEPTH_EXCEEDED_UNSCANNED"})
+        for marker in FORBIDDEN_OBSERVABLE_MARKERS:
+            if any(marker in v for v in views):
+                findings.append({"artifact": name, "marker": marker})
+    audit_body = {
+        "status": "PASSED" if not findings else "FAILED",
+        "checked_at": ts,
+        "hidden_fields_found_in_observable": len(findings),
+    }
+    audit_sha = hashlib.sha256(
+        json.dumps({"audit": audit_body, "findings": findings}, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    audit_body["audit_sha256"] = audit_sha
+    return {"leak_audit": audit_body, "findings": findings}
+
+
+def assemble_world_export_bundle_v1(
+    *,
+    bundle_id: str,
+    world_version: str,
+    branch_id: str,
+    root_seed: int,
+    adapter_pins: Sequence[Mapping[str, Any]],
+    observable_artifacts: Mapping[str, Sequence[Mapping[str, Any]]],
+    hidden_artifacts: Mapping[str, Sequence[Mapping[str, Any]]],
+    observable_payloads_for_audit: Mapping[str, bytes | str],
+    schema_path: str | Path,
+    created_at_utc: str | None = None,
+    prng_version: str = "numpy==2.2.6",
+) -> dict[str, Any]:
+    """Assemble, leak-audit, and schema-validate WorldExportBundle v1."""
+    if not adapter_pins:
+        raise ValueError("adapter_pins must declare at least one pinned upstream adapter")
+    now_utc = created_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    observable_section = {
+        "r2_bucket": "pearland-petroleum-corp",
+        "r2_prefix": f"exports/world_bundle/observable/{bundle_id}/",
+        "delta_tables": [dict(x) for x in observable_artifacts["delta_tables"]],
+        "ice_ot_l0": [dict(x) for x in observable_artifacts["ice_ot_l0"]],
+        "edi_topology": [dict(x) for x in observable_artifacts["edi_topology"]],
+        "epm_kpi_fixtures": [dict(x) for x in observable_artifacts["epm_kpi_fixtures"]],
+        "ece_evidence_dossiers": [dict(x) for x in observable_artifacts["ece_evidence_dossiers"]],
+    }
+    all_observable_refs = [
+        *observable_section["delta_tables"],
+        *observable_section["ice_ot_l0"],
+        *observable_section["edi_topology"],
+        *observable_section["epm_kpi_fixtures"],
+        *observable_section["ece_evidence_dossiers"],
+    ]
+    # Always audit BOTH the observable manifest section itself (unshadowable) AND every declared observable payload
+    # (requiring body presence plus exact size_bytes and sha256 verification before any PASSED / QUALIFIED verdict).
+    audit = audit_observable_for_hidden_leaks(
+        observable_payloads_for_audit,
+        checked_at_utc=now_utc,
+        manifest_json=json.dumps(observable_section, sort_keys=True),
+        observable_refs=all_observable_refs,
+    )
+    all_approved = all(p.get("maturity_status") == "APPROVED_UPSTREAM_RELEASE" for p in adapter_pins)
+    # Provisional commit-pinned adapters cap verdict strictly at QUALIFIED_PROVISIONAL (VERIFY-001 §3)
+    verdict = (
+        "QUALIFIED"
+        if (all_approved and audit["leak_audit"]["status"] == "PASSED")
+        else ("QUALIFIED_PROVISIONAL" if audit["leak_audit"]["status"] == "PASSED" else "DRAFT")
+    )
+
+    bundle: dict[str, Any] = {
+        "schema_version": "1.0.0",
+        "bundle_id": bundle_id,
+        "bundle_version": "1.0.0",
+        "world_version": world_version,
+        "branch_id": branch_id,
+        "seed_policy": {
+            "prng_algorithm": "numpy.random.PCG64",
+            "prng_version": prng_version,
+            "root_seed": int(root_seed),
+        },
+        "created_at": now_utc,
+        "qualification_verdict": verdict,
+        "provenance_class": "SYNTHETIC",
+        "upstream_adapter_pins": [dict(p) for p in adapter_pins],
+        "observable": observable_section,
+        "hidden_truth": {
+            "r2_bucket": "pearland-petroleum-hidden",
+            "r2_prefix": f"evaluation/hidden/world_bundle/{bundle_id}/",
+            "separate_credential_boundary": True,
+            "canonical_world_snapshots": [dict(x) for x in hidden_artifacts["canonical_world_snapshots"]],
+            "evaluation_scoring_keys": [dict(x) for x in hidden_artifacts["evaluation_scoring_keys"]],
+        },
+        "leak_audit": audit["leak_audit"],
+    }
+
+    schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
+    jsonschema.validate(instance=bundle, schema=schema)
+    return bundle

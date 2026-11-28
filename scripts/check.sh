@@ -100,6 +100,10 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp6_scenario_b.py
 
 echo
+echo "== WP-8A DuckDB-vs-Databricks KPI parity and WP-8B Certified WorldExportBundle v1 =="
+uv run --no-project --with jsonschema python3 -m unittest tests/test_wp8_parity_and_bundle.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
