@@ -73,6 +73,7 @@ class AtomicStagingInboxService:
                 access_label TEXT NOT NULL,
                 payload_digest TEXT NOT NULL,
                 payload_json TEXT NOT NULL,
+                pinned_txn_key TEXT,
                 delta_published INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS conflict_quarantine (
@@ -290,9 +291,19 @@ class AtomicStagingInboxService:
         source_system: str,
         branch_id: str,
         sink_commit_fn: Any,
+        inject_crash_after_pin_before_sink: bool = False,
         inject_crash_after_sink_before_mark: bool = False,
     ) -> dict[str, Any]:
-        """PO-03 Crash Point 2 safe idempotent publisher with pre-pinned batch row sets."""
+        """PO-03 Crash Point 2 safe idempotent publisher with exclusive per-row pre-pinned batch ownership.
+
+        Rows are claimed exclusively via `pinned_txn_key` inside an ACID transaction BEFORE calling
+        `sink_commit_fn`, so:
+        - No concurrent or later transaction (txn v2) can claim or double-publish rows pinned by txn v1
+          even if txn v1 crashes between pin and sink commit.
+        - Retrying txn v1 only commits/marks its own pinned rows that are still `delta_published = 0`
+          and never swallows newly arrived staging rows.
+        - The Delta sink is still expected to enforce `(txnAppId, txnVersion)` idempotency on retry.
+        """
         prior = self.conn.execute(
             "SELECT row_count FROM delta_publish_ledger WHERE txn_app_id = ? AND txn_version = ?",
             (txn_app_id, txn_version),
@@ -300,8 +311,7 @@ class AtomicStagingInboxService:
         if prior is not None:
             return {"status": "IDEMPOTENT_ALREADY_PUBLISHED", "row_count": int(prior["row_count"])}
 
-        # Pin exact staging_ids for (txn_app_id, txn_version) BEFORE calling sink so retries after
-        # Crash Point 2 NEVER swallow newly arrived staging rows into the crashed transaction!
+        txn_key = f"{txn_app_id}:{txn_version}"
         cur = self.conn.cursor()
         cur.execute("BEGIN IMMEDIATE")
         try:
@@ -315,7 +325,7 @@ class AtomicStagingInboxService:
                 pending_rows = cur.execute(
                     """
                     SELECT staging_id FROM silver_staging
-                    WHERE source_system = ? AND branch_id = ? AND delta_published = 0
+                    WHERE source_system = ? AND branch_id = ? AND delta_published = 0 AND pinned_txn_key IS NULL
                     ORDER BY staging_id ASC
                     """,
                     (source_system, branch_id),
@@ -324,6 +334,10 @@ class AtomicStagingInboxService:
                 if not ids:
                     cur.execute("ROLLBACK")
                     return {"status": "NO_PENDING_ROWS", "row_count": 0}
+                cur.executemany(
+                    "UPDATE silver_staging SET pinned_txn_key = ? WHERE staging_id = ?",
+                    [(txn_key, i) for i in ids],
+                )
                 cur.execute(
                     """
                     INSERT INTO delta_publish_batches (
@@ -346,14 +360,19 @@ class AtomicStagingInboxService:
             cur.execute("ROLLBACK")
             raise
 
+        if inject_crash_after_pin_before_sink:
+            raise RuntimeError("INJECTED_CRASH_AFTER_PIN_BEFORE_SINK")
+
         placeholders = ",".join("?" for _ in ids)
         rows = [
             dict(r)
             for r in self.conn.execute(
-                f"SELECT * FROM silver_staging WHERE staging_id IN ({placeholders}) ORDER BY staging_id ASC",
+                f"SELECT * FROM silver_staging WHERE staging_id IN ({placeholders}) AND delta_published = 0 ORDER BY staging_id ASC",
                 ids,
             ).fetchall()
         ]
+        if not rows:
+            return {"status": "IDEMPOTENT_ALREADY_PUBLISHED", "row_count": 0}
 
         sink_commit_fn(table_name=table_name, rows=rows, txn_app_id=txn_app_id, txn_version=txn_version)
 

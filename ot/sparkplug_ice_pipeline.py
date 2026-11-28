@@ -11,6 +11,8 @@ Consumes `fixtures/golden/refinery_a_ot_tags.yaml` and enforces:
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -69,16 +71,29 @@ class SparkplugOTPublisher:
         self.bd_seq: int = 0
         self.seq: int = 0
         self.connected: bool = False
+        self.unrecoverable_buffer_loss: bool = False
+        self.buffer_loss_reason: str | None = None
         self._last_published: dict[str, tuple[float, str]] = {}
         self._latest_sample: dict[str, tuple[float, str, str, str]] = {}
         self._load_persisted_buffer()
 
     def _load_persisted_buffer(self) -> None:
         if self.buffer_path is not None and self.buffer_path.is_file():
-            data = json.loads(self.buffer_path.read_text(encoding="utf-8"))
-            self.bd_seq = int(data.get("bd_seq", 0))
-            for k, v in data.get("latest_sample", {}).items():
-                self._latest_sample[k] = (float(v[0]), str(v[1]), str(v[2]), str(v[3]))
+            try:
+                data = json.loads(self.buffer_path.read_text(encoding="utf-8"))
+                self.bd_seq = int(data.get("bd_seq", 0))
+                for k, v in data.get("latest_sample", {}).items():
+                    self._latest_sample[k] = (float(v[0]), str(v[1]), str(v[2]), str(v[3]))
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+                # OT-001 §4 / OT-03: surface unrecoverable buffer corruption explicitly instead of crashing startup
+                self.unrecoverable_buffer_loss = True
+                self.buffer_loss_reason = f"CORRUPT_PERSISTED_BUFFER: {exc}"
+                self._latest_sample.clear()
+                corrupt_copy = self.buffer_path.with_suffix(self.buffer_path.suffix + ".corrupt")
+                try:
+                    os.replace(self.buffer_path, corrupt_copy)
+                except OSError:
+                    pass
 
     def _save_persisted_buffer(self) -> None:
         if self.buffer_path is not None:
@@ -87,7 +102,22 @@ class SparkplugOTPublisher:
                 "bd_seq": self.bd_seq,
                 "latest_sample": {k: list(v) for k, v in sorted(self._latest_sample.items())},
             }
-            self.buffer_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+            raw = json.dumps(payload, sort_keys=True)
+            fd, tmp_name = tempfile.mkstemp(
+                prefix=".ot_buf_", suffix=".tmp", dir=str(self.buffer_path.parent)
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                    fh.write(raw)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                os.replace(tmp_name, self.buffer_path)
+            except Exception:
+                try:
+                    os.unlink(tmp_name)
+                except OSError:
+                    pass
+                raise
 
     def _next_data_seq(self) -> int:
         # Sparkplug B v3.0: NBIRTH uses seq=0; subsequent DBIRTH/DDATA use 1..255 wrapping back to 1

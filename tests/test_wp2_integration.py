@@ -6,12 +6,15 @@ Covers:
 - PO-03 Crash Point 1 (before NATS ack): identical redelivery returns IDEMPOTENT_DUPLICATE with zero double effect
 - Idempotent conflict quarantine for conflicting digest under same delivery_key (5 retries -> 1 quarantine row)
 - Server-tracked bidirectional revision monotonicity (forward gaps AND regressions/duplicates quarantined)
-- PO-03 Crash Point 2 with pre-pinned batch rows: new row B staged during crash window is NOT dropped on retry
+- PO-03 Crash Point 2 with exclusive pre-pinned batch ownership:
+  (a) crash after pin before sink: txn v2 cannot steal or double-publish txn v1's pinned row
+  (b) crash after sink before mark: new row B staged during crash window is NOT dropped on txn v1 retry
 - OT-01 ambiguous/unregistered tag rejection, OT-02 deadband + Bad quality bypass, OT-03 NBIRTH(seq=0)/DBIRTH(seq>=1)
-  with restart buffer persistence and no invented readings, OT-DELAY-01 visibility cutoff using real WP-1b OT tags
-- EDI CFG-0 adoption against real WP-1b fixtures/golden/cfg0_dexpi_topology.json, non-vacuous B7 digest check,
-  idempotent request_id receipts + conflict detection, and dangling-edge rejection
-- Automated AST import check confirming zero hidden-truth imports in integration/, ot/, and source-systems/
+  with atomic crash-safe restart buffer persistence and explicit corrupt-buffer loss signaling, OT-DELAY-01 cutoff
+- EDI CFG-0 adoption against real WP-1b fixtures/golden/cfg0_dexpi_topology.json with independently pinned
+  literal SHA-256 digest, canonicalization sensitivity test, SQLite cross-restart idempotency,
+  expected_prior_configuration enforcement (EDI-001 §3), scope vs payload CONFLICT reasons, and dangling-edge rejection
+- Automated AST check confirming zero static or dynamic hidden-truth imports in integration/, ot/, and source-systems/
 """
 from __future__ import annotations
 
@@ -31,6 +34,9 @@ from ot.sparkplug_ice_pipeline import AmbiguousTagError, SparkplugOTPublisher, f
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CFG0_PATH = REPO_ROOT / "fixtures" / "golden" / "cfg0_dexpi_topology.json"
 OT_TAGS_PATH = REPO_ROOT / "fixtures" / "golden" / "refinery_a_ot_tags.yaml"
+
+# Independently pinned SHA-256 canonical digest of WP-1b fixtures/golden/cfg0_dexpi_topology.json (39 equip, 6 conns)
+PINNED_WP1B_CFG0_DIGEST = "f355152dd35019f0d83245eb1b13c754a4172d99e1b24c47a97402f76a8fb2b0"
 
 
 def _load_outbox_store_module():
@@ -117,8 +123,7 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(inbox.quarantine_count(), 1)
                 self.assertEqual(inbox.staging_count(), 1)
 
-                # 5. Server-tracked revision monotonicity (no caller parameter needed!):
-                # Forward gap (rev=3 after rev=1) AND regression (rev=1 under new delivery_key) BOTH quarantine
+                # 5. Server-tracked revision monotonicity: forward gap AND regression BOTH quarantine
                 ooo = dict(ev1)
                 ooo["delivery_key"] = "refinery_sqlite:baseline:unit:4B:rev3"
                 ooo["event_id"] = "EV-OOO-3"
@@ -134,15 +139,41 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(inbox.consume_event(reg).reason, "STALE_OR_DUPLICATE_REVISION")
                 self.assertEqual(inbox.staging_count(), 1)
 
-                # 6. PO-03 Crash Point 2 with new row B arriving during crash window:
-                # txn v1 commits row 1 -> crashes before mark -> row 2 arrives -> retry v1 marks ONLY row 1!
+                # 6. PO-03 Crash Point 2a (crash AFTER pin BEFORE sink):
+                # txn v1 pins row 1 and crashes before calling sink -> txn v2 MUST NOT claim row 1!
                 committed_batches: dict[tuple[str, int], list[dict]] = {}
+                committed_delivery_keys: list[str] = []
 
                 def idempotent_delta_sink(*, table_name, rows, txn_app_id, txn_version):
                     key = (txn_app_id, txn_version)
                     if key not in committed_batches:
                         committed_batches[key] = list(rows)
+                        committed_delivery_keys.extend(r["delivery_key"] for r in rows)
 
+                with self.assertRaises(RuntimeError):
+                    inbox.publish_staging_to_delta_idempotent(
+                        txn_app_id="wp2_silver_pub",
+                        txn_version=1,
+                        table_name="silver_refinery_events",
+                        source_system="refinery_sqlite",
+                        branch_id="baseline",
+                        sink_commit_fn=idempotent_delta_sink,
+                        inject_crash_after_pin_before_sink=True,
+                    )
+                # Another txn v99 trying to publish while txn v1 owns row 1 sees NO_PENDING_ROWS (zero cross-txn stealing!)
+                steal_attempt = inbox.publish_staging_to_delta_idempotent(
+                    txn_app_id="wp2_silver_pub",
+                    txn_version=99,
+                    table_name="silver_refinery_events",
+                    source_system="refinery_sqlite",
+                    branch_id="baseline",
+                    sink_commit_fn=idempotent_delta_sink,
+                )
+                self.assertEqual(steal_attempt["status"], "NO_PENDING_ROWS")
+                self.assertEqual(committed_delivery_keys, [])
+
+                # 7. PO-03 Crash Point 2b (crash AFTER sink BEFORE mark):
+                # txn v1 retries, commits row 1, crashes before mark -> row 2 arrives -> retry v1 marks ONLY row 1!
                 with self.assertRaises(RuntimeError):
                     inbox.publish_staging_to_delta_idempotent(
                         txn_app_id="wp2_silver_pub",
@@ -154,7 +185,6 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                         inject_crash_after_sink_before_mark=True,
                     )
 
-                # New event B (revision 2) arrives BEFORE txn v1 retries!
                 ev2 = dict(ev1)
                 ev2["delivery_key"] = "refinery_sqlite:baseline:unit:4B:rev2"
                 ev2["event_id"] = "EV-OK-2"
@@ -163,7 +193,6 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(inbox.consume_event(ev2).status, "APPLIED")
                 self.assertEqual(inbox.staging_count(), 2)
 
-                # Retry txn v1 completes ledger ONLY for pinned row 1; row 2 MUST remain unpublished!
                 pub1 = inbox.publish_staging_to_delta_idempotent(
                     txn_app_id="wp2_silver_pub",
                     txn_version=1,
@@ -176,7 +205,7 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(pub1["row_count"], 1)
                 self.assertEqual(inbox.unpublished_count(), 1)
 
-                # Next txn v2 publishes row 2 cleanly (zero lost rows!)
+                # Next txn v2 publishes row 2 cleanly (zero lost rows and zero cross-txn duplicates!)
                 pub2 = inbox.publish_staging_to_delta_idempotent(
                     txn_app_id="wp2_silver_pub",
                     txn_version=2,
@@ -188,54 +217,54 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                 self.assertEqual(pub2["status"], "PUBLISHED")
                 self.assertEqual(pub2["row_count"], 1)
                 self.assertEqual(inbox.unpublished_count(), 0)
+                self.assertEqual(
+                    committed_delivery_keys,
+                    ["refinery_sqlite:baseline:unit:4B:rev1", "refinery_sqlite:baseline:unit:4B:rev2"],
+                )
             finally:
                 src_store.close()
                 inbox.close()
 
     def test_ot01_to_ot03_and_ot_delay01_using_real_wp1b_ot_schedule(self):
         schedule = yaml.safe_load(OT_TAGS_PATH.read_text(encoding="utf-8"))
-        # OT-01: duplicate tag rejected
         with self.assertRaises(AmbiguousTagError):
             SparkplugOTPublisher({"tags": [schedule["tags"][0], schedule["tags"][0]]})
 
         with tempfile.TemporaryDirectory(prefix="ppc-wp2-ot-") as tmp:
             buf_file = Path(tmp) / "ot_buffer.json"
             pub = SparkplugOTPublisher(schedule, buffer_path=buf_file)
-            # Unregistered tag rejected
             with self.assertRaises(AmbiguousTagError):
                 pub.ingest_sample(
                     "REFA.UNKNOWN.TAG", 1.0, "Good",
                     "2026-06-15T08:00:00Z", "2026-06-15T08:00:00Z", "2026-06-15T08:00:00Z",
                 )
 
-            # Initial birth with no samples emits NBIRTH (seq=0) only — never invents 0.0 / Uncertain DBIRTHs
             b1 = pub.connect_and_birth("2026-06-15T08:00:00Z")
             self.assertEqual(len(b1), 1)
             self.assertEqual(b1[0].message_type, "NBIRTH")
             self.assertEqual(b1[0].seq, 0)
             self.assertEqual(b1[0].bd_seq, 1)
 
-            tag = "REFA.HCU.K201.SI_4110.PV"  # eu_range [0, 110], deadband_pct 0.10 -> deadband 0.11
+            tag = "REFA.HCU.K201.SI_4110.PV"
             e1 = pub.ingest_sample(tag, 100.0, "Good", "2026-06-15T08:01:00Z", "2026-06-15T08:01:00Z", "2026-06-15T08:01:01Z")
             self.assertIsNotNone(e1)
             self.assertEqual(e1.seq, 1)
             self.assertEqual(e1.equipment_id, "K-201")
 
-            # OT-02: small change inside deadband suppressed
             self.assertIsNone(
                 pub.ingest_sample(tag, 100.05, "Good", "2026-06-15T08:02:00Z", "2026-06-15T08:02:00Z", "2026-06-15T08:02:01Z")
             )
-            # Bad quality transition bypasses deadband immediately even with identical value
             bad = pub.ingest_sample(tag, 100.05, "Bad", "2026-06-15T08:03:00Z", "2026-06-15T08:03:00Z", "2026-06-15T08:03:01Z")
             self.assertIsNotNone(bad)
             self.assertEqual(bad.quality, "Bad")
 
-            # OT-03: Disconnect, buffer sample offline, simulate full process restart -> NBIRTH + DBIRTH restores buffered sample!
+            # Disconnect, buffer sample offline, simulate full restart -> NBIRTH + DBIRTH restores buffered sample
             pub.simulate_broker_disconnect()
             self.assertIsNone(
                 pub.ingest_sample(tag, 75.0, "Good", "2026-06-15T08:15:00Z", "2026-06-15T08:15:00Z", "2026-06-15T08:15:30Z")
             )
             pub_restarted = SparkplugOTPublisher(schedule, buffer_path=buf_file)
+            self.assertFalse(pub_restarted.unrecoverable_buffer_loss)
             b2 = pub_restarted.connect_and_birth("2026-06-15T08:15:30Z")
             self.assertEqual(b2[0].message_type, "NBIRTH")
             self.assertEqual(b2[0].bd_seq, 2)
@@ -246,81 +275,144 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
             self.assertEqual(dbirth[0].value, 75.0)
             self.assertEqual(dbirth[0].seq, 1)
 
-            # OT-DELAY-01: published at 08:15:30 invisible at 08:15:00, visible at 08:16:00
+            # OT-DELAY-01 visibility cutoff
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:15:00Z")), 0)
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:16:00Z")), 1)
 
-    def test_edi_cfg0_adoption_b7_real_fixture_idempotency_and_dangling_rejection(self):
+            # OT-03 corrupt buffer recovery: truncated JSON surfaces unrecoverable_buffer_loss instead of crashing startup
+            corrupt_file = Path(tmp) / "corrupt_ot_buffer.json"
+            corrupt_file.write_text('{"bd_seq": 3, "latest_sample": ', encoding="utf-8")
+            pub_corrupt = SparkplugOTPublisher(schedule, buffer_path=corrupt_file)
+            self.assertTrue(pub_corrupt.unrecoverable_buffer_loss)
+            self.assertIn("CORRUPT_PERSISTED_BUFFER", pub_corrupt.buffer_loss_reason or "")
+            b_rec = pub_corrupt.connect_and_birth("2026-06-15T08:20:00Z")
+            self.assertEqual(b_rec[0].message_type, "NBIRTH")
+
+    def test_edi_cfg0_adoption_b7_pinned_digest_persistence_prior_check_and_conflicts(self):
         cfg0_raw = json.loads(CFG0_PATH.read_text(encoding="utf-8"))
-        upstream_digest = canonical_cfg0_digest(cfg0_raw)
 
-        reg = EDIAdoptionRegistry()
-        r1 = reg.adopt_cfg0_topology(
-            CFG0_PATH,
-            request_id="REQ-CFG0-001",
-            world_id="WORLD-PPC-V1",
-            branch_id="baseline",
-            authorized_actor="usr-ref-ops",
-            expected_cfg0_digest=upstream_digest,
-            recorded_at_utc="2026-06-15T00:01:00Z",
-        )
-        self.assertEqual(r1["outcome"], "ADOPTED")
-        self.assertTrue(r1["b7_digest_parity"])
-        self.assertEqual(r1["adopted_digest"], upstream_digest)
-
-        # Idempotent replay of same request_id returns identical receipt (including recorded_at_utc)
-        r1_replay = reg.adopt_cfg0_topology(
-            CFG0_PATH,
-            request_id="REQ-CFG0-001",
-            world_id="WORLD-PPC-V1",
-            branch_id="baseline",
-            authorized_actor="usr-ref-ops",
-            expected_cfg0_digest=upstream_digest,
-            recorded_at_utc="2026-06-15T00:99:00Z",
-        )
-        self.assertEqual(r1_replay, r1)
-
-        # Non-vacuous B7 mismatch MUST fail closed
-        with self.assertRaises(ValueError):
-            reg.adopt_cfg0_topology(
-                CFG0_PATH,
-                request_id="REQ-CFG0-BAD-DIGEST",
-                world_id="WORLD-PPC-V1",
-                branch_id="baseline",
-                authorized_actor="usr-ref-ops",
-                expected_cfg0_digest="0" * 64,
-            )
+        # Canonicalization sensitivity: mutating a pump list or equipment attribute MUST change digest
+        mutated_pump = json.loads(json.dumps(cfg0_raw))
+        mutated_pump["piping_connections"][0]["pumps"] = []
+        self.assertNotEqual(canonical_cfg0_digest(mutated_pump), PINNED_WP1B_CFG0_DIGEST)
 
         with tempfile.TemporaryDirectory(prefix="ppc-wp2-edi-") as tmp:
-            # Different payload under existing request_id MUST return CONFLICT
-            alt = dict(cfg0_raw)
-            alt["equipment"] = list(cfg0_raw["equipment"]) + [{"tag": "TK-EXTRA", "class": "StorageTank", "site_id": "SITE-REF-A"}]
-            alt_path = Path(tmp) / "alt_cfg0.json"
-            alt_path.write_text(json.dumps(alt), encoding="utf-8")
-            conflict = reg.adopt_cfg0_topology(
-                alt_path,
-                request_id="REQ-CFG0-001",
-                world_id="WORLD-PPC-V1",
-                branch_id="baseline",
-                authorized_actor="usr-ref-ops",
-                expected_cfg0_digest=canonical_cfg0_digest(alt),
-            )
-            self.assertEqual(conflict["outcome"], "CONFLICT")
+            edi_db = Path(tmp) / "edi_registry.db"
+            reg1 = EDIAdoptionRegistry(db_path=edi_db)
+            try:
+                # EDI-001 §3: wrong expected_prior_configuration on fresh branch MUST fail closed
+                with self.assertRaises(ValueError):
+                    reg1.adopt_cfg0_topology(
+                        CFG0_PATH,
+                        request_id="REQ-CFG0-WRONG-PRIOR",
+                        world_id="WORLD-PPC-V1",
+                        branch_id="baseline",
+                        authorized_actor="usr-ref-ops",
+                        expected_cfg0_digest=PINNED_WP1B_CFG0_DIGEST,
+                        expected_prior_configuration="CFG-999",
+                    )
 
-            # Dangling endpoint MUST fail closed
-            bad = dict(cfg0_raw)
-            bad["piping_connections"] = [{"id": "LINE-BAD", "from": "CDU", "to": "NONEXISTENT", "pumps": []}]
-            bad_path = Path(tmp) / "bad_cfg0.json"
-            bad_path.write_text(json.dumps(bad), encoding="utf-8")
-            with self.assertRaises(ValueError):
-                reg.adopt_cfg0_topology(
-                    bad_path,
-                    request_id="REQ-CFG0-DANGLE",
+                # Valid initial adoption against independently pinned WP-1b CFG-0 digest
+                r1 = reg1.adopt_cfg0_topology(
+                    CFG0_PATH,
+                    request_id="REQ-CFG0-001",
                     world_id="WORLD-PPC-V1",
                     branch_id="baseline",
                     authorized_actor="usr-ref-ops",
-                    expected_cfg0_digest=canonical_cfg0_digest(bad),
+                    expected_cfg0_digest=PINNED_WP1B_CFG0_DIGEST,
+                    expected_prior_configuration=None,
+                    recorded_at_utc="2026-06-15T00:01:00Z",
                 )
+                self.assertEqual(r1["outcome"], "ADOPTED")
+                self.assertTrue(r1["b7_digest_parity"])
+                self.assertEqual(r1["adopted_digest"], PINNED_WP1B_CFG0_DIGEST)
+                self.assertEqual(reg1.active_configuration("WORLD-PPC-V1", "baseline"), "CFG-0")
+            finally:
+                reg1.close()
+
+            # Simulate FULL PROCESS RESTART opening the same SQLite registry file
+            reg2 = EDIAdoptionRegistry(db_path=edi_db)
+            try:
+                # 1. Cross-restart replay of same request_id + same scope + same payload returns IDENTICAL receipt
+                r1_replay = reg2.adopt_cfg0_topology(
+                    CFG0_PATH,
+                    request_id="REQ-CFG0-001",
+                    world_id="WORLD-PPC-V1",
+                    branch_id="baseline",
+                    authorized_actor="usr-ref-ops",
+                    expected_cfg0_digest=PINNED_WP1B_CFG0_DIGEST,
+                    expected_prior_configuration=None,
+                    recorded_at_utc="2026-06-15T00:05:00Z",
+                )
+                self.assertEqual(r1_replay, r1)
+
+                # 2. Same request_id + identical payload + different world_id or branch_id -> DIFFERENT_SCOPE conflict
+                scope_conflict = reg2.adopt_cfg0_topology(
+                    CFG0_PATH,
+                    request_id="REQ-CFG0-001",
+                    world_id="WORLD-OTHER",
+                    branch_id="baseline",
+                    authorized_actor="usr-ref-ops",
+                    expected_cfg0_digest=PINNED_WP1B_CFG0_DIGEST,
+                )
+                self.assertEqual(scope_conflict["outcome"], "CONFLICT")
+                self.assertEqual(scope_conflict["reason"], "DIFFERENT_SCOPE_FOR_EXISTING_REQUEST_ID")
+
+                # 3. Second distinct request on baseline with expected_prior=None now FAILS (active is CFG-0!)
+                with self.assertRaises(ValueError):
+                    reg2.adopt_cfg0_topology(
+                        CFG0_PATH,
+                        request_id="REQ-CFG0-002-STALE",
+                        world_id="WORLD-PPC-V1",
+                        branch_id="baseline",
+                        authorized_actor="usr-ref-ops",
+                        expected_cfg0_digest=PINNED_WP1B_CFG0_DIGEST,
+                        expected_prior_configuration=None,
+                    )
+
+                # 4. Non-vacuous B7 digest mismatch MUST fail closed
+                with self.assertRaises(ValueError):
+                    reg2.adopt_cfg0_topology(
+                        CFG0_PATH,
+                        request_id="REQ-CFG0-BAD-DIGEST",
+                        world_id="WORLD-PPC-V1",
+                        branch_id="child-1",
+                        authorized_actor="usr-ref-ops",
+                        expected_cfg0_digest="0" * 64,
+                    )
+
+                # 5. Different payload under existing request_id -> DIFFERENT_PAYLOAD conflict
+                alt = json.loads(json.dumps(cfg0_raw))
+                alt["equipment"].append({"tag": "TK-EXTRA", "class": "StorageTank", "site_id": "SITE-REF-A"})
+                alt_path = Path(tmp) / "alt_cfg0.json"
+                alt_path.write_text(json.dumps(alt), encoding="utf-8")
+                payload_conflict = reg2.adopt_cfg0_topology(
+                    alt_path,
+                    request_id="REQ-CFG0-001",
+                    world_id="WORLD-PPC-V1",
+                    branch_id="baseline",
+                    authorized_actor="usr-ref-ops",
+                    expected_cfg0_digest=canonical_cfg0_digest(alt),
+                )
+                self.assertEqual(payload_conflict["outcome"], "CONFLICT")
+                self.assertEqual(payload_conflict["reason"], "DIFFERENT_PAYLOAD_FOR_EXISTING_REQUEST_ID")
+
+                # 6. Dangling endpoint MUST fail closed
+                bad = json.loads(json.dumps(cfg0_raw))
+                bad["piping_connections"] = [{"id": "LINE-BAD", "from": "CDU", "to": "NONEXISTENT", "pumps": []}]
+                bad_path = Path(tmp) / "bad_cfg0.json"
+                bad_path.write_text(json.dumps(bad), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    reg2.adopt_cfg0_topology(
+                        bad_path,
+                        request_id="REQ-CFG0-DANGLE",
+                        world_id="WORLD-PPC-V1",
+                        branch_id="child-1",
+                        authorized_actor="usr-ref-ops",
+                        expected_cfg0_digest=canonical_cfg0_digest(bad),
+                    )
+            finally:
+                reg2.close()
 
     def test_zero_hidden_truth_imports_in_integration_ot_and_source_systems(self):
         forbidden = ("generators", "world_kernel", "evaluation", "hidden")
@@ -335,6 +427,19 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
                     elif isinstance(node, ast.ImportFrom) and node.module:
                         for tok in forbidden:
                             self.assertNotIn(tok, node.module.lower(), f"Forbidden import {node.module} in {py_file}")
+                    elif isinstance(node, ast.Call):
+                        fn_name = (
+                            node.func.id
+                            if isinstance(node.func, ast.Name)
+                            else (node.func.attr if isinstance(node.func, ast.Attribute) else "")
+                        )
+                        if fn_name in ("__import__", "import_module"):
+                            for arg in node.args:
+                                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                                    for tok in forbidden:
+                                        self.assertNotIn(
+                                            tok, arg.value.lower(), f"Forbidden dynamic import {arg.value} in {py_file}"
+                                        )
 
 
 if __name__ == "__main__":
