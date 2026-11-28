@@ -53,6 +53,10 @@ echo
 echo "== WP-1a public data ingest contracts =="
 uv run --no-project --with jsonschema python3 -m unittest tests/test_public_ingest.py
 
+echo
+echo "== WP-4A backup op-budget, recovery-gap checker, and SQLite restore drill =="
+python3 -m unittest -q tests/test_wp4a_backup_recovery.py
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   (cd infra && docker compose --profile all config -q) && echo "  ok  infra/docker-compose.yml parses"
 else
