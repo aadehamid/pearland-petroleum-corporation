@@ -12,14 +12,19 @@ canonical S2-* timeline for segregated hold tank TK-101H:
   - Idempotent Delta publication from Silver staging via `publish_staging_to_delta_idempotent`.
 - WP-3 (`lakehouse/delta/publisher.py`, `lakehouse/delta/reader_as_of.py`):
   - Delta Lake idempotent writes + read-only DuckDB verification of S2-M1 movement row.
-  - Analytical release manifests S2-L1 (09:50) and S2-L2 (13:15).
-  - INFO-001 §3 `select_reader_as_of` with AccessGrant, DeliveryReceipt, ReleaseEvent, and PublicationRecord:
-    - 09:00 / 09:20 / 09:30 / 09:50: failed LIMS assay S2-P1 (receipt S2-R1, release S2-L1) -> QUALITY_HOLD.
-    - 10:00 UTC: planner decision S2-D1 pinned to 10:00 cutoff (sees S2-P1 + S2-L1 ONLY).
-    - 12:00 / 12:30 / 13:00 / 13:15: delayed passing LIMS correction S2-P2 (receipt S2-R2, release S2-L2) -> RELEASE.
-    - 13:05 UTC (post-publication of S2-P2, pre-release of S2-L2): still sees S2-P1 + S2-L1 (DATA-001 §2 gating).
-    - Replay of 10:00 decision S2-D1 after S2-P2 & S2-L2 arrive reproduces S2-P1 + S2-L1 identically (zero leakage).
-    - Unauthorized role (`ExternalGuest`) receives opaque `UNRESOLVED` with `payload: None`.
+  - Analytical release manifests S2-L1 (recorded 09:40, published 09:45, delivered 09:50) and
+    S2-L2 (recorded 13:05, published 13:10, delivered 13:15) carrying registered EPM KPI rows
+    (`Inventory Days of Cover`, `ontology/kpi_ontology_class_hierarchy.md`).
+  - INFO-001 §3 `select_reader_as_of` with AccessGrant (`08:00`, `workspace`, `crude-disposition`),
+    DeliveryReceipt, ReleaseEvent, and PublicationRecord matching `SCENARIO-001 §3` exactly:
+    - `S2-P1` / `S2-R1`: effective 08:00, recorded 09:00, published 09:20, delivered 09:30 (`QUALITY_HOLD`).
+    - `S2-L1`: recorded 09:40, published 09:45, delivered 09:50.
+    - `S2-D1`: 10:00 UTC planner decision cutoff (sees `S2-P1` + `S2-L1` ONLY).
+    - `S2-P2` / `S2-R2`: effective 08:00, recorded 12:00, published 12:30, delivered 13:00 (`RELEASE`).
+    - `S2-L2`: recorded 13:05, published 13:10, delivered 13:15.
+    - Boundary checks at 09:25 (pre-receipt `UNRESOLVED`), 09:47 (pre-release delivery `UNRESOLVED`),
+      13:12 (pre-`S2-L2` delivery retains `S2-P1`/`S2-L1`), 10:00 replay (zero leakage of `S2-P2`/`S2-L2`),
+      and unauthorized `ExternalGuest` (opaque `UNRESOLVED`, `payload: None`).
 """
 from __future__ import annotations
 
@@ -194,33 +199,38 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
             )
             tank_tk101h_bbl = eq.mass_kg_to_volume_bbl(tk_step.closing_mass_kg, sg)
 
-            # 3. WP-3 Analytical Release Manifests (S2-L1 at 09:50, S2-L2 at 13:15) + Delta KPI store
+            # 3. WP-3 Analytical Release Manifests (S2-L1 & S2-L2) + Delta KPI store using EPM-bound KPI
+            # `Inventory Days of Cover` (semantic/mappings/epm_kpi_bindings.yaml, ADR-0060 Q1).
+            # At 180,000 bbl/day nominal refinery crude charge, 500 bbl released into available stock adds 500/180000 days.
+            nominal_crude_bpd = 180000.0
             kpi_l1 = [
                 KPIFactRow(
                     release_id="S2-L1",
                     branch_id="scn-b-s2",
-                    kpi_name="Crude Quality Hold Volume",
-                    measure_class="OPERATIONAL_METRIC",
-                    epm_artifact="Refinery_Yield_Mass_Balance",
-                    value=tank_tk101h_bbl,
-                    unit="bbl",
+                    kpi_name="Inventory Days of Cover",
+                    measure_class="KPI",
+                    epm_artifact="ontology/kpi_ontology_class_hierarchy.md",
+                    value=0.0,  # LOT-44 held in TK-101H is excluded from available crude cover until quality release
+                    unit="days",
                     parent_kpi=None,
-                    effective_at_utc="2026-06-15T09:00:00Z",
-                    published_at_utc="2026-06-15T09:50:00Z",
+                    effective_at_utc="2026-06-15T09:40:00Z",
+                    published_at_utc="2026-06-15T09:45:00Z",
+                    access_label="OPERATIONS",
                 ).to_dict()
             ]
             kpi_l2 = [
                 KPIFactRow(
                     release_id="S2-L2",
                     branch_id="scn-b-s2",
-                    kpi_name="Crude Quality Hold Volume",
-                    measure_class="OPERATIONAL_METRIC",
-                    epm_artifact="Refinery_Yield_Mass_Balance",
-                    value=0.0,
-                    unit="bbl",
+                    kpi_name="Inventory Days of Cover",
+                    measure_class="KPI",
+                    epm_artifact="ontology/kpi_ontology_class_hierarchy.md",
+                    value=tank_tk101h_bbl / nominal_crude_bpd,
+                    unit="days",
                     parent_kpi=None,
-                    effective_at_utc="2026-06-15T12:00:00Z",
-                    published_at_utc="2026-06-15T13:15:00Z",
+                    effective_at_utc="2026-06-15T13:05:00Z",
+                    published_at_utc="2026-06-15T13:10:00Z",
+                    access_label="OPERATIONS",
                 ).to_dict()
             ]
             kpi_w1 = write_delta_table_idempotent(
@@ -230,61 +240,87 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_id="S2-L1",
                 branch_id="scn-b-s2",
                 status="PUBLISHED",
-                published_at_utc="2026-06-15T09:50:00Z",
-                cutoff_utc="2026-06-15T09:45:00Z",
+                published_at_utc="2026-06-15T09:45:00Z",
+                cutoff_utc="2026-06-15T09:40:00Z",
                 delta_tables={"tank_movements": 0, "kpi_facts": int(kpi_w1["delta_version"])},
                 kpi_rows=kpi_l1,
             )
 
-            # 4. WP-3 INFO-001 §3 reader-as-of selection across the canonical S2-* timeline
+            # 4. WP-3 INFO-001 §3 reader-as-of selection across the exact SCENARIO-001 §3 S2-* timeline
             grants = [
                 AccessGrant(
                     role="Planner",
-                    channel="portal",
-                    purpose="operations",
-                    valid_from_utc="2026-06-15T00:00:00Z",
-                    recorded_at_utc="2026-06-15T00:00:00Z",
+                    channel="workspace",
+                    purpose="crude-disposition",
+                    valid_from_utc="2026-06-15T08:00:00Z",
+                    recorded_at_utc="2026-06-15T08:00:00Z",
                     effect="ALLOW",
                 ),
                 AccessGrant(
                     role="Analyst",
-                    channel="portal",
-                    purpose="operations",
-                    valid_from_utc="2026-06-15T00:00:00Z",
-                    recorded_at_utc="2026-06-15T00:00:00Z",
+                    channel="workspace",
+                    purpose="crude-disposition",
+                    valid_from_utc="2026-06-15T08:00:00Z",
+                    recorded_at_utc="2026-06-15T08:00:00Z",
                     effect="ALLOW",
                 ),
             ]
             pub_p1 = PublicationRecord(
                 publication_id="S2-P1",
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 release_id="S2-L1",
                 supersession_ordinal=1,
-                effective_at_utc="2026-06-15T09:00:00Z",
-                recorded_at_utc="2026-06-15T09:20:00Z",
-                published_at_utc="2026-06-15T09:30:00Z",
+                effective_at_utc="2026-06-15T08:00:00Z",
+                recorded_at_utc="2026-06-15T09:00:00Z",
+                published_at_utc="2026-06-15T09:20:00Z",
                 allowed_roles=("Planner", "Analyst"),
                 supersedes_publication_id=None,
-                payload={"tank_id": "TK-101H", "disposition": "QUALITY_HOLD", "sulfur_wt_pct": 3.45},
+                payload={"lot_id": "LOT-44", "tank_id": "TK-101H", "disposition": "QUALITY_HOLD", "sulfur_wt_pct": 3.45},
             )
             receipt_r1 = DeliveryReceipt(
                 publication_id="S2-P1",
                 recipient_role="Planner",
-                channel="portal",
+                channel="workspace",
                 delivered_at_utc="2026-06-15T09:30:00Z",
             )
             rel_l1 = ReleaseEvent(
                 release_id="S2-L1",
                 status="PUBLISHED",
-                published_at_utc="2026-06-15T09:50:00Z",
+                published_at_utc="2026-06-15T09:45:00Z",
                 delivered_at_utc="2026-06-15T09:50:00Z",
-                authorized_at_utc="2026-06-15T09:50:00Z",
+                authorized_at_utc="2026-06-15T09:45:00Z",
+            )
+
+            # Sharp pre-receipt (09:25) and pre-release-delivery (09:47) boundary probes -> UNRESOLVED
+            pre_receipt_0925 = select_reader_as_of(
+                subject_key="assay:TK-101H:LOT-44",
+                branch_id="scn-b-s2",
+                reader_role="Planner",
+                reader_cutoff_utc="2026-06-15T09:25:00Z",
+                publications=[pub_p1],
+                release_events=[rel_l1],
+                receipts=[receipt_r1],
+                grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
+            )
+            pre_release_delivery_0947 = select_reader_as_of(
+                subject_key="assay:TK-101H:LOT-44",
+                branch_id="scn-b-s2",
+                reader_role="Planner",
+                reader_cutoff_utc="2026-06-15T09:47:00Z",
+                publications=[pub_p1],
+                release_events=[rel_l1],
+                receipts=[receipt_r1],
+                grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
 
             # 10:00 UTC planner decision S2-D1 BEFORE S2-P2/S2-L2 exist
             decision_s2_d1_initial = select_reader_as_of(
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 reader_role="Planner",
                 reader_cutoff_utc="2026-06-15T10:00:00Z",
@@ -292,6 +328,8 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_events=[rel_l1],
                 receipts=[receipt_r1],
                 grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
 
             # 12:00..13:15 delayed passing lab correction S2-P2 (receipt S2-R2) + restatement release S2-L2
@@ -302,56 +340,58 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_id="S2-L2",
                 branch_id="scn-b-s2",
                 status="PUBLISHED",
-                published_at_utc="2026-06-15T13:15:00Z",
-                cutoff_utc="2026-06-15T13:10:00Z",
+                published_at_utc="2026-06-15T13:10:00Z",
+                cutoff_utc="2026-06-15T13:05:00Z",
                 delta_tables={"tank_movements": 0, "kpi_facts": int(kpi_w2["delta_version"])},
                 kpi_rows=kpi_l2,
                 supersedes_release_id="S2-L1",
             )
             pub_p2 = PublicationRecord(
                 publication_id="S2-P2",
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 release_id="S2-L2",
                 supersession_ordinal=2,
-                effective_at_utc="2026-06-15T12:00:00Z",
-                recorded_at_utc="2026-06-15T12:30:00Z",
-                published_at_utc="2026-06-15T13:00:00Z",
+                effective_at_utc="2026-06-15T08:00:00Z",
+                recorded_at_utc="2026-06-15T12:00:00Z",
+                published_at_utc="2026-06-15T12:30:00Z",
                 allowed_roles=("Planner", "Analyst"),
                 supersedes_publication_id="S2-P1",
-                payload={"tank_id": "TK-101H", "disposition": "RELEASE", "sulfur_wt_pct": 1.38},
+                payload={"lot_id": "LOT-44", "tank_id": "TK-101H", "disposition": "RELEASE", "sulfur_wt_pct": 1.38},
             )
             receipt_r2 = DeliveryReceipt(
                 publication_id="S2-P2",
                 recipient_role="Planner",
-                channel="portal",
+                channel="workspace",
                 delivered_at_utc="2026-06-15T13:00:00Z",
             )
             rel_l2 = ReleaseEvent(
                 release_id="S2-L2",
                 status="PUBLISHED",
-                published_at_utc="2026-06-15T13:15:00Z",
+                published_at_utc="2026-06-15T13:10:00Z",
                 delivered_at_utc="2026-06-15T13:15:00Z",
-                authorized_at_utc="2026-06-15T13:15:00Z",
+                authorized_at_utc="2026-06-15T13:10:00Z",
             )
 
             all_pubs = [pub_p1, pub_p2]
             all_rels = [rel_l1, rel_l2]
             all_receipts = [receipt_r1, receipt_r2]
 
-            # 13:05 UTC: S2-P2 is published/delivered, but S2-L2 release is NOT yet cut -> MUST still resolve S2-P1!
-            pre_release_1305 = select_reader_as_of(
-                subject_key="assay:TK-101H:S2-M1",
+            # 13:12 UTC: S2-P2 delivered at 13:00 and S2-L2 published at 13:10, but S2-L2 NOT delivered until 13:15!
+            pre_release_1312 = select_reader_as_of(
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 reader_role="Planner",
-                reader_cutoff_utc="2026-06-15T13:05:00Z",
+                reader_cutoff_utc="2026-06-15T13:12:00Z",
                 publications=all_pubs,
                 release_events=all_rels,
                 receipts=all_receipts,
                 grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
             restated_1315 = select_reader_as_of(
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 reader_role="Planner",
                 reader_cutoff_utc="2026-06-15T13:15:00Z",
@@ -359,10 +399,12 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_events=all_rels,
                 receipts=all_receipts,
                 grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
             # Replay 10:00 decision S2-D1 AFTER S2-P2 & S2-L2 exist -> zero temporal leakage!
             decision_s2_d1_replay = select_reader_as_of(
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 reader_role="Planner",
                 reader_cutoff_utc="2026-06-15T10:00:00Z",
@@ -370,9 +412,11 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_events=all_rels,
                 receipts=all_receipts,
                 grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
             unauthorized_view = select_reader_as_of(
-                subject_key="assay:TK-101H:S2-M1",
+                subject_key="assay:TK-101H:LOT-44",
                 branch_id="scn-b-s2",
                 reader_role="ExternalGuest",
                 reader_cutoff_utc="2026-06-15T13:15:00Z",
@@ -380,8 +424,14 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 release_events=all_rels,
                 receipts=all_receipts,
                 grants=grants,
+                channel="workspace",
+                purpose="crude-disposition",
             )
 
+            kpi_delta_rows = sorted(
+                query_delta_readonly_duckdb(delta_kpi_dir),
+                key=lambda r: (str(r["release_id"]), str(r["kpi_name"])),
+            )
             evidence = {
                 "scenario_id": "SCENARIO-B-S2",
                 "qualification_verdict": "QUALIFIED_PROVISIONAL",
@@ -389,6 +439,7 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                 "tank_tk101h_bbl": tank_tk101h_bbl,
                 "tank_mass_residual_kg": tk_step.mass_residual_kg,
                 "delta_movement_row_count": len(delta_movement_rows),
+                "kpi_rows": kpi_delta_rows,
                 "quarantine_count": inbox.quarantine_count(),
                 "watermarks": inbox.watermarks("logistics_sqlite", "scn-b-s2"),
                 "m1_outcomes": {
@@ -402,8 +453,10 @@ def run_scenario_b_walkthrough(work_dir: str | Path | None = None) -> dict[str, 
                     "S2-L1_sha256": manifest_l1["manifest_sha256"],
                     "S2-L2_sha256": manifest_l2["manifest_sha256"],
                 },
+                "pre_receipt_0925": pre_receipt_0925,
+                "pre_release_delivery_0947": pre_release_delivery_0947,
                 "decision_s2_d1_1000": decision_s2_d1_initial,
-                "pre_release_1305": pre_release_1305,
+                "pre_release_1312": pre_release_1312,
                 "restated_1315": restated_1315,
                 "decision_s2_d1_replay": decision_s2_d1_replay,
                 "replay_exact_match": decision_s2_d1_initial == decision_s2_d1_replay,
