@@ -135,7 +135,7 @@ Implementation work packages write exclusively to these repository paths (`lakeh
 - **Predecessors & blocking decisions:** `WP-2`; relies on `ADR-0042`, `0044`, `0045`, `0047`. Generalized process bindings remain pending until `ds-business-process/1.0` releases.
 - **Accountable role & upstream owners:** Data & Knowledge Graph Engineer; EPM (`511a9e8d`) and ECE (`750b398`) provisional adapters.
 - **Governing IDs:** `INFO-001`, `GRAPH-001`, `DATA-001`, `EVID-001`, `PPC-016`, `PPC-017`, `PPC-018`; `PO-03`, `PO-08`.
-- **Inputs, outputs & affected components:** Inputs: `WP-2` Postgres Silver staging and raw extracts, EPM Turtle/SHACL bundle, ECE contracts. Outputs: `lakehouse/delta/` tables + `ReleaseManifest` publisher, GX DQ suite, `semantic/` Turtle + `pyshacl` validator, `graph/neo4j/` snapshot loader, `pgvector` evidence index, reader-as-of query engine.
+- **Inputs, outputs & affected components:** Inputs: `WP-2` Postgres Silver staging and raw extracts, EPM Turtle/SHACL bundle, ECE contracts. Outputs: `lakehouse/delta/` tables + `ReleaseManifest` publisher, GX DQ suite, `semantic/` Turtle + `pyshacl` validator + `semantic/mappings/epm_kpi_bindings.yaml` (`ADR-0060 Q1`), `graph/neo4j/` snapshot loader, `pgvector` evidence index, reader-as-of query engine.
 - **Ordered implementation tasks:**
   1. Implement idempotent `delta-rs` Silver/Gold publication from Postgres staging with `txnAppId`/`txnVersion`, `aws_conditional_put="etag"`, and Dagster concurrency pool = 1 per table.
   2. Implement EPM tall KPI Store with `KPI`, `OPERATIONAL_METRIC`, and `MARKET_INDICATOR` measure classes, decomposition links, atomic `ReleaseManifest` cuts, and `RETRACTED` (`L1/X1`) handling.
