@@ -475,6 +475,28 @@ class TestWP0Schemas(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             validate_payload("provisional_adapter_manifest.schema.json", bad_adapter)
 
+        # Approved upstream release cannot leave approved_upstream_release null or cap provisional
+        bad_approved = copy.deepcopy(payloads["provisional_adapter_manifest.schema.json"])
+        bad_approved["maturity_status"] = "APPROVED_UPSTREAM_RELEASE"
+        bad_approved["approved_upstream_release"] = None
+        bad_approved["qualification_cap"] = "QUALIFIED"
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("provisional_adapter_manifest.schema.json", bad_approved)
+
+        # PROHIBITED ActionProposal cannot be APPROVED, EXECUTED, or AUTO_EXECUTED (ADR-0056 G3-b)
+        for bad_status in ("APPROVED", "EXECUTED", "AUTO_EXECUTED"):
+            bad_prop = copy.deepcopy(payloads["action_proposal.schema.json"])
+            bad_prop["authority_class"] = "PROHIBITED"
+            bad_prop["status"] = bad_status
+            with self.assertRaises(jsonschema.ValidationError):
+                validate_payload("action_proposal.schema.json", bad_prop)
+
+        # ReleaseManifest table snapshots cannot point to hidden bucket (ADR-0053, ADR-0057)
+        bad_rm = copy.deepcopy(payloads["release_manifest.schema.json"])
+        bad_rm["table_snapshots"][0]["r2_uri"] = "s3://pearland-petroleum-hidden/delta/kpi_store/gold_kpi_facts"
+        with self.assertRaises(jsonschema.ValidationError):
+            validate_payload("release_manifest.schema.json", bad_rm)
+
 
 class TestWP0PolicyAndPins(unittest.TestCase):
     def test_policy_thresholds_match_adr_0056(self):
@@ -629,7 +651,7 @@ class TestWP0SemanticAndInfra(unittest.TestCase):
         dagster_cfg = yaml.safe_load((INFRA_DIR / "dagster" / "dagster.yaml").read_text(encoding="utf-8"))
         limits = dagster_cfg["run_coordinator"]["config"]["tag_concurrency_limits"]
         self.assertIn(
-            {"key": "dagster/concurrency_key", "value": "delta_table_single_writer", "limit": 1},
+            {"key": "ppc/delta_table", "value": {"applyLimitPerUniqueValue": True}, "limit": 1},
             limits,
         )
 

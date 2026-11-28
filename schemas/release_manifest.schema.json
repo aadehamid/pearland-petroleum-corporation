@@ -77,7 +77,11 @@
         "properties": {
           "table_name": { "type": "string", "minLength": 1 },
           "delta_version": { "type": "integer", "minimum": 0 },
-          "r2_uri": { "type": "string", "pattern": "^s3://[a-z0-9-]+/delta/.+" },
+          "r2_uri": {
+            "type": "string",
+            "pattern": "^s3://[a-z0-9-]+/delta/.+",
+            "not": { "pattern": "hidden" }
+          },
           "snapshot_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
         }
       }

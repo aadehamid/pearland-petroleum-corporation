@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DELTA_CONCURRENCY_POOL_KEY = "delta_table_single_writer"
+DELTA_CONCURRENCY_POOL_KEY = "ppc/delta_table"
 DELTA_CONCURRENCY_POOL_LIMIT = 1
 
 
@@ -283,9 +283,10 @@ def run_delta_r2_and_databricks_probes(
             }
 
         #    (b) Two concurrent delta-rs overwrite writers racing on the same R2 table with
-        #        max_commit_retries=0 (no retry masking): at least one conflicting overwrite is
-        #        rejected by delta-rs conflict detection under aws_conditional_put="etag", or
-        #        strictly serialized cleanly without corrupting the log.
+        #        max_commit_retries=0 (no retry masking): one writer commits and the competing
+        #        writer MUST fail with a Delta commit conflict under aws_conditional_put="etag".
+        from deltalake.exceptions import CommitFailedError
+
         def compete(writer_id: int) -> tuple[int, str, str]:
             tbl = pa.table(
                 {
@@ -304,7 +305,7 @@ def run_delta_r2_and_databricks_probes(
                     commit_properties=CommitProperties(max_commit_retries=0),
                 )
                 return (writer_id, "COMMITTED", "")
-            except Exception as exc:
+            except CommitFailedError as exc:
                 return (writer_id, "REJECTED", f"{type(exc).__name__}: {str(exc)[:180]}")
 
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -313,8 +314,10 @@ def run_delta_r2_and_databricks_probes(
 
         rejected_count = sum(1 for _, st, _ in race_results if st == "REJECTED")
         committed_count = sum(1 for _, st, _ in race_results if st == "COMMITTED")
-        if committed_count < 1:
-            raise AssertionError(f"No writer committed in race test: {race_results}")
+        if committed_count != 1 or rejected_count != 1:
+            raise AssertionError(
+                f"Expected exactly 1 COMMITTED and 1 REJECTED (CommitFailedError) in dual-writer race, got: {race_results}"
+            )
 
         # Verify table log remains readable and intact after competing writers
         dt_after = DeltaTable(table_uri, storage_options=storage_opts)

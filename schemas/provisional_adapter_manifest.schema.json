@@ -77,6 +77,15 @@
           "qualification_cap": { "const": "QUALIFIED_PROVISIONAL" }
         }
       }
+    },
+    {
+      "if": { "properties": { "maturity_status": { "const": "APPROVED_UPSTREAM_RELEASE" } } },
+      "then": {
+        "properties": {
+          "approved_upstream_release": { "type": "string", "minLength": 1 },
+          "qualification_cap": { "const": "QUALIFIED" }
+        }
+      }
     }
   ]
 }

@@ -89,5 +89,15 @@
       "type": "string",
       "enum": ["OBSERVED", "DERIVED", "ESTIMATED", "SYNTHETIC", "SCENARIO_ASSUMPTION"]
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "authority_class": { "const": "PROHIBITED" } } },
+      "then": {
+        "properties": {
+          "status": { "enum": ["DRAFT", "POLICY_CHECKED", "DENIED"] }
+        }
+      }
+    }
+  ]
 }
