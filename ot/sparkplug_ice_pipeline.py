@@ -81,13 +81,21 @@ class SparkplugOTPublisher:
         if self.buffer_path is not None and self.buffer_path.is_file():
             try:
                 data = json.loads(self.buffer_path.read_text(encoding="utf-8"))
+                if not isinstance(data, dict):
+                    raise TypeError(f"Expected JSON object in OT buffer, got {type(data).__name__}")
                 self.bd_seq = int(data.get("bd_seq", 0))
-                for k, v in data.get("latest_sample", {}).items():
-                    self._latest_sample[k] = (float(v[0]), str(v[1]), str(v[2]), str(v[3]))
-            except (json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError) as exc:
+                latest = data.get("latest_sample", {})
+                if not isinstance(latest, dict):
+                    raise TypeError(f"Expected JSON object for latest_sample, got {type(latest).__name__}")
+                for k, v in latest.items():
+                    if not isinstance(v, (list, tuple)) or len(v) < 4:
+                        raise ValueError(f"Malformed sample tuple for {k!r}")
+                    self._latest_sample[str(k)] = (float(v[0]), str(v[1]), str(v[2]), str(v[3]))
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError, IndexError, AttributeError) as exc:
                 # OT-001 §4 / OT-03: surface unrecoverable buffer corruption explicitly instead of crashing startup
                 self.unrecoverable_buffer_loss = True
                 self.buffer_loss_reason = f"CORRUPT_PERSISTED_BUFFER: {exc}"
+                self.bd_seq = 0
                 self._latest_sample.clear()
                 corrupt_copy = self.buffer_path.with_suffix(self.buffer_path.suffix + ".corrupt")
                 try:

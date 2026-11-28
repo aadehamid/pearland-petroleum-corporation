@@ -279,14 +279,21 @@ class TestWP2SourcesOTIntegration(unittest.TestCase):
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:15:00Z")), 0)
             self.assertEqual(len(filter_visible_ot_events(dbirth, "2026-06-15T08:16:00Z")), 1)
 
-            # OT-03 corrupt buffer recovery: truncated JSON surfaces unrecoverable_buffer_loss instead of crashing startup
-            corrupt_file = Path(tmp) / "corrupt_ot_buffer.json"
-            corrupt_file.write_text('{"bd_seq": 3, "latest_sample": ', encoding="utf-8")
-            pub_corrupt = SparkplugOTPublisher(schedule, buffer_path=corrupt_file)
-            self.assertTrue(pub_corrupt.unrecoverable_buffer_loss)
-            self.assertIn("CORRUPT_PERSISTED_BUFFER", pub_corrupt.buffer_loss_reason or "")
-            b_rec = pub_corrupt.connect_and_birth("2026-06-15T08:20:00Z")
-            self.assertEqual(b_rec[0].message_type, "NBIRTH")
+            # OT-03 corrupt buffer recovery: truncated AND shape-corrupt JSON surface unrecoverable_buffer_loss cleanly
+            for idx, bad_json in enumerate(
+                (
+                    '{"bd_seq": 3, "latest_sample": ',
+                    '[1, 2, 3]',
+                    '{"bd_seq": 1, "latest_sample": []}',
+                )
+            ):
+                corrupt_file = Path(tmp) / f"corrupt_ot_buffer_{idx}.json"
+                corrupt_file.write_text(bad_json, encoding="utf-8")
+                pub_corrupt = SparkplugOTPublisher(schedule, buffer_path=corrupt_file)
+                self.assertTrue(pub_corrupt.unrecoverable_buffer_loss)
+                self.assertIn("CORRUPT_PERSISTED_BUFFER", pub_corrupt.buffer_loss_reason or "")
+                b_rec = pub_corrupt.connect_and_birth("2026-06-15T08:20:00Z")
+                self.assertEqual(b_rec[0].message_type, "NBIRTH")
 
     def test_edi_cfg0_adoption_b7_pinned_digest_persistence_prior_check_and_conflicts(self):
         cfg0_raw = json.loads(CFG0_PATH.read_text(encoding="utf-8"))
