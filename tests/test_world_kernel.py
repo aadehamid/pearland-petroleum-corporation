@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+"""Independent verification tests for WP-1c Refinery A v1 World Kernel (EQ-01 through EQ-08).
+
+Verifies every Python-checked hand fixture in PPC-REVIEW-002 §3, PPC-ENG-001 §4,
+PPC-WORLD-001 §5, and WORLD-002 §6, plus step-refinement convergence (60s/10s/1s),
+23/25-hour America/Chicago DST parity, checkpoint bit-exact replay, and child-branch isolation.
+"""
+from __future__ import annotations
+
+import unittest
+from datetime import datetime, timezone
+from fractions import Fraction
+
+from generators import equations as eq
+from generators.world_kernel import (
+    RefineryWorldKernel,
+    WorldEvent,
+    WorldState,
+    local_business_day_elapsed_hours,
+    paired_rng,
+)
+
+
+class TestEquationsExactFixtures(unittest.TestCase):
+    def test_eq01_and_eq02_t125_baseline_and_intermediate_overflow_split(self):
+        # Exact rational check: SG=0.840 -> rho=839.173440 kg/m3, 133.417915 kg/bbl
+        sg = 0.840
+        kg_per_bbl = eq.volume_bbl_to_mass_kg(1.0, sg)
+        self.assertAlmostEqual(kg_per_bbl, 133.417915, places=6)
+
+        # Missing density returns INSUFFICIENT_INPUT
+        with self.assertRaises(eq.InsufficientInputError):
+            eq.volume_bbl_to_mass_kg(100.0, None)
+
+        # Baseline T125: 10,000 bbl + 500 bbl/h in - 700 bbl/h out for 2 h = 9,600 bbl
+        res = eq.step_tank_with_exact_crossing(
+            opening_mass_kg=eq.volume_bbl_to_mass_kg(10000.0, sg),
+            min_mass_kg=eq.volume_bbl_to_mass_kg(1000.0, sg),
+            max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
+            inflow_rate_kg_s=eq.volume_bbl_to_mass_kg(500.0, sg) / 3600.0,
+            outflow_rate_kg_s=eq.volume_bbl_to_mass_kg(700.0, sg) / 3600.0,
+            dt_s=7200.0,
+        )
+        self.assertFalse(res.crossing_occurred)
+        self.assertAlmostEqual(eq.mass_kg_to_volume_bbl(res.closing_mass_kg, sg), 9600.0, places=9)
+        self.assertAlmostEqual(res.closing_mass_kg, 1280811.99, places=2)
+        self.assertAlmostEqual(res.mass_residual_kg, 0.0, places=12)
+
+        # Intermediate overflow fixture: 11,800 bbl, cap 12,000, hour 1 net +400 bbl/h (600 in / 200 out)
+        # MUST split at exact t* = 0.5 h = 1800 s instead of hiding 12,200 bbl overflow!
+        res_ovf = eq.step_tank_with_exact_crossing(
+            opening_mass_kg=eq.volume_bbl_to_mass_kg(11800.0, sg),
+            min_mass_kg=eq.volume_bbl_to_mass_kg(1000.0, sg),
+            max_mass_kg=eq.volume_bbl_to_mass_kg(12000.0, sg),
+            inflow_rate_kg_s=eq.volume_bbl_to_mass_kg(600.0, sg) / 3600.0,
+            outflow_rate_kg_s=eq.volume_bbl_to_mass_kg(200.0, sg) / 3600.0,
+            dt_s=3600.0,
+            rule="divert",
+        )
+        self.assertTrue(res_ovf.crossing_occurred)
+        self.assertEqual(res_ovf.crossing_bound, "MAX")
+        self.assertAlmostEqual(res_ovf.crossing_time_s, 1800.0, places=9)
+        self.assertAlmostEqual(eq.mass_kg_to_volume_bbl(res_ovf.closing_mass_kg, sg), 12000.0, places=9)
+        self.assertAlmostEqual(eq.mass_kg_to_volume_bbl(res_ovf.diverted_or_blocked_kg, sg), 200.0, places=9)
+        self.assertAlmostEqual(res_ovf.mass_residual_kg, 0.0, places=12)
+
+        # Exact rational zero-residual check
+        exact_m = eq.volume_bbl_to_mass_kg_exact(Fraction(9600), Fraction("0.840"))
+        self.assertEqual(
+            exact_m,
+            Fraction(9600) * Fraction("0.158987294928") * Fraction("0.840") * Fraction("999.016"),
+        )
+        self.assertAlmostEqual(float(exact_m), 1280811.99, places=2)
+
+    def test_eq03_friction_all_regimes_continuous(self):
+        # Laminar (Re=1500), transition (Re=3000 Churchill), turbulent (Re=50000 Colebrook-White)
+        f_lam = eq.darcy_friction_factor(1500.0, 0.0001)
+        self.assertAlmostEqual(f_lam, 64.0 / 1500.0, places=12)
+        f_trans = eq.darcy_friction_factor(3000.0, 0.0001)
+        self.assertTrue(0.03 < f_trans < 0.05)
+        f_turb = eq.darcy_friction_factor(50000.0, 0.0001)
+        self.assertTrue(0.018 < f_turb < 0.025)
+
+    def test_eq05_and_eq07_scn_a_t125_and_h2cont_exact_fixtures(self):
+        # Unit cancellation check: R_min_mass = 0.0666845554 kg H2 / kg VGO feed
+        r_m = eq.hcu_r_min_mass(4000.0, 0.910)
+        self.assertAlmostEqual(r_m, 0.0666845554, places=9)
+
+        # Normal SCN-A-T125 H2 header: 107 + 73 - 5 - 5 = 170 t/day; headroom = 170 - 5 - 40 = 125 t/day
+        h2_norm = eq.h2_header_balance(107.0, 73.0, 5.0, 5.0, 5.0, 40.0)
+        self.assertAlmostEqual(h2_norm["net_plant_h2_supply_t_per_day"], 170.0, places=9)
+        self.assertAlmostEqual(h2_norm["hcu_headroom_t_per_day"], 125.0, places=9)
+        self.assertTrue(h2_norm["no_double_allocation"])
+
+        # 75% compressor derate: binding cap = 30,000 bbl/day = 4,336.08 t/day
+        res = eq.hcu_evaluate(
+            requested_feed_bbl_per_day=30000.0,
+            compressor_circ_fraction=0.75,
+            h2_allocable_t_per_day=h2_norm["hcu_headroom_t_per_day"],
+            fixture_mode=True,
+        )
+        self.assertTrue(res["feasible"])
+        self.assertEqual(res["binding_constraint"], "compressor_circulation_cap")
+        self.assertAlmostEqual(res["max_feed_bbl_per_day"], 30000.0, places=6)
+        self.assertAlmostEqual(res["max_feed_t_per_day"], 4336.08, places=2)
+        self.assertAlmostEqual(res["h2_chem_t_per_day"], 86.72, places=2)
+        self.assertAlmostEqual(res["total_input_mass_t_per_day"], 4422.80, places=2)
+        self.assertAlmostEqual(res["mass_residual_t_per_day"], 0.0, places=12)
+        self.assertAlmostEqual(res["c5_plus_bbl_per_day"], 32643.6, places=1)
+        self.assertAlmostEqual(res["c3_plus_bbl_per_day"], 34448.4, places=1)
+        self.assertAlmostEqual(res["liquid_vol_gain_c5_pct"], 8.81, places=2)
+        self.assertEqual(res["outputs"]["acid_gas"]["phase"], "gas")
+        self.assertIsNone(res["outputs"]["acid_gas"]["volume_bbl_per_day"])
+
+        # 30,001 bbl/day MUST be INFEASIBLE (WORLD-01)
+        res_infeas = eq.hcu_evaluate(
+            requested_feed_bbl_per_day=30001.0,
+            compressor_circ_fraction=0.75,
+            h2_allocable_t_per_day=h2_norm["hcu_headroom_t_per_day"],
+            fixture_mode=True,
+        )
+        self.assertFalse(res_infeas["feasible"])
+        self.assertEqual(res_infeas["status"], "INFEASIBLE")
+
+        # SCN-A-H2CONT SMR turndown (57 t/day -> 120 net -> 75 headroom): overrides compressor cap at 3,750 t/day (25,945 bbl/day)
+        h2_cont = eq.h2_header_balance(57.0, 73.0, 5.0, 5.0, 5.0, 40.0)
+        self.assertAlmostEqual(h2_cont["hcu_headroom_t_per_day"], 75.0, places=9)
+        res_h2 = eq.hcu_evaluate(
+            requested_feed_bbl_per_day=30000.0,
+            compressor_circ_fraction=0.75,
+            h2_allocable_t_per_day=h2_cont["hcu_headroom_t_per_day"],
+            fixture_mode=True,
+        )
+        self.assertEqual(res_h2["binding_constraint"], "shared_h2_cap")
+        self.assertAlmostEqual(res_h2["max_feed_t_per_day"], 3750.0, places=6)
+        self.assertAlmostEqual(res_h2["max_feed_bbl_per_day"], 25945.1, delta=1.0)
+
+    def test_eq06_fcc_positive_ccr_exact_fixture_and_wp1_calibration_bounds(self):
+        # PPC-REVIEW-002 §3 test constants countercheck
+        ya, yb, yc, yd = eq.fcc_4lump_integrate(
+            w_ccr_feed=0.04, k1=2.2, k2=0.35, k3=0.55, k4=0.18, beta_bc=0.80, alpha_d=0.40, f_add=0.75
+        )
+        self.assertAlmostEqual(ya, 0.290206, places=5)
+        self.assertAlmostEqual(yb, 0.419304, places=5)
+        self.assertAlmostEqual(yc, 0.200504, places=5)
+        self.assertAlmostEqual(yd, 0.089986, places=5)
+        self.assertAlmostEqual(ya + yb + yc + yd, 1.0, places=12)
+
+        # WP-1 calibrated kinetic set must land strictly inside ADR-0056 G3-c bounds
+        cal = eq.fcc_evaluate(feed_t_per_day=3100.0, w_ccr_feed=0.012)
+        self.assertTrue(cal["feasible"])
+        self.assertLessEqual(abs(cal["mass_residual_t_per_day"]), 1e-9 * 3100.0)
+        self.assertLessEqual(abs(cal["sulfur_residual_t_per_day"]), 1e-9 * 3100.0)
+        self.assertLessEqual(cal["energy_residual_rel"], 1e-4)
+        self.assertTrue(70.0 <= cal["conversion_wt_pct"] <= 78.0, cal["conversion_wt_pct"])
+        self.assertTrue(44.0 <= cal["yields_wt_pct"]["naphtha"] <= 52.0, cal["yields_wt_pct"])
+        self.assertTrue(16.0 <= cal["yields_wt_pct"]["gas_total"] <= 22.0, cal["yields_wt_pct"])
+        self.assertTrue(4.5 <= cal["yields_wt_pct"]["coke"] <= 6.5, cal["yields_wt_pct"])
+        self.assertTrue(14.0 <= cal["yields_wt_pct"]["lco"] <= 20.0, cal["yields_wt_pct"])
+        self.assertTrue(5.0 <= cal["yields_wt_pct"]["slurry"] <= 9.0, cal["yields_wt_pct"])
+
+    def test_eq08_blending_fixtures_rvp_rt70_sulfur_flash_cloud_and_gates(self):
+        # Chevron RVP: 96% @ 6.80 + 4% @ 52.00 = 9.25 psi
+        rvp = eq.chevron_rvp_psi([0.96, 0.04], [6.80, 52.00])
+        self.assertAlmostEqual(rvp, 9.25, places=2)
+
+        # Mass sulfur T24: 100 t @ 10 ppmw + 5 t @ 100 ppmw = 14.286 (PASS); 6 t = 15.094 (HOLD)
+        s_pass = eq.blend_sulfur_ppmw([100.0, 5.0], [10.0, 100.0])
+        s_hold = eq.blend_sulfur_ppmw([100.0, 6.0], [10.0, 100.0])
+        self.assertAlmostEqual(s_pass, 100.0 / 7.0, places=9)
+        self.assertAlmostEqual(s_hold, 800.0 / 53.0, places=9)
+        self.assertEqual(eq.evaluate_ulsd_release(s_pass, 60.0, 44.0, 45.0, 28.0, -10.0, -5.0)["disposition"], "RELEASE")
+        self.assertEqual(eq.evaluate_ulsd_release(s_hold, 60.0, 44.0, 45.0, 28.0, -10.0, -5.0)["disposition"], "QUALITY_HOLD")
+        # Unhydrotreated LCO always holds even if numeric sulfur/flash/cetane look OK
+        self.assertEqual(
+            eq.evaluate_ulsd_release(10.0, 60.0, 45.0, 45.0, 25.0, -10.0, -5.0, contains_unhydrotreated_lco=True)["disposition"],
+            "QUALITY_HOLD",
+        )
+
+        # Ethyl RT-70 (PPC-REVIEW-002 §3 #6): RON 91.1960, MON 81.4457, BOB AKI 86.3209, E10 AKI 88.99
+        rt70 = eq.ethyl_rt70_octane(
+            vol_fracs=[0.40, 0.40, 0.15, 0.05],
+            rons=[98.0, 90.0, 68.0, 94.0],
+            mons=[87.0, 79.0, 66.0, 90.0],
+            olefins_vol_pct=[1.0, 28.0, 1.0, 0.0],
+            aromatics_vol_pct=[62.0, 25.0, 3.0, 0.0],
+        )
+        self.assertAlmostEqual(rt70["ron"], 91.1960, places=4)
+        self.assertAlmostEqual(rt70["mon"], 81.4457, places=4)
+        self.assertAlmostEqual(rt70["aki"], 86.3209, places=4)
+        bob_rel = eq.evaluate_bob_and_e10_release("REGULAR", rt70["aki"], 6.7, 6.8, 8.0)
+        self.assertEqual(bob_rel["disposition"], "RELEASE")
+        self.assertAlmostEqual(bob_rel["terminal_e10_aki"], 88.99, places=2)
+        # Untreated LSR always holds
+        self.assertEqual(
+            eq.evaluate_bob_and_e10_release("REGULAR", rt70["aki"], 6.7, 6.8, 8.0, contains_untreated_lsr=True)["disposition"],
+            "QUALITY_HOLD",
+        )
+
+        # Wickey-Chittenden flash and Hu-Burns cloud bounds
+        flash = eq.wickey_chittenden_flash_c([0.5, 0.5], [50.0, 70.0])
+        self.assertTrue(50.0 < flash < 60.0)  # weighted toward lower flash component
+        cloud = eq.hu_burns_cloud_k([0.5, 0.5], [260.0, 275.0])
+        self.assertTrue(268.0 < cloud < 275.0)  # weighted toward higher cloud component
+
+
+class TestWorldKernelReplayBranchesAndDST(unittest.TestCase):
+    def test_world002_70min_baseline_vs_0840_child_branch_and_isolation(self):
+        t0 = datetime(2026, 6, 15, 8, 0, tzinfo=timezone.utc)
+        t_derate = datetime(2026, 6, 15, 8, 10, tzinfo=timezone.utc)
+        t_fork = datetime(2026, 6, 15, 8, 40, tzinfo=timezone.utc)
+        t_end = datetime(2026, 6, 15, 9, 10, tzinfo=timezone.utc)
+
+        base_state = WorldState(world_version="world-v1.0.0", branch_id="baseline", root_seed=42, current_time_utc=t0)
+        base = RefineryWorldKernel(base_state, step_seconds=60, fixture_mode=True)
+        base.schedule_event(WorldEvent("EVT-DERATE", t_derate, "HCU_COMPRESSOR_DERATE", {"compressor_circ_fraction": 0.75}))
+
+        # Advance baseline to 08:40 checkpoint
+        base.advance_to(t_fork)
+        ckpt = base.checkpoint()
+        ckpt_digest_before = ckpt["state_digest"]
+
+        # Fork isolated child branch at 08:40 reducing HCU feed to 24,000 bbl/day for final 30 min
+        child = RefineryWorldKernel.from_checkpoint(ckpt, branch_id="child-24k")
+        child.schedule_event(WorldEvent("EVT-SET-24K", t_fork, "HCU_FEED_SETPOINT", {"requested_feed_bbl_per_day": 24000.0}))
+
+        # Run both to 09:10 UTC
+        base.advance_to(t_end)
+        child.advance_to(t_end)
+
+        # Exact WORLD-002 §6 / PPC-ENG-001 §4 fixtures:
+        # Baseline: 10 min @ 36,000 (250 bbl) + 60 min @ 30,000 (1,250 bbl) = 1,500 bbl
+        # Child:    10 min @ 36,000 (250 bbl) + 30 min @ 30,000 (625 bbl) + 30 min @ 24,000 (500 bbl) = 1,375 bbl
+        self.assertAlmostEqual(base.state.hcu_cumulative_processed_bbl, 1500.0, places=9)
+        self.assertAlmostEqual(child.state.hcu_cumulative_processed_bbl, 1375.0, places=9)
+        self.assertAlmostEqual(
+            base.state.hcu_cumulative_processed_bbl - child.state.hcu_cumulative_processed_bbl, 125.0, places=9
+        )
+        # Child never mutated parent checkpoint (PO-09)
+        self.assertEqual(ckpt["state"].digest(), ckpt_digest_before)
+
+        # Bit-exact replay from checkpoint
+        replay = RefineryWorldKernel.from_checkpoint(ckpt)
+        replay.advance_to(t_end)
+        self.assertEqual(replay.state.digest(), base.state.digest())
+
+    def test_step_refinement_60s_10s_1s_and_dst_23_25_hours_and_paired_rng(self):
+        t0 = datetime(2026, 6, 15, 8, 0, tzinfo=timezone.utc)
+        t_derate = datetime(2026, 6, 15, 8, 10, tzinfo=timezone.utc)
+        t_end = datetime(2026, 6, 15, 9, 10, tzinfo=timezone.utc)
+
+        totals = {}
+        for dt in (60, 10, 1):
+            k = RefineryWorldKernel(WorldState("world-v1.0.0", f"dt-{dt}", 42, t0), step_seconds=dt, fixture_mode=True)
+            k.schedule_event(WorldEvent("EVT-DERATE", t_derate, "HCU_COMPRESSOR_DERATE", {"compressor_circ_fraction": 0.75}))
+            k.advance_to(t_end)
+            totals[dt] = k.state.hcu_cumulative_processed_bbl
+        self.assertAlmostEqual(totals[60], totals[10], places=9)
+        self.assertAlmostEqual(totals[60], totals[1], places=9)
+
+        # America/Chicago DST business days (6 AM to 6 AM): spring forward 2026-03-08 (23h), fall back 2026-11-01 (25h)
+        self.assertEqual(local_business_day_elapsed_hours("2026-03-07"), 23.0)
+        self.assertEqual(local_business_day_elapsed_hours("2026-10-31"), 25.0)
+        self.assertEqual(local_business_day_elapsed_hours("2026-06-15"), 24.0)
+
+        # Semantic-keyed paired PCG64 RNG produces bit-identical sequences across sibling branches
+        s1 = paired_rng(42, "exogenous:ambient_temp_day_1").normal(25.0, 2.0, size=5).tolist()
+        s2 = paired_rng(42, "exogenous:ambient_temp_day_1").normal(25.0, 2.0, size=5).tolist()
+        s3 = paired_rng(42, "exogenous:ambient_temp_day_2").normal(25.0, 2.0, size=5).tolist()
+        self.assertEqual(s1, s2)
+        self.assertNotEqual(s1, s3)
+
+
+if __name__ == "__main__":
+    unittest.main()
