@@ -171,6 +171,29 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                 zlib.compress(b"clean") + b"GARBAGEHDR" + zlib.compress(b"evaluation/hidden/keys.json"),
             ),
             (
+                "gzip_corrupt_crc_trailer",
+                gzip.compress(b"evaluation/hidden/keys.json")[:-1]
+                + bytes([gzip.compress(b"evaluation/hidden/keys.json")[-1] ^ 0xFF]),
+            ),
+            (
+                "zlib_corrupt_adler_trailer",
+                zlib.compress(b"evaluation/hidden/keys.json")[:-1]
+                + bytes([zlib.compress(b"evaluation/hidden/keys.json")[-1] ^ 0xFF]),
+            ),
+            (
+                "gzip_truncated_then_garbage_then_clean",
+                gzip.compress(b"evaluation/hidden/keys.json" + b"A" * 100)[:40]
+                + b"MIDGARBAGE"
+                + gzip.compress(b"all clean here"),
+            ),
+            (
+                "gzip_truncated_then_bogus_gzip_header",
+                gzip.compress(b"evaluation/hidden/keys.json" + b"A" * 100)[:40]
+                + b"\x1f\x8b\x08\x00"
+                + b"\x00" * 5
+                + b"junknotstream",
+            ),
+            (
                 "zlib_bomb_exceeding_budget_fails_closed",
                 zlib.compress(b"\x00" * (65 * 1024 * 1024)) + zlib.compress(b"evaluation/hidden/keys.json") + b"\x00pad",
             ),

@@ -80,10 +80,76 @@ def _find_next_magic_offset(buf: bytes) -> int | None:
     return best
 
 
-def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
-    """Decompress all members of gzip/zlib/raw-deflate streams (including after corrupt gaps); returns (buffers, budget_exceeded)."""
+def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> tuple[bytes, bool]:
+    """Recover as much decompressed output as possible before a corrupt trailer or mid-stream error."""
+    if remaining_budget <= 0 or not data:
+        return b"", False
+    dobj = zlib.decompressobj(wbits)
+    out = bytearray()
+    budget_hit = False
+    chunk_size = 1024
+    pos = 0
+    n = len(data)
+    while pos < n:
+        rem_cap = remaining_budget - len(out)
+        if rem_cap <= 0:
+            budget_hit = True
+            break
+        end = min(pos + chunk_size, n)
+        try:
+            piece = dobj.decompress(data[pos:end], rem_cap)
+            if piece:
+                out.extend(piece)
+            if dobj.unconsumed_tail:
+                budget_hit = True
+                break
+            pos = end
+        except zlib.error:
+            if chunk_size > 1:
+                # Re-attempt byte-by-byte inside the failing block with a fresh decompressor
+                # replayed cleanly up to `pos`, so everything before the bad byte/trailer is kept.
+                dobj = zlib.decompressobj(wbits)
+                out = bytearray()
+                try:
+                    if pos > 0:
+                        prefix_piece = dobj.decompress(data[:pos], remaining_budget)
+                        out.extend(prefix_piece)
+                except zlib.error:
+                    break
+                for b_idx in range(pos, end):
+                    rem_cap = remaining_budget - len(out)
+                    if rem_cap <= 0:
+                        budget_hit = True
+                        break
+                    try:
+                        piece = dobj.decompress(data[b_idx : b_idx + 1], rem_cap)
+                        if piece:
+                            out.extend(piece)
+                        if dobj.unconsumed_tail:
+                            budget_hit = True
+                            break
+                    except zlib.error:
+                        break
+            break
+    try:
+        rem_cap = remaining_budget - len(out)
+        if rem_cap > 0 and not budget_hit:
+            flushed = dobj.flush(rem_cap)
+            if flushed:
+                out.extend(flushed[:rem_cap])
+    except zlib.error:
+        pass
+    return bytes(out), budget_hit
+
+
+def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool, bool]:
+    """Decompress gzip/zlib members (resuming after garbage gaps between intact gzip/zlib headers) and raw-deflate streams.
+
+    Returns (buffers, budget_exceeded, corrupt_stream_unscanned).
+    """
     results: list[bytes] = []
     budget_exceeded = False
+    corrupt_unscanned = False
     for wbits in (16 + zlib.MAX_WBITS, zlib.MAX_WBITS, -zlib.MAX_WBITS):
         rem = buf
         chunks: list[bytes] = []
@@ -111,21 +177,35 @@ def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool]:
                 if not nxt or len(nxt) >= len(rem):
                     break
                 rem = nxt
-            except Exception:
-                # If a member already succeeded (or an embedded gzip/zlib header follows garbage),
-                # resume scanning at the next embedded compressed header rather than stopping silently.
+            except zlib.error:
+                # Recover any bytes decompressed before a corrupt trailer or mid-stream error
+                # instead of silently discarding them, and fail closed if a compressed header
+                # failed decompression.
+                partial, partial_budget = _recover_partial_stream(wbits, rem, remaining_budget)
+                if partial_budget:
+                    budget_exceeded = True
+                if partial:
+                    total_out += len(partial)
+                    chunks.append(partial)
+                    results.append(partial)
+                if wbits == 16 + zlib.MAX_WBITS and (partial or rem.startswith(b"\x1f\x8b")):
+                    corrupt_unscanned = True
+                elif wbits == zlib.MAX_WBITS and (
+                    partial or rem.startswith((b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda"))
+                ):
+                    corrupt_unscanned = True
                 next_off = _find_next_magic_offset(rem)
                 if next_off is None:
                     break
                 rem = rem[next_off:]
         if len(chunks) > 1:
             results.append(b"".join(chunks))
-    return results, budget_exceeded
+    return results, budget_exceeded, corrupt_unscanned
 
 
-def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool]:
+def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool, bool]:
     """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1)."""
-    out, budget_exceeded = _decompress_all_members(raw_bytes)
+    out, budget_exceeded, corrupt_unscanned = _decompress_all_members(raw_bytes)
 
     stripped = re.sub(rb"\s+", b"", raw_bytes)
     for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
@@ -155,21 +235,23 @@ def _decode_one_layer(raw_bytes: bytes) -> tuple[list[bytes], bool]:
                         out.append(decoded)
                 except Exception:
                     pass
-    return out, budget_exceeded
+    return out, budget_exceeded, corrupt_unscanned
 
 
-def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[list[str], bool]:
-    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget_exceeded flag."""
+def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[list[str], bool, bool]:
+    """Produce decoded text views recursively (up to max_depth layers) plus fail-closed budget/corrupt flags."""
     raw_bytes = raw.encode("utf-8") if isinstance(raw, str) else raw
     seen: set[bytes] = {raw_bytes}
     byte_candidates: list[bytes] = [raw_bytes]
     frontier: list[bytes] = [raw_bytes]
     budget_exceeded = False
+    corrupt_unscanned = False
     for _ in range(max_depth):
         next_frontier: list[bytes] = []
         for buf in frontier:
-            children, exceeded = _decode_one_layer(buf)
+            children, exceeded, corrupt = _decode_one_layer(buf)
             budget_exceeded = budget_exceeded or exceeded
+            corrupt_unscanned = corrupt_unscanned or corrupt
             for child in children:
                 if child not in seen:
                     seen.add(child)
@@ -184,7 +266,7 @@ def _decode_variants_for_scan(raw: bytes | str, max_depth: int = 3) -> tuple[lis
         views.append(raw.lower())
     for cand in byte_candidates:
         views.extend(_text_views_from_bytes(cand))
-    return views, budget_exceeded
+    return views, budget_exceeded, corrupt_unscanned
 
 
 def audit_observable_for_hidden_leaks(
@@ -202,9 +284,11 @@ def audit_observable_for_hidden_leaks(
 
     findings: list[dict[str, str]] = []
     for name, raw in items:
-        views, budget_exceeded = _decode_variants_for_scan(raw)
+        views, budget_exceeded, corrupt_unscanned = _decode_variants_for_scan(raw)
         if budget_exceeded:
             findings.append({"artifact": name, "marker": "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED"})
+        if corrupt_unscanned:
+            findings.append({"artifact": name, "marker": "DECOMPRESSION_ERROR_UNSCANNED"})
         for marker in FORBIDDEN_OBSERVABLE_MARKERS:
             if any(marker in v for v in views):
                 findings.append({"artifact": name, "marker": marker})
