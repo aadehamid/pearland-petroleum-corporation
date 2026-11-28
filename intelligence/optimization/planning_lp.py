@@ -60,13 +60,19 @@ class PlanningLPInputs:
     fcc_max_bpd: float = 30000.0
     h2_hcu_headroom_t_per_day: float = 125.0
     hcu_h2_intensity_t_per_kbbl: float = 2.8907  # linear planning factor (t H2 per 1000 bbl VGO)
-    # Linearized planning yield factors (deliberately lagged/reduced vs nonlinear kernel)
-    hcu_ulsd_yield_vol: float = 0.430   # lagged planning estimate (mechanistic slate ~0.442)
+    # Linearized base-plus-delta planning yield factors (deliberately lagged/reduced vs nonlinear kernel)
+    hcu_ulsd_yield_vol: float = 0.430   # base lagged planning estimate (mechanistic slate ~0.442)
+    delta_hcu_ulsd_yield_vol: float = 0.0
     hcu_jet_yield_vol: float = 0.225
+    delta_hcu_jet_yield_vol: float = 0.0
     hcu_naphtha_yield_vol: float = 0.310
+    delta_hcu_naphtha_yield_vol: float = 0.0
     fcc_naphtha_yield_vol: float = 0.510
+    delta_fcc_naphtha_yield_vol: float = 0.0
     fcc_lco_yield_vol: float = 0.175
+    delta_fcc_lco_yield_vol: float = 0.0
     fcc_slurry_yield_vol: float = 0.075
+    delta_fcc_slurry_yield_vol: float = 0.0
     # Linearized gasoline blend constraints (deliberately linear RVP & AKI!)
     bob_rvp_max_psi: float = 9.00
     bob_aki_min: float = 84.2
@@ -111,7 +117,6 @@ class PlanningLPInputs:
             "fcc_naphtha_yield_vol",
             "fcc_lco_yield_vol",
             "fcc_slurry_yield_vol",
-            "bob_rvp_max_psi",
             "bob_aki_min",
             "butane_max_vol_frac",
             "demand_ulsd_max_bpd",
@@ -121,6 +126,19 @@ class PlanningLPInputs:
             val = _require_finite_number(field_name, getattr(self, field_name))
             if val < 0.0:
                 raise ValueError(f"{field_name} must be non-negative, got {val!r}")
+        for delta_field, base_field in (
+            ("delta_hcu_ulsd_yield_vol", "hcu_ulsd_yield_vol"),
+            ("delta_hcu_jet_yield_vol", "hcu_jet_yield_vol"),
+            ("delta_hcu_naphtha_yield_vol", "hcu_naphtha_yield_vol"),
+            ("delta_fcc_naphtha_yield_vol", "fcc_naphtha_yield_vol"),
+            ("delta_fcc_lco_yield_vol", "fcc_lco_yield_vol"),
+            ("delta_fcc_slurry_yield_vol", "fcc_slurry_yield_vol"),
+        ):
+            dv = _require_finite_number(delta_field, getattr(self, delta_field))
+            if float(getattr(self, base_field)) + dv < 0.0:
+                raise ValueError(f"{base_field} + {delta_field} must be non-negative")
+        if _require_finite_number("bob_rvp_max_psi", self.bob_rvp_max_psi) <= 0.0:
+            raise ValueError("bob_rvp_max_psi must be positive")
         if _require_finite_number("hcu_h2_intensity_t_per_kbbl", self.hcu_h2_intensity_t_per_kbbl) <= 0.0:
             raise ValueError("hcu_h2_intensity_t_per_kbbl must be positive")
         if self.butane_max_vol_frac > 1.0:
@@ -179,7 +197,14 @@ def solve_planning_lp(inputs: PlanningLPInputs) -> dict[str, Any]:
     sr_ago = 0.210 * m.crude_light + 0.170 * m.crude_med + 0.110 * m.crude_heavy
     sr_resid = 0.100 * m.crude_light + 0.205 * m.crude_med + 0.3875 * m.crude_heavy
 
-    bob_base = sr_naphtha + inputs.hcu_naphtha_yield_vol * m.vgo_to_hcu + inputs.fcc_naphtha_yield_vol * m.vgo_to_fcc
+    eff_hcu_naphtha = inputs.hcu_naphtha_yield_vol + inputs.delta_hcu_naphtha_yield_vol
+    eff_hcu_ulsd = inputs.hcu_ulsd_yield_vol + inputs.delta_hcu_ulsd_yield_vol
+    eff_hcu_jet = inputs.hcu_jet_yield_vol + inputs.delta_hcu_jet_yield_vol
+    eff_fcc_naphtha = inputs.fcc_naphtha_yield_vol + inputs.delta_fcc_naphtha_yield_vol
+    eff_fcc_lco = inputs.fcc_lco_yield_vol + inputs.delta_fcc_lco_yield_vol
+    eff_fcc_slurry = inputs.fcc_slurry_yield_vol + inputs.delta_fcc_slurry_yield_vol
+
+    bob_base = sr_naphtha + eff_hcu_naphtha * m.vgo_to_hcu + eff_fcc_naphtha * m.vgo_to_fcc
     m.c_bob_bal = pyo.Constraint(expr=m.bob_prod == bob_base + m.butane_to_bob)
     m.c_butane_cap = pyo.Constraint(expr=m.butane_to_bob <= inputs.butane_max_vol_frac * m.bob_prod)
 
@@ -193,10 +218,10 @@ def solve_planning_lp(inputs: PlanningLPInputs) -> dict[str, Any]:
     )
 
     m.c_ulsd_bal = pyo.Constraint(
-        expr=m.ulsd_prod <= sr_ago + inputs.hcu_ulsd_yield_vol * m.vgo_to_hcu + inputs.fcc_lco_yield_vol * m.vgo_to_fcc
+        expr=m.ulsd_prod <= sr_ago + eff_hcu_ulsd * m.vgo_to_hcu + eff_fcc_lco * m.vgo_to_fcc
     )
-    m.c_jet_bal = pyo.Constraint(expr=m.jet_prod == sr_kero + inputs.hcu_jet_yield_vol * m.vgo_to_hcu)
-    m.c_resid_bal = pyo.Constraint(expr=m.resid_prod == sr_resid + inputs.fcc_slurry_yield_vol * m.vgo_to_fcc)
+    m.c_jet_bal = pyo.Constraint(expr=m.jet_prod == sr_kero + eff_hcu_jet * m.vgo_to_hcu)
+    m.c_resid_bal = pyo.Constraint(expr=m.resid_prod == sr_resid + eff_fcc_slurry * m.vgo_to_fcc)
 
     # EQ-09 Daily gross margin objective ($/day)
     revenue = (

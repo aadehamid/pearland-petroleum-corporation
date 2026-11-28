@@ -7,10 +7,10 @@
   "design_basis_ref": "fixtures/golden/refinery_a_design_basis.yaml",
   "public_vintage_ref": "fixtures/golden/public_data_vintage_manifest.json",
   "solver_profile": {
-    "lp_solver": "HiGHS",
+    "lp_solver": "appsi_highs",
     "lp_feasibility_tolerance": 1e-7,
-    "nlp_feasibility_tolerance": 1e-8
+    "nlp_solver_status": "DEFERRED_NOT_IMPLEMENTED_IN_WP3A_LP_SLICE"
   },
   "pinned_scenarios": ["SCN-A-T125", "SCN-A-H2CONT"],
-  "purpose": "Allows WP-3A Planning LP and UC-3 backcasting qualification (R3, PO-12b) to execute independently in parallel with WP-2 and WP-3 (PPC-PLAN-001 C16)."
+  "purpose": "Pins Refinery A design basis, public vintage, and HiGHS LP solver profile for WP-3A Planning LP and UC-3 backcasting qualification (R3, PO-12b; PPC-PLAN-001 C16)."
 }

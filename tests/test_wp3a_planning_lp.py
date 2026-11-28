@@ -12,7 +12,11 @@ Verifies:
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
 import unittest
+
+import yaml
 
 from intelligence.optimization.backcasting import (
     evaluate_lp_setpoints_in_wp1_physics,
@@ -20,8 +24,33 @@ from intelligence.optimization.backcasting import (
 )
 from intelligence.optimization.planning_lp import PlanningLPInputs, solve_planning_lp
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
+    def test_manifest_and_design_basis_alignment(self):
+        manifest = json.loads((REPO_ROOT / "fixtures/golden/wp3a_release_manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["provenance_class"], "SYNTHETIC")
+        self.assertEqual(manifest["solver_profile"]["lp_solver"], "appsi_highs")
+        self.assertAlmostEqual(manifest["solver_profile"]["lp_feasibility_tolerance"], 1e-7, places=12)
+        design_basis_path = REPO_ROOT / manifest["design_basis_ref"]
+        vintage_path = REPO_ROOT / manifest["public_vintage_ref"]
+        self.assertTrue(design_basis_path.exists())
+        self.assertTrue(vintage_path.exists())
+
+        basis = yaml.safe_load(design_basis_path.read_text(encoding="utf-8"))
+        defaults = PlanningLPInputs(case_id="SCN-A-T125", branch_id="baseline")
+        units_by_id = {u["id"]: u for u in basis["units"]}
+        self.assertAlmostEqual(defaults.cdu_min_bpd, float(basis["crude_slate"]["min_charge_bbl_per_day"]), places=6)
+        self.assertAlmostEqual(defaults.cdu_max_bpd, float(basis["crude_slate"]["max_charge_bbl_per_day"]), places=6)
+        self.assertAlmostEqual(defaults.hcu_max_bpd, float(units_by_id["4B"]["capacity_bbl_per_day"]), places=6)
+        self.assertAlmostEqual(defaults.fcc_max_bpd, float(units_by_id["4A"]["capacity_bbl_per_day"]), places=6)
+
+        # Explicitly run SCN-A-T125 pinned scenario under 75% compressor derate
+        t125 = solve_planning_lp(PlanningLPInputs(case_id="SCN-A-T125", branch_id="scn-a-derate", hcu_max_bpd=30000.0))
+        self.assertEqual(t125["feasibility_status"], "FEASIBLE")
+        self.assertLessEqual(t125["setpoints"]["hcu_feed_bpd"], 30000.0 + 1e-6)
+
     def test_infeasible_30001_rejected_and_h2cont_75t_binds(self):
         # 30,001 bbl/day fixed HCU feed against 30,000 bbl/day derated cap MUST be INFEASIBLE
         infeas = solve_planning_lp(
@@ -58,9 +87,10 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
         )
         orig_res = solve_planning_lp(orig)
         self.assertEqual(orig_res["feasibility_status"], "FEASIBLE")
-        # Determinism check
+        # Determinism check covers BOTH optimal margin and every setpoint value
         orig_replay = solve_planning_lp(orig)
         self.assertEqual(orig_res["margin_usd_per_day"], orig_replay["margin_usd_per_day"])
+        self.assertEqual(orig_res["setpoints"], orig_replay["setpoints"])
 
         # Closed-loop check on uncalibrated LP exposes real nonlinear Chevron RVP violation!
         orig_cl = evaluate_lp_setpoints_in_wp1_physics(
@@ -69,13 +99,14 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
         self.assertFalse(orig_cl["closed_loop_feasible"])
         self.assertGreater(orig_cl["rvp_nonlinearity_gap_psi"], 0.4)
 
-        # Recalibrated LP tightens butane cap to 3.4% (Chevron RVP <= 9.00) and updates HCU ULSD yield to 0.442
+        # Recalibrated LP tightens butane cap to 3.4% (Chevron RVP <= 9.00) and applies base+delta HCU ULSD yield to 0.442
         # Decision alternative swings FCC/crude mix under higher ULSD margin
         alt = PlanningLPInputs(
             case_id="UC3-ALT",
             branch_id="scn-a-alt",
             hcu_max_bpd=30000.0,
-            hcu_ulsd_yield_vol=0.442,
+            hcu_ulsd_yield_vol=0.430,
+            delta_hcu_ulsd_yield_vol=0.012,
             butane_max_vol_frac=0.034,
             fcc_max_bpd=30000.0,
             price_ulsd=106.0,
@@ -86,21 +117,29 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
             recalibrated_butane_max_vol_frac=0.034,
             decision_alt_inputs=alt,
             actual_realized_margin_usd_per_day=orig_res["margin_usd_per_day"] - 125000.0,
-        )
-        self.assertTrue(backcast["po12b_nonzero_calibration_proven"])
-        self.assertAlmostEqual(backcast["identity_residual_usd_per_day"], 0.0, places=6)
-
-        # Recalibrated LP MUST pass closed-loop WP-1 physics with ZERO violations!
-        recal_cl = evaluate_lp_setpoints_in_wp1_physics(
-            backcast["cases"]["recal_plan"],
-            orig,
             compressor_circ_fraction=0.75,
             h2_allocable_t_per_day=125.0,
             rvp_cap_psi=9.00,
         )
-        self.assertTrue(recal_cl["closed_loop_feasible"], recal_cl["violations"])
+        self.assertTrue(backcast["po12b_nonzero_calibration_proven"])
+        self.assertAlmostEqual(backcast["identity_residual_usd_per_day"], 0.0, places=6)
+        self.assertFalse(backcast["orig_closed_loop"]["closed_loop_feasible"])
+        self.assertTrue(backcast["recal_closed_loop"]["closed_loop_feasible"], backcast["recal_closed_loop"]["violations"])
 
-    def test_input_validation_rejects_non_finite_booleans_and_bad_bounds(self):
+        # Arbitrary nudge that does NOT close WP-1 Chevron-RVP physics MUST NOT claim PO-12b proven
+        nudge_only = run_uc3_three_way_backcast(
+            orig_inputs=orig,
+            recalibrated_hcu_ulsd_yield=0.4301,
+            recalibrated_butane_max_vol_frac=0.06,
+            decision_alt_inputs=alt,
+            actual_realized_margin_usd_per_day=orig_res["margin_usd_per_day"] - 125000.0,
+            compressor_circ_fraction=0.75,
+            h2_allocable_t_per_day=125.0,
+            rvp_cap_psi=9.00,
+        )
+        self.assertFalse(nudge_only["po12b_nonzero_calibration_proven"])
+
+    def test_input_validation_and_scenario_bound_binding(self):
         with self.assertRaises(ValueError):
             PlanningLPInputs(case_id="BAD-NAN", branch_id="b1", price_ulsd=float("nan"))
         with self.assertRaises(ValueError):
@@ -108,14 +147,43 @@ class TestWP3APlanningLPAndBackcasting(unittest.TestCase):
         with self.assertRaises(ValueError):
             PlanningLPInputs(case_id="BAD-BOUNDS", branch_id="b1", hcu_min_bpd=50000.0, hcu_max_bpd=30000.0)
         with self.assertRaises(ValueError):
+            PlanningLPInputs(case_id="BAD-RVP", branch_id="b1", bob_rvp_max_psi=0.0)
+        with self.assertRaises(ValueError):
             PlanningLPInputs(case_id="BAD-PROV", branch_id="b1", provenance_class="UNKNOWN")
+
+        scen_20k = PlanningLPInputs(case_id="MAINT-20K", branch_id="b1", hcu_max_bpd=20000.0)
+        scen_30k = PlanningLPInputs(case_id="DERATE-30K", branch_id="b1", hcu_max_bpd=30000.0)
+        res_30k = solve_planning_lp(scen_30k)
+        # Cross-scenario setpoints MUST fail closed via input_digest mismatch
         with self.assertRaises(ValueError):
             evaluate_lp_setpoints_in_wp1_physics(
-                {"feasibility_status": "FEASIBLE", "setpoints": {}},
-                PlanningLPInputs(case_id="OK", branch_id="b1"),
-                compressor_circ_fraction=1.5,
+                res_30k, scen_20k, compressor_circ_fraction=1.0, h2_allocable_t_per_day=125.0
+            )
+        # Missing setpoint keys with matching digest MUST raise ValueError (not KeyError)
+        with self.assertRaises(ValueError):
+            evaluate_lp_setpoints_in_wp1_physics(
+                {"feasibility_status": "FEASIBLE", "input_digest": scen_20k.input_digest(), "setpoints": {}},
+                scen_20k,
+                compressor_circ_fraction=1.0,
                 h2_allocable_t_per_day=125.0,
             )
+        # Hand-built setpoint exceeding scenario's 20,000 bbl/day cap MUST fail closed even when physics allows 40,000
+        forged_25k = {
+            "feasibility_status": "FEASIBLE",
+            "input_digest": scen_20k.input_digest(),
+            "setpoints": {
+                "hcu_feed_bpd": 25000.0,
+                "cdu_total_bpd": 150000.0,
+                "fcc_feed_bpd": 20000.0,
+                "butane_vol_frac": 0.0,
+                "linear_bob_rvp_psi": 6.8,
+            },
+        }
+        chk = evaluate_lp_setpoints_in_wp1_physics(
+            forged_25k, scen_20k, compressor_circ_fraction=1.0, h2_allocable_t_per_day=125.0
+        )
+        self.assertFalse(chk["closed_loop_feasible"])
+        self.assertTrue(any("HCU_SCENARIO_CAP_EXCEEDED" in v for v in chk["violations"]))
 
 
 if __name__ == "__main__":
