@@ -267,22 +267,37 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             self.assertIn("DECOMPRESSION_ERROR_UNSCANNED", hdr_markers, hdr_name)
             self.assertIn("evaluation/hidden", hdr_markers, hdr_name)
 
-        # Corrupt zlib header PLUS corrupted body byte MUST still fail closed with DECOMPRESSION_ERROR_UNSCANNED
+        # Corrupt zlib header PLUS corrupted body byte MUST fail closed both unwrapped AND base64/hex-wrapped
         double_corrupt = bytearray(zlib.compress(b"evaluation/hidden/keys.json"))
         double_corrupt[0] = 0x79
         double_corrupt[2] ^= 0xFF
-        double_audit = audit_observable_for_hidden_leaks({"double_corrupt.zlib": bytes(double_corrupt)})
-        self.assertEqual(double_audit["leak_audit"]["status"], "FAILED")
-        self.assertTrue(any(f["marker"] == "DECOMPRESSION_ERROR_UNSCANNED" for f in double_audit["findings"]))
+        double_bytes = bytes(double_corrupt)
+        for wrap_name, wrapped in (
+            ("unwrapped", double_bytes),
+            ("b64_wrapped", base64.b64encode(double_bytes)),
+            ("hex_wrapped", double_bytes.hex().encode("ascii")),
+        ):
+            double_audit = audit_observable_for_hidden_leaks({f"double_{wrap_name}.zlib": wrapped})
+            self.assertEqual(double_audit["leak_audit"]["status"], "FAILED", wrap_name)
+            self.assertTrue(
+                any(f["marker"] == "DECOMPRESSION_ERROR_UNSCANNED" for f in double_audit["findings"]),
+                (wrap_name, double_audit["findings"]),
+            )
 
-        # Clean base64-wrapped zlib/gzip, small-window RFC 1950 zlib, and alphanumeric ASCII MUST pass with 0 FPs
+        # Clean base64-wrapped zlib/gzip, small-window RFC 1950 zlib, raw-deflate, UTF-16/32, and ASCII MUST pass
         cobj = zlib.compressobj(9, zlib.DEFLATED, 8)
         small_win_zlib = cobj.compress(b"clean refinery operational summary") + cobj.flush()
+        raw_deflate_clean = zlib.compress(b"small text")[2:-4]
         for clean_name, clean_payload in (
             ("b64_zlib_clean", base64.b64encode(zlib.compress(b"small text"))),
             ("b64_gzip_clean", base64.b64encode(gzip.compress(b"small text"))),
             ("small_win_zlib_clean", small_win_zlib),
+            ("raw_deflate_clean", raw_deflate_clean),
+            ("utf16le_clean", "clean refinery operational summary".encode("utf-16-le")),
+            ("utf16be_clean", "clean refinery operational summary".encode("utf-16-be")),
+            ("utf32le_clean", "clean refinery operational summary".encode("utf-32-le")),
             ("alnum_word_clean", b"operationalreport12345678"),
+            ("alnum_24_clean", b"operationalreport1234567"),
         ):
             clean_res = audit_observable_for_hidden_leaks({clean_name: clean_payload})
             self.assertEqual(clean_res["leak_audit"]["status"], "PASSED", (clean_name, clean_res["findings"]))

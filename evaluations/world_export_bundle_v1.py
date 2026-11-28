@@ -149,17 +149,52 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
     return bytes(out), budget_hit, bool(dobj.eof)
 
 
-def _is_clean_utf8_text(buf: bytes) -> bool:
-    """Return True iff buf is valid UTF-8 text with no NUL or non-whitespace C0 control bytes."""
-    try:
-        text = buf.decode("utf-8", errors="strict")
-    except UnicodeDecodeError:
-        return False
+def _is_printable_text(text: str) -> bool:
     for ch in text:
         code = ord(ch)
         if code < 32 and ch not in ("\t", "\n", "\r"):
             return False
+        if 0xD800 <= code <= 0xDFFF:
+            return False
     return True
+
+
+def _is_clean_text(buf: bytes) -> bool:
+    """Return True iff buf is clean printable UTF-8, UTF-16LE/BE, or UTF-32LE/BE text."""
+    try:
+        if _is_printable_text(buf.decode("utf-8", errors="strict")):
+            return True
+    except UnicodeDecodeError:
+        pass
+    # UTF-16LE/BE (even length, ASCII-dominant or printable Unicode, never starting with gzip/zlib magic)
+    if len(buf) >= 2 and len(buf) % 2 == 0 and not buf.startswith(_COMPRESSED_MAGIC_PREFIXES):
+        for enc in ("utf-16-le", "utf-16-be"):
+            try:
+                text = buf.decode(enc, errors="strict")
+                if text and _is_printable_text(text) and all(ord(c) < 0x0250 for c in text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+    # UTF-32LE/BE (multiple of 4 bytes)
+    if len(buf) >= 4 and len(buf) % 4 == 0:
+        for enc in ("utf-32-le", "utf-32-be"):
+            try:
+                text = buf.decode(enc, errors="strict")
+                if text and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+    return False
+
+
+def _looks_like_base64_blob(token: bytes) -> bool:
+    """Distinguish real full-payload base64 (mixed case or padding/symbols, len % 4 == 0) from plain lowercase words."""
+    if len(token) < 16 or len(token) % 4 != 0:
+        return False
+    has_marker_char = any(b in token for b in b"=+/_-")
+    has_upper = any(65 <= b <= 90 for b in token)
+    has_lower = any(97 <= b <= 122 for b in token)
+    return has_marker_char or (has_upper and has_lower)
 
 
 def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool, bool]:
@@ -243,17 +278,17 @@ def _decompress_all_members(buf: bytes) -> tuple[list[tuple[bytes, bool]], bool,
                 rem = rem[next_off:]
         if len(chunks) > 1:
             results.append((b"".join(chunks), is_raw_probe or had_error))
-        if not is_raw_probe and had_clean_member and not had_error and not rem:
+        if had_clean_member and not had_error and not rem:
             fully_decompressed_cleanly = True
     return results, budget_exceeded, fully_decompressed_cleanly
 
 
 def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tuple[bytes, bool]], bool, bool]:
-    """Decode one layer of gzip/zlib (incl. multi-member+padded), base64 (offsets 0..3), and hex (offsets 0..1).
+    """Decode one layer of gzip/zlib/raw-deflate, base64 (offsets 0..3), and hex (offsets 0..1).
 
     Returns ([(child_bytes, child_is_speculative), ...], budget_exceeded, corrupt_unscanned).
-    Only non-speculative binary buffers that fail clean gzip/zlib decompression emit `corrupt_unscanned`,
-    preventing both false positives on speculative ASCII offset slices and fail-open on corrupt archives.
+    Non-speculative binary buffers (including full-payload base64/hex wrappers) that are neither clean
+    UTF-8/16/32 text nor cleanly decompressed to EOF emit `corrupt_unscanned` so corrupt archives fail closed.
     """
     decompressed, budget_exceeded, cleanly_decompressed = _decompress_all_members(raw_bytes)
     out: list[tuple[bytes, bool]] = [(buf, speculative or child_spec) for buf, child_spec in decompressed]
@@ -261,12 +296,12 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
     corrupt_unscanned = (
         (not speculative)
         and bool(raw_bytes)
-        and (not _is_clean_utf8_text(raw_bytes))
+        and (not _is_clean_text(raw_bytes))
         and (not cleanly_decompressed)
     )
 
     stripped = re.sub(rb"\s+", b"", raw_bytes)
-    for token in (stripped, *_B64_TOKEN_RE.findall(raw_bytes)):
+    for is_full, token in [(True, stripped)] + [(False, t) for t in _B64_TOKEN_RE.findall(raw_bytes)]:
         for offset in (0, 1, 2, 3):
             sub = token[offset:]
             if len(sub) < 16:
@@ -278,13 +313,12 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
             try:
                 decoded = base64.b64decode(padded, validate=True)
                 if decoded:
-                    # Base64/hex decodings are speculative probes (plain ASCII words can decode as
-                    # random bytes), so they are scanned for markers without triggering corrupt-binary FPs.
-                    out.append((decoded, True))
+                    is_direct_b64 = (not speculative) and is_full and offset == 0 and _looks_like_base64_blob(token)
+                    out.append((decoded, not is_direct_b64))
             except Exception:
                 pass
 
-    for token in (stripped, *_HEX_TOKEN_RE.findall(raw_bytes)):
+    for is_full, token in [(True, stripped)] + [(False, t) for t in _HEX_TOKEN_RE.findall(raw_bytes)]:
         for offset in (0, 1):
             sub = token[offset:]
             even_len = len(sub) - (len(sub) % 2)
@@ -292,7 +326,8 @@ def _decode_one_layer(raw_bytes: bytes, *, speculative: bool) -> tuple[list[tupl
                 try:
                     decoded = bytes.fromhex(sub[:even_len].decode("ascii"))
                     if decoded:
-                        out.append((decoded, True))
+                        is_direct_hex = (not speculative) and is_full and offset == 0 and (len(sub) % 2 == 0)
+                        out.append((decoded, not is_direct_hex))
                 except Exception:
                     pass
     return out, budget_exceeded, corrupt_unscanned
