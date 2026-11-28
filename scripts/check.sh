@@ -86,6 +86,11 @@ echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO
 uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
 
 echo
+echo "== WP-6 Scenario B vertical slice (S2-* crude-quality rejection & delayed restatement) =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml \
+  python3 -m unittest tests/test_wp6_scenario_b.py
+
+echo
 echo "== shell syntax =="
 while IFS= read -r script; do
   bash -n "$script"
