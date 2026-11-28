@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_id": "WP3A-PINNED-RELEASE-MANIFEST-001",
+  "provenance_class": "SYNTHETIC",
+  "governing_adrs": ["ADR-0048", "ADR-0050", "ADR-0054", "ADR-0056"],
+  "world_version": "world-v1.0.0",
+  "design_basis_ref": "fixtures/golden/refinery_a_design_basis.yaml",
+  "public_vintage_ref": "fixtures/golden/public_data_vintage_manifest.json",
+  "solver_profile": {
+    "lp_solver": "HiGHS",
+    "lp_feasibility_tolerance": 1e-7,
+    "nlp_feasibility_tolerance": 1e-8
+  },
+  "pinned_scenarios": ["SCN-A-T125", "SCN-A-H2CONT"],
+  "purpose": "Allows WP-3A Planning LP and UC-3 backcasting qualification (R3, PO-12b) to execute independently in parallel with WP-2 and WP-3 (PPC-PLAN-001 C16)."
+}
