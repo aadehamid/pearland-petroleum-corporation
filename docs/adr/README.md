@@ -24,3 +24,4 @@ Baseline decisions `ADR-001` through `ADR-039` are preserved verbatim in [PPC-RE
 | [ADR-0057](0057-two-bucket-r2-hidden-isolation-and-legacy-bucket-retirement.md) | Two-bucket R2 isolation for hidden canonical truth and retirement of legacy `lagos-chem-l0` bucket | Decided | 2026-11-27 | Amends ADR-003, ADR-0053 |
 | [ADR-0058](0058-shared-relate-project-memory-for-all-agents.md) | Shared Relate project memory for all coding agents | Decided | 2026-11-27 | None |
 | [ADR-0059](0059-overnight-night-run-delegation-and-standin-authority.md) | Overnight night-run execution and owner stand-in delegation (Claude Fable 5.2 / Codex GPT 6.2 Astra) | Decided | 2026-11-27 | None |
+| [ADR-0060](0060-physical-model-consistency-graph-and-check-rules.md) | Physical-model consistency graph design, EPM KPI provenance, and check gating | Decided (owner stand-in) | 2026-11-28 | None |
