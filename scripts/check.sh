@@ -49,6 +49,10 @@ echo "== WP-0 contracts, schemas, adapters, semantic, and infra =="
 uv run --no-project --with jsonschema --with referencing --with pyyaml --with rdflib --with pyshacl \
   python3 -m unittest tests/test_wp0_contracts.py
 
+echo
+echo "== WP-1a public data ingest contracts =="
+uv run --no-project --with jsonschema python3 -m unittest tests/test_public_ingest.py
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   (cd infra && docker compose --profile all config -q) && echo "  ok  infra/docker-compose.yml parses"
 else
