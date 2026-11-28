@@ -54,6 +54,12 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertEqual(dup_res["status"], "PARITY_FAILED")
         self.assertEqual(dup_res["drifts"][0]["kind"], "DUPLICATE_KEY_IN_DUCKDB")
 
+        # Absent `value` field MUST fail parity rather than counting as matching SQL NULL
+        no_val_row = [{"release_id": "REL-1", "branch_id": "baseline", "kpi_name": "K1", "measure_class": "KPI", "threshold_status": "GREEN"}]
+        no_val_res = diff_duckdb_vs_databricks_kpis(no_val_row, no_val_row)
+        self.assertEqual(no_val_res["status"], "PARITY_FAILED")
+        self.assertEqual(no_val_res["drift_count"], 2)
+
     def test_wp8b_certified_world_export_bundle_schema_and_leak_audit(self):
         pins = [
             {"upstream_repo": "aadehamid/enterprise-performance-model", "pinned_commit": "511a9e8", "adapter_version": "0.1.0", "maturity_status": "PROVISIONAL_COMMIT_PIN"},
@@ -105,7 +111,8 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertEqual(leaked["leak_audit"]["hidden_fields_found_in_observable"], 1)
         self.assertEqual(leaked["qualification_verdict"], "DRAFT")
 
-        # Leaked hidden path inside observable manifest metadata itself MUST ALSO fail audit!
+        # Leaked hidden path inside observable manifest metadata itself MUST ALSO fail audit,
+        # even if caller tries to shadow `__observable_manifest__`!
         bad_obs = {
             **obs_artifacts,
             "delta_tables": [_ref("bad_ref", "evaluation/hidden/leak.parquet", clean_bytes)],
@@ -118,11 +125,31 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             adapter_pins=pins,
             observable_artifacts=bad_obs,
             hidden_artifacts=hid_artifacts,
-            observable_payloads_for_audit={"dossiers.json": clean_bytes},
+            observable_payloads_for_audit={"__observable_manifest__": b"clean", "dossiers.json": clean_bytes},
             schema_path=BUNDLE_SCHEMA,
         )
         self.assertEqual(leaked_meta["leak_audit"]["status"], "FAILED")
         self.assertEqual(leaked_meta["qualification_verdict"], "DRAFT")
+
+        # Real schema hidden-truth field names, UTF-16LE bytes, and invalid-byte-split markers MUST ALL fail audit!
+        for case_name, bad_payload in (
+            ("schema_field", b'{"canonical_world_snapshots":[{"name":"s0"}],"evaluation_scoring_keys":[]}'),
+            ("utf16_leak", "evaluation/hidden/keys.json".encode("utf-16-le")),
+            ("split_invalid_byte", b"evaluation/\x94hidden/keys.json"),
+        ):
+            evasion = assemble_world_export_bundle_v1(
+                bundle_id=f"PPC-BUNDLE-{case_name}",
+                world_version="world-v1.0.0",
+                branch_id="baseline",
+                root_seed=42,
+                adapter_pins=pins,
+                observable_artifacts=obs_artifacts,
+                hidden_artifacts=hid_artifacts,
+                observable_payloads_for_audit={case_name: bad_payload},
+                schema_path=BUNDLE_SCHEMA,
+            )
+            self.assertEqual(evasion["leak_audit"]["status"], "FAILED", case_name)
+            self.assertEqual(evasion["qualification_verdict"], "DRAFT", case_name)
 
         # Empty adapter_pins MUST be rejected
         with self.assertRaises(ValueError):

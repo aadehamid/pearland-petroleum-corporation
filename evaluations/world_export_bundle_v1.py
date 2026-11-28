@@ -25,24 +25,50 @@ import jsonschema
 FORBIDDEN_OBSERVABLE_MARKERS: tuple[str, ...] = (
     "evaluation/hidden",
     "pearland-petroleum-hidden",
+    "hidden_truth",
+    "canonical_world_snapshots",
+    "evaluation_scoring_keys",
+    "separate_credential_boundary",
     "canonical_world_truth",
     "hidden_scoring_key",
     "root_seed_secret",
 )
 
 
+def _decode_variants_for_scan(raw: bytes | str) -> list[str]:
+    """Produce decoded text views so UTF-8, invalid-byte-split, and UTF-16LE/BE markers are all scanned."""
+    if isinstance(raw, str):
+        return [raw.lower()]
+    views = [
+        raw.decode("utf-8", errors="replace").lower(),
+        raw.decode("utf-8", errors="ignore").lower(),
+    ]
+    for enc in ("utf-16-le", "utf-16-be"):
+        try:
+            views.append(raw.decode(enc, errors="ignore").lower())
+        except UnicodeError:
+            pass
+    return views
+
+
 def audit_observable_for_hidden_leaks(
     observable_payloads: Mapping[str, bytes | str],
     checked_at_utc: str | None = None,
+    manifest_json: str | None = None,
 ) -> dict[str, Any]:
-    """Scan every observable artifact payload for hidden-truth markers (ADR-0053, B13)."""
+    """Scan every observable artifact payload and optional manifest JSON for hidden-truth markers (ADR-0053, B13)."""
     ts = checked_at_utc or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    findings: list[dict[str, str]] = []
+    items: list[tuple[str, bytes | str]] = []
+    if manifest_json is not None:
+        items.append(("__observable_manifest__", manifest_json))
     for name, raw in sorted(observable_payloads.items()):
-        text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
-        low = text.lower()
+        items.append((str(name), raw))
+
+    findings: list[dict[str, str]] = []
+    for name, raw in items:
+        views = _decode_variants_for_scan(raw)
         for marker in FORBIDDEN_OBSERVABLE_MARKERS:
-            if marker in low:
+            if any(marker in v for v in views):
                 findings.append({"artifact": name, "marker": marker})
     audit_body = {
         "status": "PASSED" if not findings else "FAILED",
@@ -82,12 +108,12 @@ def assemble_world_export_bundle_v1(
         "epm_kpi_fixtures": [dict(x) for x in observable_artifacts["epm_kpi_fixtures"]],
         "ece_evidence_dossiers": [dict(x) for x in observable_artifacts["ece_evidence_dossiers"]],
     }
-    # Always audit BOTH the observable manifest section itself AND caller-supplied payload contents
-    combined_audit_inputs: dict[str, bytes | str] = {
-        "__observable_manifest__": json.dumps(observable_section, sort_keys=True),
-        **dict(observable_payloads_for_audit),
-    }
-    audit = audit_observable_for_hidden_leaks(combined_audit_inputs, checked_at_utc=now_utc)
+    # Always audit BOTH the observable manifest section itself (unshadowable) AND caller-supplied payloads
+    audit = audit_observable_for_hidden_leaks(
+        observable_payloads_for_audit,
+        checked_at_utc=now_utc,
+        manifest_json=json.dumps(observable_section, sort_keys=True),
+    )
     all_approved = all(p.get("maturity_status") == "APPROVED_UPSTREAM_RELEASE" for p in adapter_pins)
     # Provisional commit-pinned adapters cap verdict strictly at QUALIFIED_PROVISIONAL (VERIFY-001 §3)
     verdict = (

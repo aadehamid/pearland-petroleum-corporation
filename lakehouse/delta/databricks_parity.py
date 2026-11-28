@@ -64,8 +64,14 @@ def diff_duckdb_vs_databricks_kpis(
                     "databricks": b_row.get("threshold_status"),
                 }
             )
-        dv = d_row.get("value")
-        bv = b_row.get("value")
+        if "value" not in d_row or "value" not in b_row:
+            if "value" not in d_row:
+                drifts.append({"key": list(k), "kind": "MISSING_VALUE_FIELD_IN_DUCKDB"})
+            if "value" not in b_row:
+                drifts.append({"key": list(k), "kind": "MISSING_VALUE_FIELD_IN_DATABRICKS"})
+            continue
+        dv = d_row["value"]
+        bv = b_row["value"]
         if (dv is None) != (bv is None):
             drifts.append({"key": list(k), "kind": "NULL_HANDLING_MISMATCH", "duckdb": dv, "databricks": bv})
             continue
