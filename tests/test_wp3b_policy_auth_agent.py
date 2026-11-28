@@ -371,6 +371,20 @@ class TestWP3BPolicyAuthAndOfflineAgent(unittest.TestCase):
                 )
                 self.assertEqual(p_nobase["authority_class"], "ESCALATE")
 
+                # Non-feed-rate action with attested high rate_change_pct and baseline-free feed_bbl_per_day
+                # MUST ALSO escalate (never demoted to Tier 1!)
+                p_mode_nobase = gate.submit_proposal(
+                    proposal_id="PROP-MODE-NO-BASELINE-3K",
+                    branch_id="baseline",
+                    action_type="unit_mode_change_inside_envelope",
+                    proposer_id="usr-agent-1",
+                    proposer_is_agent=True,
+                    payload={"feed_bbl_per_day": 3000.0},
+                    metrics={"margin_effect_usd": 1000.0, "rate_change_pct": 30.0},
+                    now_utc=t0 + timedelta(minutes=12),
+                )
+                self.assertEqual(p_mode_nobase["authority_class"], "ESCALATE")
+
                 # 13. Derived notional_usd = volume_bbl_60f * pinned_price_usd_per_bbl (40,000 * $200 = $8M > $5M cap)
                 # MUST escalate AND ESCALATED proposals MUST be terminal (never approvable or executable)!
                 p_notional = gate.submit_proposal(

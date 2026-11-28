@@ -88,8 +88,8 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
                     raise ValueError(f"Non-finite {container_name} field {aux_field}={aux_val!r}")
 
     # Derive rate_change_bbl_per_day AND rate_change_pct from feed_bbl_per_day + baseline_feed_bbl_per_day.
-    # If feed_bbl_per_day is given WITHOUT baseline_feed_bbl_per_day, the delta cannot be verified, so
-    # fail conservatively by marking rate_change_pct unverifiable (None -> missing_estimate_counts_as_exceeded).
+    # When baseline_feed_bbl_per_day is omitted, keep all caller-attested metrics intact; classify_proposal
+    # treats any baseline-free feed_bbl_per_day as unverifiable and escalates directly to ESCALATE.
     feed_val = payload.get("feed_bbl_per_day") if payload.get("feed_bbl_per_day") is not None else merged.get("feed_bbl_per_day")
     base_val = (
         payload.get("baseline_feed_bbl_per_day")
@@ -109,8 +109,6 @@ def _effective_metrics(payload: Mapping[str, Any], metrics: Mapping[str, Any]) -
             if merged.get("rate_change_pct") is None or implied_pct > abs(float(merged["rate_change_pct"])):
                 merged["rate_change_pct"] = implied_pct
         else:
-            # Unverifiable target feed without baseline proof: fail closed (force escalation)
-            merged["rate_change_pct"] = None
             merged["rate_change_bbl_per_day"] = max(
                 abs(float(merged.get("rate_change_bbl_per_day") or 0.0)), abs(feed_f)
             )
@@ -238,6 +236,26 @@ class PolicyGateService:
                 "required_approver_role": None,
                 "expiry_minutes": None,
                 "policy_version": self.policy_version,
+            }
+
+        # Any proposal supplying feed_bbl_per_day without baseline_feed_bbl_per_day cannot have its
+        # rate delta verified against Tier 1/2 caps, so it escalates directly to ESCALATE across all actions.
+        has_feed_target = (payload or {}).get("feed_bbl_per_day") is not None or metrics.get("feed_bbl_per_day") is not None
+        has_baseline_feed = (
+            (payload or {}).get("baseline_feed_bbl_per_day") is not None
+            or metrics.get("baseline_feed_bbl_per_day") is not None
+        )
+        if has_feed_target and not has_baseline_feed:
+            t2 = classes["REQUIRE_APPROVAL_TIER_2"]
+            esc_expiry = int(classes["ESCALATE"].get("expiry_logical_minutes", t2["expiry_logical_minutes"]))
+            return {
+                "authority_class": "ESCALATE",
+                "policy_result": "ESCALATED",
+                "tier": 3,
+                "required_approver_role": classes["ESCALATE"]["approver_roles"]["default"],
+                "expiry_minutes": esc_expiry,
+                "policy_version": self.policy_version,
+                "requires_new_decision_id": bool(classes["ESCALATE"].get("requires_new_decision_id", True)),
             }
 
         if action_type in classes["AUTO_EXECUTE"]["allowed_actions"]:
