@@ -1,0 +1,36 @@
+# Refinery A v1 Native OT Tag Schedule (WP-1b, PPC-OT-001 §3, ADR-0046, ADR-0053)
+# Aligned with ICE Level-0 contract (commit 1467e92) and OPC UA / Sparkplug v3.0 quality codes.
+
+schema_version: "1.0.0"
+site_id: "SITE-REF-A"
+provenance_class: "SYNTHETIC"
+opcua_namespace: "urn:ppc:refinery-a:ot"
+sparkplug_group_id: "PPC_SITE_REF_A"
+quality_encoding:
+  good: "0x00000000"
+  uncertain: "0x40000000"
+  bad: "0x80000000"
+
+tags:
+  - {tag_id: "REFA.CDU.FI_1001.PV", equipment_id: "CDU", property: "crude_charge_flow", native_unit: "bbl/h", sample_seconds: 60, eu_range: [0.0, 9000.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.CDU.TI_1002.PV", equipment_id: "CDU", property: "flash_zone_temp", native_unit: "degC", sample_seconds: 60, eu_range: [250.0, 420.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.FCC.FI_4001.PV", equipment_id: "4A", property: "vgo_feed_flow", native_unit: "bbl/h", sample_seconds: 60, eu_range: [0.0, 1500.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.FCC.TI_4002.PV", equipment_id: "4A", property: "riser_outlet_temp", native_unit: "degC", sample_seconds: 60, eu_range: [480.0, 560.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.FCC.TI_4003.PV", equipment_id: "4A", property: "regenerator_temp", native_unit: "degC", sample_seconds: 60, eu_range: [650.0, 760.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.FI_4101.PV", equipment_id: "4B", property: "vgo_feed_flow", native_unit: "bbl/h", sample_seconds: 60, eu_range: [0.0, 2000.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.TI_4102.PV", equipment_id: "4B", property: "reactor_wabt_temp", native_unit: "degC", sample_seconds: 60, eu_range: [340.0, 440.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.PI_4103.PV", equipment_id: "4B", property: "h2_partial_pressure", native_unit: "bar", sample_seconds: 60, eu_range: [60.0, 200.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.SI_4110.PV", equipment_id: "K-201", parent_unit: "4B", property: "recycle_compressor_speed_pct", native_unit: "pct", sample_seconds: 1, eu_range: [0.0, 110.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.FI_4111.PV", equipment_id: "K-201", parent_unit: "4B", property: "recycle_h2_mass_flow", native_unit: "t/day", sample_seconds: 1, eu_range: [0.0, 500.0], deadband_pct: 0.15, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.HCU.K201.VI_4112.PV", equipment_id: "K-201", parent_unit: "4B", property: "compressor_bearing_vibration", native_unit: "mm/s", sample_seconds: 1, eu_range: [0.0, 25.0], deadband_pct: 0.20, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.SMR.FI_6001.PV", equipment_id: "6", property: "smr_h2_production", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 130.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.DHT.FI_5101.PV", equipment_id: "5A", property: "dht_h2_draw", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 80.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.NHT.FI_5401.PV", equipment_id: "5D", property: "nht_h2_draw", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 20.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.FDS.FI_5201.PV", equipment_id: "5B", property: "fds_h2_draw", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 20.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.REF.FI_5301.PV", equipment_id: "5C", property: "reformer_h2_byproduct", native_unit: "t/day", sample_seconds: 60, eu_range: [0.0, 100.0], deadband_pct: 0.25, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK101.LI_101.PV", equipment_id: "TK-101", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 13000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK101H.LI_101H.PV", equipment_id: "TK-101H", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 160000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK102.LI_102.PV", equipment_id: "TK-102", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 320000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK201.LI_201.PV", equipment_id: "TK-201", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 160000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK301.LI_301.PV", equipment_id: "TK-301", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 220000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}
+  - {tag_id: "REFA.TK303.LI_303.PV", equipment_id: "TK-303", property: "tank_volume_std", native_unit: "bbl_60F", sample_seconds: 60, eu_range: [0.0, 220000.0], deadband_pct: 0.10, provenance_class: "SYNTHETIC"}

@@ -36,7 +36,7 @@ python3 scripts/adr_graph.py summary
 echo
 echo "== physical-model consistency graph =="
 uv run --no-project --with pyyaml python3 -m unittest -q scripts/test_physical_graph.py
-uv run --no-project --with pyyaml python3 scripts/physical_graph.py check || echo "  note  physical_graph check has 10 C2 alias findings remaining until the WP-1 design-basis alias table (fixtures/golden/refinery_a_design_basis.yaml) lands (ADR-0060 Q3)"
+uv run --no-project --with pyyaml python3 scripts/physical_graph.py check
 uv run --no-project --with pyyaml python3 scripts/physical_graph.py summary
 
 echo
@@ -62,6 +62,10 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 else
   echo "  skip  docker compose not available; YAML structure tests above still read docker-compose.yml"
 fi
+
+echo
+echo "== WP-1b design basis, CFG-0 topology, and OT tags =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp1b_design_basis.py
 
 echo
 echo "== shell syntax =="

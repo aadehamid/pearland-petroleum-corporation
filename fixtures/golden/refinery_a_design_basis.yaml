@@ -1,0 +1,327 @@
+# Refinery A v1 Authoritative Design Basis, Tank Register, Hydraulics, Assays, and Commercial World
+# Governing ADRs: ADR-0040, ADR-0043, ADR-0049, ADR-0054 (Option A), ADR-0056 (G3-c), ADR-0060
+# Authoritative in-repo sources: docs/enterprise-architecture/independent-review/PPC-REVIEW-002_Governing_Refinery_Equations_and_Balances.md,
+#   docs/adr/0054-refinery-a-flowsheet-closure-option-a-and-design-basis.md, docs/adr/0056-identity-steward-action-thresholds-and-refinery-a-parameters.md.
+# Regulatory basis for summer RFG E10 RVP caps: 40 CFR 1090.215 (7.4 psi Houston RFG E10 less ~1.0 psi ethanol bump -> 6.4 psi BOB; 7.8 psi ozone nonattainment E10 -> 6.8 psi BOB).
+# Transfer-line hydraulics and pump curves are WP-1 design-basis parameters populated per ADR-0054 / PPC-REVIEW-002 B5.
+# All fictional refinery capacities, assays, parameters, terminals, and customers are SYNTHETIC.
+
+schema_version: "1.0.0"
+design_basis_version: "1.0.0"
+provenance_class: "SYNTHETIC"
+facility_id: "SITE-REF-A"
+facility_name: "Pearland Refinery A"
+padd: "PADD 3"
+site_timezone: "America/Chicago"
+
+horizon:
+  warmup_days: 30
+  synthetic_history_months: 12
+  canonical_step_seconds: 60
+  provenance_class: "SYNTHETIC"
+
+crude_slate:
+  nominal_charge_bbl_per_day: 180000.0
+  min_charge_bbl_per_day: 105000.0
+  max_charge_bbl_per_day: 190000.0
+  design_blend_vol_frac:
+    ASSAY-LIGHT-SWEET: 0.30
+    ASSAY-MEDIUM-SOUR: 0.50
+    ASSAY-HEAVY-SOUR: 0.20
+  tbp_cut_points_c: [30.0, 85.0, 175.0, 240.0, 360.0, 565.0]
+  max_cut_point_shift_c: 15.0
+  max_adjacent_overlap_wt_pct: 2.0
+  column_loss_wt_pct: 0.2
+  column_loss_range_wt_pct: [0.0, 0.5]
+  provenance_class: "SYNTHETIC"
+
+# Three >=12-point (14-point) synthetic TBP assays matching ADR-0054/0056 whole-crude API, S, and 30/50/20 blend yields
+crude_assays:
+  - id: "ASSAY-LIGHT-SWEET"
+    name: "USGC Light Sweet Synthetic Analog"
+    provenance_class: "SYNTHETIC"
+    target_api_gravity: 39.0
+    target_sulfur_wt_pct: 0.35
+    ccr_wt_pct: 1.2
+    tbp_points_vol_pct_c:
+      - [0.0, -40.0]
+      - [3.0, 30.0]
+      - [7.5, 58.0]
+      - [12.0, 85.0]
+      - [20.5, 130.0]
+      - [29.0, 175.0]
+      - [35.5, 208.0]
+      - [42.0, 240.0]
+      - [52.5, 300.0]
+      - [63.0, 360.0]
+      - [76.5, 462.0]
+      - [90.0, 565.0]
+      - [95.0, 620.0]
+      - [100.0, 710.0]
+    cuts:
+      - {name: "LPG", vol_pct: 3.0, sg_60_60: 0.54467, sulfur_wt_pct: 0.00077, mid_bp_c: 0.0}
+      - {name: "LSR", vol_pct: 9.0, sg_60_60: 0.67460, sulfur_wt_pct: 0.00578, mid_bp_c: 57.5}
+      - {name: "HEAVY_NAPHTHA", vol_pct: 17.0, sg_60_60: 0.75455, sulfur_wt_pct: 0.02312, mid_bp_c: 130.0}
+      - {name: "KEROSENE", vol_pct: 13.0, sg_60_60: 0.81151, sulfur_wt_pct: 0.09632, mid_bp_c: 207.5}
+      - {name: "AGO", vol_pct: 21.0, sg_60_60: 0.85449, sulfur_wt_pct: 0.25042, mid_bp_c: 300.0}
+      - {name: "VGO", vol_pct: 27.0, sg_60_60: 0.90446, sulfur_wt_pct: 0.55863, mid_bp_c: 462.5}
+      - {name: "VACUUM_RESIDUE", vol_pct: 10.0, sg_60_60: 0.95443, sulfur_wt_pct: 1.00168, mid_bp_c: 625.0}
+
+  - id: "ASSAY-MEDIUM-SOUR"
+    name: "USGC Medium Sour Synthetic Analog"
+    provenance_class: "SYNTHETIC"
+    target_api_gravity: 31.0
+    target_sulfur_wt_pct: 1.60
+    ccr_wt_pct: 3.8
+    tbp_points_vol_pct_c:
+      - [0.0, -35.0]
+      - [2.0, 30.0]
+      - [4.75, 58.0]
+      - [7.5, 85.0]
+      - [13.25, 130.0]
+      - [19.0, 175.0]
+      - [24.0, 208.0]
+      - [29.0, 240.0]
+      - [37.5, 300.0]
+      - [46.0, 360.0]
+      - [62.75, 462.0]
+      - [79.5, 565.0]
+      - [90.0, 630.0]
+      - [100.0, 725.0]
+    cuts:
+      - {name: "LPG", vol_pct: 2.0, sg_60_60: 0.54960, sulfur_wt_pct: 0.00256, mid_bp_c: 0.0}
+      - {name: "LSR", vol_pct: 5.5, sg_60_60: 0.67450, sulfur_wt_pct: 0.01920, mid_bp_c: 57.5}
+      - {name: "HEAVY_NAPHTHA", vol_pct: 11.5, sg_60_60: 0.75744, sulfur_wt_pct: 0.07680, mid_bp_c: 130.0}
+      - {name: "KEROSENE", vol_pct: 10.0, sg_60_60: 0.81740, sulfur_wt_pct: 0.31999, mid_bp_c: 207.5}
+      - {name: "AGO", vol_pct: 17.0, sg_60_60: 0.85937, sulfur_wt_pct: 0.83197, mid_bp_c: 300.0}
+      - {name: "VGO", vol_pct: 33.5, sg_60_60: 0.91333, sulfur_wt_pct: 1.85594, mid_bp_c: 462.5}
+      - {name: "VACUUM_RESIDUE", vol_pct: 20.5, sg_60_60: 0.98428, sulfur_wt_pct: 3.32789, mid_bp_c: 635.0}
+
+  - id: "ASSAY-HEAVY-SOUR"
+    name: "USGC Heavy Sour Synthetic Analog"
+    provenance_class: "SYNTHETIC"
+    target_api_gravity: 24.0
+    target_sulfur_wt_pct: 2.60
+    ccr_wt_pct: 6.5
+    tbp_points_vol_pct_c:
+      - [0.0, -30.0]
+      - [0.5, 30.0]
+      - [1.875, 58.0]
+      - [3.25, 85.0]
+      - [6.125, 130.0]
+      - [9.0, 175.0]
+      - [11.75, 208.0]
+      - [14.5, 240.0]
+      - [20.0, 300.0]
+      - [25.5, 360.0]
+      - [43.375, 462.0]
+      - [61.25, 565.0]
+      - [81.0, 640.0]
+      - [100.0, 740.0]
+    cuts:
+      - {name: "LPG", vol_pct: 0.5, sg_60_60: 0.55393, sulfur_wt_pct: 0.00308, mid_bp_c: 0.0}
+      - {name: "LSR", vol_pct: 2.75, sg_60_60: 0.67071, sulfur_wt_pct: 0.02305, mid_bp_c: 57.5}
+      - {name: "HEAVY_NAPHTHA", vol_pct: 5.75, sg_60_60: 0.75355, sulfur_wt_pct: 0.09222, mid_bp_c: 130.0}
+      - {name: "KEROSENE", vol_pct: 5.5, sg_60_60: 0.81344, sulfur_wt_pct: 0.38423, mid_bp_c: 207.5}
+      - {name: "AGO", vol_pct: 11.0, sg_60_60: 0.85336, sulfur_wt_pct: 0.99900, mid_bp_c: 300.0}
+      - {name: "VGO", vol_pct: 35.75, sg_60_60: 0.90825, sulfur_wt_pct: 2.22854, mid_bp_c: 462.5}
+      - {name: "VACUUM_RESIDUE", vol_pct: 38.75, sg_60_60: 0.98610, sulfur_wt_pct: 3.99598, mid_bp_c: 645.0}
+
+# Authoritative Refinery A v1 units, Option A bounded interfaces, and explicit source aliases (ADR-0060 C2)
+units:
+  - id: "CDU"
+    name: "CDU + VDU"
+    facility: "SITE-REF-A"
+    kind: "process_unit"
+    capacity_bbl_per_day: 190000.0
+    nominal_bbl_per_day: 180000.0
+    aliases: ["CDU + VDU", "CDU/VDU"]
+    provenance_class: "SYNTHETIC"
+  - id: "4A"
+    name: "FCC Unit"
+    facility: "SITE-REF-A"
+    kind: "process_unit"
+    capacity_bbl_per_day: 30000.0
+    nominal_bbl_per_day: 21600.0
+    max_coke_wt_pct_at_30k: 7.0
+    aliases: ["FCC", "FCC VGO Feed Recycle", "FCC Unit"]
+    provenance_class: "SYNTHETIC"
+  - id: "4B"
+    name: "Hydrocracker"
+    facility: "SITE-REF-A"
+    kind: "process_unit"
+    capacity_bbl_per_day: 40000.0
+    nominal_bbl_per_day: 36000.0
+    recycle_compressor_id: "K-201"
+    aliases: ["Hydrocracker", "HCU"]
+    provenance_class: "SYNTHETIC"
+  - id: "5A"
+    name: "Diesel Hydrotreater"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    capacity_bbl_per_day: 60000.0
+    max_lco_wt_frac: 0.20
+    h2_uptake_sr_wt_frac: 0.0045
+    h2_uptake_lco_wt_frac: 0.0160
+    aliases: ["DHT", "Diesel Hydrotreater"]
+    provenance_class: "SYNTHETIC"
+  - id: "5B"
+    name: "FCC Naphtha Selective HDS"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    capacity_bbl_per_day: 18000.0
+    liquid_yield_wt_frac: 0.995
+    h2_uptake_wt_frac: 0.0032
+    octane_loss_aki: 1.0
+    target_sulfur_ppmw: 8.0
+    max_sulfur_ppmw: 10.0
+    aliases: ["FCC Selective HDS", "FDS", "FCC Naphtha Selective HDS"]
+    provenance_class: "SYNTHETIC"
+  - id: "5C"
+    name: "Catalytic Reformer"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    capacity_bbl_per_day: 30000.0
+    min_turndown_frac: 0.50
+    aliases: ["Catalytic Reformer", "REF"]
+    provenance_class: "SYNTHETIC"
+  - id: "5D"
+    name: "Naphtha Hydrotreater"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    capacity_bbl_per_day: 36000.0
+    liquid_yield_wt_frac: 0.997
+    h2_uptake_wt_frac: 0.00135
+    max_sulfur_ppmw: 0.5
+    aliases: ["NHT", "Naphtha Hydrotreater"]
+    provenance_class: "SYNTHETIC"
+  - id: "6"
+    name: "SMR and Utilities Header"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    smr_max_h2_t_per_day: 120.0
+    smr_min_turndown_frac: 0.45
+    smr_gas_per_h2_kg_per_kg: 3.50
+    boiler_efficiency: 0.88
+    aliases: ["SMR", "Steam and power", "Refinery Fuel Gas Header"]
+    provenance_class: "SYNTHETIC"
+  - id: "9"
+    name: "Priced Boundary and SRU Sinks"
+    facility: "SITE-REF-A"
+    kind: "bounded_interface"
+    sru_capacity_t_per_day: 250.0
+    sru_recovery_frac: 0.995
+    aliases: ["SRU", "Sulfur Recovery Unit", "EX"]
+    provenance_class: "SYNTHETIC"
+  - id: "BL"
+    name: "Product Blending and Quality Hold"
+    facility: "SITE-REF-A"
+    kind: "blending_header"
+    aliases: ["Product Blending", "Gasoline Blending", "ULSD Blending"]
+    provenance_class: "SYNTHETIC"
+  - id: "FT"
+    name: "Finished Tankage and Dispatch"
+    facility: "SITE-REF-A"
+    kind: "dispatch"
+    aliases: ["Finished Tankage", "Jet A-1 Tankage"]
+    provenance_class: "SYNTHETIC"
+
+# 13 tanks matching PPC-REVIEW-002 tank register verbatim
+tanks:
+  - {id: "TK-101", service: "Paper arithmetic / active crude test tank", working_min_bbl: 1000.0, working_max_bbl: 12000.0, initial_bbl: 10000.0, ref_sg_60_60: 0.840, provenance_class: "SYNTHETIC"}
+  - {id: "TK-101H", service: "Segregated crude receipt hold tank", working_min_bbl: 0.0, working_max_bbl: 150000.0, initial_bbl: 0.0, ref_sg_60_60: 0.871, provenance_class: "SYNTHETIC"}
+  - {id: "TK-102", service: "Active crude blend charge tank 1", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 180000.0, ref_sg_60_60: 0.866, provenance_class: "SYNTHETIC"}
+  - {id: "TK-103", service: "Active crude blend charge tank 2", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 210000.0, ref_sg_60_60: 0.871, provenance_class: "SYNTHETIC"}
+  - {id: "TK-104", service: "Active crude blend charge tank 3", working_min_bbl: 30000.0, working_max_bbl: 300000.0, initial_bbl: 150000.0, ref_sg_60_60: 0.910, provenance_class: "SYNTHETIC"}
+  - {id: "TK-201", service: "VGO intermediate feed tank", working_min_bbl: 15000.0, working_max_bbl: 150000.0, initial_bbl: 90000.0, ref_sg_60_60: 0.910, provenance_class: "SYNTHETIC"}
+  - {id: "TK-202", service: "Catalytic Reformer intermediate feed tank", working_min_bbl: 15000.0, working_max_bbl: 150000.0, initial_bbl: 80000.0, ref_sg_60_60: 0.756, provenance_class: "SYNTHETIC"}
+  - {id: "TK-301", service: "Finished ULSD blend & release tank 1", working_min_bbl: 20000.0, working_max_bbl: 200000.0, initial_bbl: 120000.0, ref_sg_60_60: 0.840, provenance_class: "SYNTHETIC"}
+  - {id: "TK-302", service: "Finished ULSD blend & release tank 2", working_min_bbl: 20000.0, working_max_bbl: 200000.0, initial_bbl: 110000.0, ref_sg_60_60: 0.840, provenance_class: "SYNTHETIC"}
+  - {id: "TK-303", service: "Finished RBOB/CBOB blend & release tank 1", working_min_bbl: 20000.0, working_max_bbl: 200000.0, initial_bbl: 125000.0, ref_sg_60_60: 0.742, provenance_class: "SYNTHETIC"}
+  - {id: "TK-304", service: "Finished RBOB/CBOB blend & release tank 2", working_min_bbl: 20000.0, working_max_bbl: 200000.0, initial_bbl: 115000.0, ref_sg_60_60: 0.742, provenance_class: "SYNTHETIC"}
+  - {id: "TK-401", service: "Finished Jet A-1 export tank", working_min_bbl: 10000.0, working_max_bbl: 120000.0, initial_bbl: 65000.0, ref_sg_60_60: 0.810, provenance_class: "SYNTHETIC"}
+  - {id: "TK-402", service: "Heavy Resid / Slurry export tank", working_min_bbl: 10000.0, working_max_bbl: 120000.0, initial_bbl: 55000.0, ref_sg_60_60: 0.980, provenance_class: "SYNTHETIC"}
+
+# 11 individual pumps mapping explicitly to the 5 A/B pairs + P-402 in PPC-REVIEW-002 (ADR-0060 C2)
+pumps:
+  - {id: "P-101A", doc_pair_label: "P-101A/B", line_id: "LINE-CRUDE-CHG", role: "primary", h0_m: 145.0, cp_s2_per_m5: 180.0, n0_rpm: 1780.0, viscous_service: true, provenance_class: "SYNTHETIC"}
+  - {id: "P-101B", doc_pair_label: "P-101A/B", line_id: "LINE-CRUDE-CHG", role: "standby", h0_m: 145.0, cp_s2_per_m5: 180.0, n0_rpm: 1780.0, viscous_service: true, provenance_class: "SYNTHETIC"}
+  - {id: "P-201A", doc_pair_label: "P-201A/B", line_id: "LINE-VGO-HCU", role: "primary", h0_m: 95.0, cp_s2_per_m5: 420.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-201B", doc_pair_label: "P-201A/B", line_id: "LINE-VGO-HCU", role: "standby", h0_m: 95.0, cp_s2_per_m5: 420.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-301A", doc_pair_label: "P-301A/B", line_id: "LINE-ULSD-DISP", role: "primary", h0_m: 110.0, cp_s2_per_m5: 350.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-301B", doc_pair_label: "P-301A/B", line_id: "LINE-ULSD-DISP", role: "standby", h0_m: 110.0, cp_s2_per_m5: 350.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-302A", doc_pair_label: "P-302A/B", line_id: "LINE-BOB-DISP", role: "primary", h0_m: 115.0, cp_s2_per_m5: 310.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-302B", doc_pair_label: "P-302A/B", line_id: "LINE-BOB-DISP", role: "standby", h0_m: 115.0, cp_s2_per_m5: 310.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-401A", doc_pair_label: "P-401A/B", line_id: "LINE-JET-EXP", role: "primary", h0_m: 85.0, cp_s2_per_m5: 550.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-401B", doc_pair_label: "P-401A/B", line_id: "LINE-JET-EXP", role: "standby", h0_m: 85.0, cp_s2_per_m5: 550.0, n0_rpm: 1780.0, viscous_service: false, provenance_class: "SYNTHETIC"}
+  - {id: "P-402", doc_pair_label: "P-402", line_id: "LINE-RESID-EXP", role: "primary", h0_m: 135.0, cp_s2_per_m5: 480.0, n0_rpm: 1180.0, viscous_service: true, provenance_class: "SYNTHETIC"}
+
+# 6 EQ-03 hydraulic transfer paths (commercial steel roughness 0.046 mm)
+transfer_lines:
+  - {id: "LINE-CRUDE-CHG", source: "TK-102", destination: "CDU", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.4572, length_m: 650.0, roughness_m: 0.000046, k_fittings: 14.0, delta_z_m: 8.0, delta_p_pa: 250000.0, nominal_flow_bbl_per_day: 180000.0, fluid_sg: 0.866, fluid_viscosity_pa_s: 0.012, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-VGO-HCU", source: "TK-201", destination: "4B", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.2540, length_m: 420.0, roughness_m: 0.000046, k_fittings: 12.0, delta_z_m: 6.0, delta_p_pa: 180000.0, nominal_flow_bbl_per_day: 36000.0, fluid_sg: 0.910, fluid_viscosity_pa_s: 0.008, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-ULSD-DISP", source: "TK-301", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.3048, length_m: 1200.0, roughness_m: 0.000046, k_fittings: 16.0, delta_z_m: 4.0, delta_p_pa: 200000.0, nominal_flow_bbl_per_day: 55000.0, fluid_sg: 0.840, fluid_viscosity_pa_s: 0.0032, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-BOB-DISP", source: "TK-303", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.3048, length_m: 1200.0, roughness_m: 0.000046, k_fittings: 16.0, delta_z_m: 4.0, delta_p_pa: 220000.0, nominal_flow_bbl_per_day: 65000.0, fluid_sg: 0.742, fluid_viscosity_pa_s: 0.0006, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-JET-EXP", source: "TK-401", destination: "FT", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.2032, length_m: 500.0, roughness_m: 0.000046, k_fittings: 10.0, delta_z_m: 3.0, delta_p_pa: 120000.0, nominal_flow_bbl_per_day: 20000.0, fluid_sg: 0.810, fluid_viscosity_pa_s: 0.0018, provenance_class: "SYNTHETIC"}
+  - {id: "LINE-RESID-EXP", source: "TK-402", destination: "FT", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", diameter_m: 0.3048, length_m: 480.0, roughness_m: 0.000046, k_fittings: 15.0, delta_z_m: 5.0, delta_p_pa: 150000.0, nominal_flow_bbl_per_day: 37800.0, fluid_sg: 0.980, fluid_viscosity_pa_s: 0.140, provenance_class: "SYNTHETIC"}
+
+# Complete Option A process stream connectivity with explicit phase & SI mass units (Check 2)
+streams:
+  - {id: "STR-CDU-LSR-NHT", source: "CDU", destination: "5D", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-CDU-HN-NHT", source: "CDU", destination: "5D", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-CDU-DIST-DHT", source: "CDU", destination: "5A", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-CDU-VGO-FCC", source: "CDU", destination: "4A", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-CDU-VGO-HCU", source: "CDU", destination: "4B", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-CDU-VR-EXP", source: "CDU", destination: "9", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-FCC-NAPHTHA-FDS", source: "4A", destination: "5B", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-FCC-LCO-DHT", source: "4A", destination: "5A", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-FCC-SLURRY-EXP", source: "4A", destination: "9", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-FCC-DRYGAS-FG", source: "4A", destination: "6", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-FCC-LPG-EXP", source: "4A", destination: "9", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-ACIDGAS-SRU", source: "4B", destination: "9", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-DRYGAS-FG", source: "4B", destination: "6", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-LPG-EXP", source: "4B", destination: "9", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-LN-BL", source: "4B", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-HN-REF", source: "4B", destination: "5C", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-JET-FT", source: "4B", destination: "FT", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-ULSD-BL", source: "4B", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HCU-UCO-FCC", source: "4B", destination: "4A", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-NHT-LSR-BL", source: "5D", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-NHT-HN-REF", source: "5D", destination: "5C", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-REF-REFORMATE-BL", source: "5C", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-REF-H2-HDR", source: "5C", destination: "6", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-FDS-NAPHTHA-BL", source: "5B", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-DHT-DIST-BL", source: "5A", destination: "BL", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-HT-SOURGAS-SRU", source: "5A", destination: "9", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-BL-FINISHED-FT", source: "BL", destination: "FT", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+
+# 3 distribution terminals (Terminal ethanol 10.0 vol% enters strictly inside terminals, ADR-0054)
+# Houston RFG summer E10 cap is 7.4 psi (40 CFR 1090.215) -> 6.4 psi BOB cap before +1.0 psi ethanol bump.
+terminals:
+  - {id: "TERM-01", name: "Houston Ship Channel Rack", mode: ["pipeline", "truck", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.4, storage_ulsd_max_bbl: 180000.0, storage_bob_max_bbl: 200000.0, provenance_class: "SYNTHETIC"}
+  - {id: "TERM-02", name: "Beaumont Products Terminal", mode: ["pipeline", "marine"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.8, storage_ulsd_max_bbl: 150000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
+  - {id: "TERM-03", name: "Pasadena Distribution Rack", mode: ["pipeline", "truck"], ethanol_blend_vol_pct: 10.0, ethanol_octane_aki: 113.0, ethanol_rvp_bump_psi: 1.0, rfg_summer_bob_rvp_max_psi: 6.4, storage_ulsd_max_bbl: 140000.0, storage_bob_max_bbl: 160000.0, provenance_class: "SYNTHETIC"}
+
+# 12 synthetic commercial customers (PPC-WORLD-001 §1, PPC-PLAN-001 WP-1; premium share <= 10% per ADR-0056 G3-c)
+customers:
+  - {id: "CUST-01", name: "Bayou Fleet Fuels LLC", segment: "commercial_diesel", primary_terminal: "TERM-01", product: "ULSD", contract_bbl_per_day: 8500.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 8.50, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-02", name: "Gulf Corridor Jobbers Inc", segment: "wholesale_rack", primary_terminal: "TERM-01", product: "E10_REG", contract_bbl_per_day: 11000.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-03", name: "Sabine Marine Bunkers Co", segment: "marine_wholesale", primary_terminal: "TERM-02", product: "ULSD", contract_bbl_per_day: 7500.0, delivery_mode: "marine", penalty_usd_per_bbl: 11.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-04", name: "Lone Star Retail Brands", segment: "branded_retail", primary_terminal: "TERM-03", product: "E10_REG", contract_bbl_per_day: 12000.0, delivery_mode: "truck", penalty_usd_per_bbl: 7.50, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-05", name: "Lone Star Premium Supply", segment: "branded_retail", primary_terminal: "TERM-03", product: "E10_PREM", contract_bbl_per_day: 2500.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-06", name: "Coastal Freight Logistics", segment: "commercial_diesel", primary_terminal: "TERM-01", product: "ULSD", contract_bbl_per_day: 9000.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 9.50, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-07", name: "Brazos Valley Distributors", segment: "wholesale_rack", primary_terminal: "TERM-03", product: "ULSD", contract_bbl_per_day: 6500.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.50, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-08", name: "Neches Valley Transport", segment: "commercial_diesel", primary_terminal: "TERM-02", product: "ULSD", contract_bbl_per_day: 6000.0, delivery_mode: "pipeline", penalty_usd_per_bbl: 8.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-09", name: "Galveston Bay Jobbers", segment: "wholesale_rack", primary_terminal: "TERM-01", product: "E10_REG", contract_bbl_per_day: 9500.0, delivery_mode: "truck", penalty_usd_per_bbl: 6.25, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-10", name: "Port Arthur Terminal Partners", segment: "marine_wholesale", primary_terminal: "TERM-02", product: "E10_REG", contract_bbl_per_day: 8000.0, delivery_mode: "marine", penalty_usd_per_bbl: 7.00, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-11", name: "I-10 Energy Marketing", segment: "wholesale_rack", primary_terminal: "TERM-03", product: "ULSD", contract_bbl_per_day: 5500.0, delivery_mode: "truck", penalty_usd_per_bbl: 7.25, provenance_class: "SYNTHETIC"}
+  - {id: "CUST-12", name: "Houston Metro Rack Supply", segment: "branded_retail", primary_terminal: "TERM-01", product: "E10_PREM", contract_bbl_per_day: 1800.0, delivery_mode: "truck", penalty_usd_per_bbl: 9.50, provenance_class: "SYNTHETIC"}
+
+# Priced refinery-gate boundary sinks (G1-6: market indicators, no customer contracts in v1)
+priced_boundary_sinks:
+  - {id: "SINK-JET-A1", product: "JET_A1", price_basis: "USGC_JET_SPOT", indicator_usd_per_bbl: 91.50, provenance_class: "SYNTHETIC"}
+  - {id: "SINK-LPG", product: "LPG", price_basis: "MB_PROPANE_SPOT", indicator_usd_per_bbl: 34.00, provenance_class: "SYNTHETIC"}
+  - {id: "SINK-SULFUR", product: "ELEMENTAL_SULFUR", price_basis: "USGC_SULFUR_INDICATOR", indicator_usd_per_t: 115.00, provenance_class: "SYNTHETIC"}
+  - {id: "SINK-RESID", product: "VACUUM_RESIDUE", price_basis: "USGC_HSFO_INDICATOR", indicator_usd_per_bbl: 62.00, provenance_class: "SYNTHETIC"}
+  - {id: "SINK-SLURRY", product: "FCC_SLURRY", price_basis: "USGC_SLURRY_INDICATOR", indicator_usd_per_bbl: 58.00, provenance_class: "SYNTHETIC"}
+  - {id: "SINK-NAPHTHA-EXP", product: "EXCESS_LSR_NAPHTHA", price_basis: "USGC_NAPHTHA_INDICATOR", indicator_usd_per_bbl: 68.00, provenance_class: "SYNTHETIC"}
