@@ -1,0 +1,377 @@
+{
+  "schema_version": "1.0.0",
+  "manifest_kind": "PPC-WP1-PUBLIC-DATA-VINTAGE",
+  "provenance_class": "OBSERVED",
+  "vintage": "2026-11-28",
+  "window": {
+    "start_date": "2024-01-01",
+    "end_date": "2025-12-31"
+  },
+  "captured_at_utc": "2026-11-28T06:36:41Z",
+  "governing_adrs": [
+    "ADR-0051",
+    "ADR-0057"
+  ],
+  "r2_bucket": "pearland-petroleum-corp",
+  "sources": {
+    "eia": {
+      "series_count": 14,
+      "series": {
+        "WCRRIP32": {
+          "unit": "MBBL/D",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 9464.0,
+          "min_value": 7526.0,
+          "max_value": 9546.0
+        },
+        "WGIRIP32": {
+          "unit": "MBBL/D",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 9579.0,
+          "min_value": 7648.0,
+          "max_value": 9688.0
+        },
+        "WCESTP31": {
+          "unit": "MBBL",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 238177.0,
+          "min_value": 227521.0,
+          "max_value": 266673.0
+        },
+        "WD0ST_R30_1": {
+          "unit": "MBBL",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 41982.0,
+          "min_value": 31346.0,
+          "max_value": 42458.0
+        },
+        "WGTSTP31": {
+          "unit": "MBBL",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 91029.0,
+          "min_value": 76242.0,
+          "max_value": 91617.0
+        },
+        "WO6ST_R30_1": {
+          "unit": "MBBL",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 37470.0,
+          "min_value": 31310.0,
+          "max_value": 42191.0
+        },
+        "W_EPOBGRR_SAE_R30_MBBL": {
+          "unit": "MBBL",
+          "frequency": "weekly",
+          "row_count": 104,
+          "date_min": "2024-01-05",
+          "date_max": "2025-12-26",
+          "latest_value": 12292.0,
+          "min_value": 8071.0,
+          "max_value": 13320.0
+        },
+        "RWTC": {
+          "unit": "$/BBL",
+          "frequency": "daily",
+          "row_count": 498,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 57.26,
+          "min_value": 55.44,
+          "max_value": 87.69
+        },
+        "RBRTE": {
+          "unit": "$/BBL",
+          "frequency": "daily",
+          "row_count": 506,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 61.35,
+          "min_value": 59.93,
+          "max_value": 93.12
+        },
+        "EER_EPD2DXL0_PF4_RGC_DPG": {
+          "unit": "$/GAL",
+          "frequency": "daily",
+          "row_count": 498,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 1.999,
+          "min_value": 1.907,
+          "max_value": 2.906
+        },
+        "EER_EPMRU_PF4_RGC_DPG": {
+          "unit": "$/GAL",
+          "frequency": "daily",
+          "row_count": 498,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 1.737,
+          "min_value": 1.649,
+          "max_value": 2.659
+        },
+        "EER_EPJK_PF4_RGC_DPG": {
+          "unit": "$/GAL",
+          "frequency": "daily",
+          "row_count": 498,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 1.911,
+          "min_value": 1.819,
+          "max_value": 2.869
+        },
+        "EER_EPLLPA_PF4_Y44MB_DPG": {
+          "unit": "$/GAL",
+          "frequency": "daily",
+          "row_count": 497,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 0.61,
+          "min_value": 0.58,
+          "max_value": 0.99
+        },
+        "RNGWHHD": {
+          "unit": "$/MMBTU",
+          "frequency": "daily",
+          "row_count": 498,
+          "date_min": "2024-01-02",
+          "date_max": "2025-12-31",
+          "latest_value": 4.0,
+          "min_value": 1.21,
+          "max_value": 13.2
+        }
+      }
+    },
+    "noaa": {
+      "archive_url": "https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2025-092326.txt",
+      "storms_since_2010": 286,
+      "hurricanes_since_2010": 125
+    },
+    "epa": {
+      "table": "PUB_DIM_FACILITY",
+      "naics": "324110",
+      "states": [
+        "TX",
+        "LA"
+      ],
+      "row_count": 402,
+      "unique_facilities": 30
+    },
+    "phmsa": {
+      "status": "DEFERRED_MANUAL_ARCHIVE",
+      "archive_url": "https://www.phmsa.dot.gov/sites/phmsa.dot.gov/files/data_statistics/pipeline/accident_hazardous_liquid_jan2010_present.zip"
+    }
+  },
+  "objects": [
+    {
+      "source": "eia",
+      "name": "WCRRIP32",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WCRRIP32.json",
+      "sha256": "67ab62333e2e480126ea79344824609e171dda8c32c18c3fca465739be63ddbb",
+      "size_bytes": 32491,
+      "row_count": 104,
+      "unit": "MBBL/D",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "WGIRIP32",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WGIRIP32.json",
+      "sha256": "ccb8383596db811bcd2918bb199518b7f8505fb2741dace517dd3a5d09fa4e5c",
+      "size_bytes": 32836,
+      "row_count": 104,
+      "unit": "MBBL/D",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "WCESTP31",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WCESTP31.json",
+      "sha256": "29f21fcdd305a4a1a5873bdc4e035a2bfae44d9e51fb8090056ddd706eb7fe2a",
+      "size_bytes": 33643,
+      "row_count": 104,
+      "unit": "MBBL",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "WD0ST_R30_1",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WD0ST_R30_1.json",
+      "sha256": "c1b01db3b43d65743555dd58fcde46bba5d9f1ecd702a39a925cda3a620ec0b7",
+      "size_bytes": 37405,
+      "row_count": 104,
+      "unit": "MBBL",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "WGTSTP31",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WGTSTP31.json",
+      "sha256": "7b6a1e0fd5b6cc48237c557a963bfac4a110f29ca9b1bdedbbb960daf1f3d3d5",
+      "size_bytes": 31664,
+      "row_count": 104,
+      "unit": "MBBL",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "WO6ST_R30_1",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/WO6ST_R30_1.json",
+      "sha256": "59c33cb608233366f202e7afd758a44254c477ff79831e4703121ba3701e472a",
+      "size_bytes": 38960,
+      "row_count": 104,
+      "unit": "MBBL",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "W_EPOBGRR_SAE_R30_MBBL",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/W_EPOBGRR_SAE_R30_MBBL.json",
+      "sha256": "cc35e1a0cebf859ae57f7fcbf3046fe06dc689501fcaac9de839098c5fe58886",
+      "size_bytes": 40083,
+      "row_count": 104,
+      "unit": "MBBL",
+      "date_min": "2024-01-05",
+      "date_max": "2025-12-26",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "RWTC",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/RWTC.json",
+      "sha256": "dd323ceaab21ed616b91605d889e6bf90b8dffa3e1b67f600a9d925def451bcd",
+      "size_bytes": 139632,
+      "row_count": 498,
+      "unit": "$/BBL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "RBRTE",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/RBRTE.json",
+      "sha256": "d8b2d8a7549dcb7b11a1997ca1b28533f1c63ba6a58ea03a163cacca2cb8ca13",
+      "size_bytes": 143371,
+      "row_count": 506,
+      "unit": "$/BBL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "EER_EPD2DXL0_PF4_RGC_DPG",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/EER_EPD2DXL0_PF4_RGC_DPG.json",
+      "sha256": "ee7ef1408451008310803dd11132b3a884d1f2ce9b09ca3fe504586b7e25bc20",
+      "size_bytes": 172033,
+      "row_count": 498,
+      "unit": "$/GAL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "EER_EPMRU_PF4_RGC_DPG",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/EER_EPMRU_PF4_RGC_DPG.json",
+      "sha256": "333f454c19ea5b7c9414b2852f479688e7e697f015d20cb11e0bf7d8e14602fb",
+      "size_bytes": 169549,
+      "row_count": 498,
+      "unit": "$/GAL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "EER_EPJK_PF4_RGC_DPG",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/EER_EPJK_PF4_RGC_DPG.json",
+      "sha256": "b7a157c4586a2f15495c1977db32e09585b12e59d8133d3b2a5823eabfb40118",
+      "size_bytes": 161566,
+      "row_count": 498,
+      "unit": "$/GAL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "EER_EPLLPA_PF4_Y44MB_DPG",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/EER_EPLLPA_PF4_Y44MB_DPG.json",
+      "sha256": "30ef6a577373a14c2985fdb555ce3f284b00dd604a1a7a7398e43b1738270207",
+      "size_bytes": 150268,
+      "row_count": 497,
+      "unit": "$/GAL",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "eia",
+      "name": "RNGWHHD",
+      "r2_key": "raw/external/eia/vintage=2026-11-28/RNGWHHD.json",
+      "sha256": "4fe65575d8fc22ee9a9380b2062ef5ac5a41b57ffaf614f25112e7804b9301cc",
+      "size_bytes": 140087,
+      "row_count": 498,
+      "unit": "$/MMBTU",
+      "date_min": "2024-01-02",
+      "date_max": "2025-12-31",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "noaa",
+      "name": "hurdat2_atlantic_best_track",
+      "r2_key": "raw/external/noaa/vintage=2026-11-28/hurdat2_atlantic.txt",
+      "sha256": "75202780ce56c8458f16fbef5fb8a026b99b00878dbb95c458211b3e6ef125b4",
+      "size_bytes": 7071568,
+      "row_count": 286,
+      "unit": "kt/mb",
+      "date_min": "2010",
+      "date_max": "2025",
+      "provenance_class": "OBSERVED"
+    },
+    {
+      "source": "epa",
+      "name": "ghgrp_naics_324110_tx_la",
+      "r2_key": "raw/external/epa/vintage=2026-11-28/ghgrp_naics_324110_tx_la.json",
+      "sha256": "e975ad5f943b6e1af133ef34f53b979460560d966afbb013fc5903d033798692",
+      "size_bytes": 382934,
+      "row_count": 402,
+      "unit": "facility_year_rows",
+      "date_min": null,
+      "date_max": null,
+      "provenance_class": "OBSERVED"
+    }
+  ],
+  "manifest_sha256": "232df6100b4fb45c935de0591a0df0bda3b00eb6e5f483d21166696f86d5e78f"
+}
