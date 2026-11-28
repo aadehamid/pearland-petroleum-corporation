@@ -78,6 +78,18 @@ uv run --no-project --with pyyaml --with numpy --with z3-solver --with hypothesi
   python3 -m unittest tests/test_world_kernel.py verification/z3/test_proof_obligations.py
 
 echo
+echo "== WP-3B policy gate (ADR-0056), signed RBAC auth, and offline recorded-response agent (PO-10) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp3b_policy_auth_agent.py
+
+echo
+echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO-03) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
+
+echo
+echo "== WP-5B Relate WASM server-filtered graph package =="
+python3 -m unittest tests/test_wp5b_relate_wasm.py
+
+echo
 echo "== WP-3A reduced Pyomo+HiGHS Planning LP, UC-3 backcasting (PO-12b), and closed-loop WP-1 checks =="
 uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
   python3 -m unittest tests/test_wp3a_planning_lp.py
