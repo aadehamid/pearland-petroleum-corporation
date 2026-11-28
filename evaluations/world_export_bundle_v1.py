@@ -162,34 +162,41 @@ def _is_printable_text(text: str) -> bool:
 
 
 def _is_clean_text(buf: bytes) -> bool:
-    """Return True iff buf is clean printable UTF-8, UTF-16LE/BE (incl. BOM/Unicode), or UTF-32LE/BE text."""
+    """Return True iff buf is clean printable UTF-8, BOM-tagged UTF-16 (any Unicode), BOM-less Latin-1 UTF-16, or UTF-32.
+
+    Per RFC 2781, BOM-less non-Latin-1 UTF-16 cannot be separated from arbitrary 16-bit binary bytes,
+    so non-Latin-1 UTF-16 requires a UTF-16 BOM (0xFFFE / 0xFEFF) to pass as clean text while still
+    being scanned for hidden-truth markers regardless of BOM.
+    """
     try:
         if _is_printable_text(buf.decode("utf-8", errors="strict")):
             return True
     except UnicodeDecodeError:
         pass
-    # UTF-16LE/BE (even length, never starting with gzip/zlib magic); require BOM or coherent Unicode text
-    # (rejecting arbitrary binary noise that accidentally decodes into mixed unrelated Unicode scripts).
     if len(buf) >= 2 and len(buf) % 2 == 0 and not buf.startswith(_COMPRESSED_MAGIC_PREFIXES):
-        has_bom = buf.startswith((b"\xff\xfe", b"\xfe\xff"))
-        for enc in ("utf-16-le", "utf-16-be"):
+        if buf.startswith(b"\xff\xfe"):
             try:
-                text = buf.decode(enc, errors="strict")
-                if not text or not _is_printable_text(text):
-                    continue
-                if has_bom:
-                    return True
-                # Without a BOM, require either null-interleaved ASCII or coherent letter/punctuation/symbol text
-                # with low script dispersion so random compressed/corrupt binary bytes cannot masquerade as UTF-16.
-                non_ascii = [c for c in text if ord(c) >= 0x80]
-                if not non_ascii:
-                    return True
-                scripts = {unicodedata.name(c, "UNKNOWN").split()[0] for c in non_ascii}
-                if "UNKNOWN" not in scripts and len(scripts) <= 3:
+                text = buf.decode("utf-16-le", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
                     return True
             except UnicodeDecodeError:
                 pass
-    # UTF-32LE/BE (multiple of 4 bytes)
+        elif buf.startswith(b"\xfe\xff"):
+            try:
+                text = buf.decode("utf-16-be", errors="strict")
+                if len(text) > 1 and _is_printable_text(text):
+                    return True
+            except UnicodeDecodeError:
+                pass
+        else:
+            # BOM-less UTF-16: accept only null-interleaved Latin-1 (ord < 0x0100) so random binary cannot pass.
+            for enc in ("utf-16-le", "utf-16-be"):
+                try:
+                    text = buf.decode(enc, errors="strict")
+                    if text and _is_printable_text(text) and all(ord(c) < 0x0100 for c in text):
+                        return True
+                except UnicodeDecodeError:
+                    pass
     if len(buf) >= 4 and len(buf) % 4 == 0:
         for enc in ("utf-32-le", "utf-32-be"):
             try:

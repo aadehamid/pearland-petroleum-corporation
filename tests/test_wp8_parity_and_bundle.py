@@ -275,6 +275,7 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         for wrap_name, wrapped in (
             ("unwrapped", double_bytes),
             ("gzip_nested", gzip.compress(double_bytes)),
+            ("short_random_binary_16b", bytes.fromhex("67745c10595a149a95ac435eafe7d5ee")),
         ):
             double_audit = audit_observable_for_hidden_leaks({f"double_{wrap_name}.zlib": wrapped})
             self.assertEqual(double_audit["leak_audit"]["status"], "FAILED", wrap_name)
@@ -283,8 +284,8 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                 (wrap_name, double_audit["findings"]),
             )
 
-        # Clean base64-wrapped zlib/gzip, small-window RFC 1950 zlib, raw-deflate, UTF-16/32 (incl. BOM/Unicode),
-        # and mixed-case / snake_case ASCII identifiers MUST ALL audit PASSED with zero false positives
+        # Clean base64-wrapped zlib/gzip, small-window RFC 1950 zlib, raw-deflate, UTF-16 (BOM-less Latin-1 &
+        # BOM-tagged full multi-script Unicode), UTF-32, and mixed-case/snake_case ASCII MUST ALL audit PASSED
         cobj = zlib.compressobj(9, zlib.DEFLATED, 8)
         small_win_zlib = cobj.compress(b"clean refinery operational summary") + cobj.flush()
         raw_deflate_clean = zlib.compress(b"small text")[2:-4]
@@ -296,8 +297,9 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
             ("utf16le_clean", "clean refinery operational summary".encode("utf-16-le")),
             ("utf16be_clean", "clean refinery operational summary".encode("utf-16-be")),
             ("utf16le_bom", "\ufeffclean refinery operational summary".encode("utf-16-le")),
-            ("utf16le_emoji", "clean refinery operational summary 🙂 ok".encode("utf-16-le")),
-            ("utf16be_cjk", "清洁精炼厂运行摘要".encode("utf-16-be")),
+            ("utf16le_bom_emoji", "\ufeffclean refinery operational summary 🙂 ok".encode("utf-16-le")),
+            ("utf16be_bom_cjk", "\ufeff清洁精炼厂运行摘要".encode("utf-16-be")),
+            ("utf16le_bom_multiscript", "\ufeffRésumé Привет 中文 العربية".encode("utf-16-le")),
             ("utf32le_clean", "clean refinery operational summary".encode("utf-32-le")),
             ("alnum_word_clean", b"operationalreport12345678"),
             ("alnum_24_clean", b"operationalreport1234567"),
