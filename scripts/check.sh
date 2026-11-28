@@ -73,6 +73,33 @@ uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml 
   python3 -m unittest tests/test_wp3_lakehouse_semantic_evidence.py
 
 echo
+echo "== WP-1c/1d Refinery A world kernel, EQ-01..EQ-08, Z3/Hypothesis proof obligations =="
+uv run --no-project --with pyyaml --with numpy --with z3-solver --with hypothesis \
+  python3 -m unittest tests/test_world_kernel.py verification/z3/test_proof_obligations.py
+
+echo
+echo "== WP-3B policy gate (ADR-0056), signed RBAC auth, and offline recorded-response agent (PO-10) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp3b_policy_auth_agent.py
+
+echo
+echo "== WP-2 source outbox, Sparkplug B OT/ICE, EDI CFG-0, and atomic inbox (PO-03) =="
+uv run --no-project --with pyyaml python3 -m unittest tests/test_wp2_integration.py
+
+echo
+echo "== WP-5B Relate WASM server-filtered graph package =="
+python3 -m unittest tests/test_wp5b_relate_wasm.py
+
+echo
+echo "== WP-3A reduced Pyomo+HiGHS Planning LP, UC-3 backcasting (PO-12b), and closed-loop WP-1 checks =="
+uv run --no-project --with pyomo --with highspy --with numpy --with pyyaml \
+  python3 -m unittest tests/test_wp3a_planning_lp.py
+
+echo
+echo "== WP-6 Scenario B vertical slice (S2-* crude-quality rejection & delayed restatement) =="
+uv run --no-project --with deltalake --with duckdb --with pyarrow --with pyyaml \
+  python3 -m unittest tests/test_wp6_scenario_b.py
+
+echo
 echo "== WP-8A DuckDB-vs-Databricks KPI parity and WP-8B Certified WorldExportBundle v1 =="
 uv run --no-project --with jsonschema python3 -m unittest tests/test_wp8_parity_and_bundle.py
 
