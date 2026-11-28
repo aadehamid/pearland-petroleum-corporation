@@ -28,11 +28,9 @@ def _stream_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
 
 
 def _normalize_r2_hw(
-    r2_raw_high_water: Mapping[tuple[str, str, str], int] | None,
+    r2_raw_high_water: Mapping[tuple[str, str, str], int],
 ) -> dict[tuple[str, str, str], int]:
     out: dict[tuple[str, str, str], int] = {}
-    if not r2_raw_high_water:
-        return out
     for k, v in r2_raw_high_water.items():
         if len(k) != 3:
             raise ValueError(
@@ -45,9 +43,9 @@ def _normalize_r2_hw(
 def check_recovery_gaps(
     outbox_rows: Sequence[Mapping[str, Any]],
     inbox_rows: Sequence[Mapping[str, Any]],
-    r2_raw_high_water: Mapping[tuple[str, str, str], int] | None = None,
+    r2_raw_high_water: Mapping[tuple[str, str, str], int],
 ) -> dict[str, Any]:
-    """Compare source outbox entries against applied InboxReceipts per (source_system, branch_id, partition_key)."""
+    """Compare source outbox entries against InboxReceipts and mandatory R2 raw-log high-water marks."""
     inbox_by_key: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     duplicate_inbox: list[dict[str, Any]] = []
     inbox_seqs_by_stream: dict[tuple[str, str, str], list[int]] = {}
@@ -194,7 +192,17 @@ def check_recovery_gaps(
                     "missing_sequences": missing_in_outbox,
                 }
             )
-        if max_r2 > max_out:
+        if stream not in r2_hw:
+            gaps.append(
+                {
+                    "kind": "RECOVERY_GAP_MISSING_R2_EVIDENCE",
+                    "source_system": src,
+                    "branch_id": branch,
+                    "partition_key": part,
+                    "outbox_high_water": max_out,
+                }
+            )
+        elif r2_hw[stream] > max_out:
             gaps.append(
                 {
                     "kind": "RECOVERY_GAP_MISSING_OUTBOX_VS_R2",
@@ -202,7 +210,7 @@ def check_recovery_gaps(
                     "branch_id": branch,
                     "partition_key": part,
                     "outbox_high_water": max_out,
-                    "r2_raw_high_water": max_r2,
+                    "r2_raw_high_water": r2_hw[stream],
                 }
             )
 
@@ -211,6 +219,7 @@ def check_recovery_gaps(
         "status": "CLEAN" if clean else "RECOVERY_GAP",
         "outbox_count": len(outbox_rows),
         "inbox_count": len(inbox_rows),
+        "r2_evidence_consulted_streams": sorted(f"{s}:{b}:{p}" for s, b, p in r2_hw),
         "gaps": gaps,
         "conflicts": conflicts,
         "duplicate_inbox": duplicate_inbox,

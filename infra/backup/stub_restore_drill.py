@@ -107,7 +107,11 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
         t0 = time.monotonic()
         shutil.copy2(backup_db, live_db)
         post_digest, restored_outbox = _canonical_db_digest(live_db)
-        gap_report = check_recovery_gaps(restored_outbox, inbox_rows)
+        gap_report = check_recovery_gaps(
+            restored_outbox,
+            inbox_rows,
+            r2_raw_high_water={("refinery_lims", "baseline", "default"): row_count},
+        )
         rto_seconds = time.monotonic() - t0
         passed = (pre_digest == post_digest) and (gap_report["status"] == "CLEAN") and (rto_seconds <= 3600.0)
         return {

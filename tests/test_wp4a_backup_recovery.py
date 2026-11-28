@@ -33,22 +33,30 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
 
     def test_recovery_gap_checker_detects_missing_receipts_tail_loss_holes_dups_and_conflicts(self):
         outbox = [
-            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "d1"},
-            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 2, "delivery_key": "k2", "payload_digest": "d2"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "default", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "d1"},
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "default", "source_sequence": 2, "delivery_key": "k2", "payload_digest": "d2"},
         ]
         inbox = [dict(r) for r in outbox]
-        self.assertEqual(check_recovery_gaps(outbox, inbox)["status"], "CLEAN")
+        r2_ok = {("refinery_sqlite", "baseline", "default"): 2}
+        clean_res = check_recovery_gaps(outbox, inbox, r2_raw_high_water=r2_ok)
+        self.assertEqual(clean_res["status"], "CLEAN")
+        self.assertEqual(clean_res["r2_evidence_consulted_streams"], ["refinery_sqlite:baseline:default"])
+
+        # 0. Missing R2 raw-log evidence for a stream MUST fail closed (PPC-REVIEW-003 §2)
+        no_r2 = check_recovery_gaps(outbox, inbox, r2_raw_high_water={})
+        self.assertEqual(no_r2["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_R2_EVIDENCE" for g in no_r2["gaps"]))
 
         # 1. Missing receipt for seq 2 -> RECOVERY_GAP_UNAPPLIED_OUTBOX
-        missing = check_recovery_gaps(outbox, inbox[:1])
+        missing = check_recovery_gaps(outbox, inbox[:1], r2_raw_high_water=r2_ok)
         self.assertEqual(missing["status"], "RECOVERY_GAP")
         self.assertEqual(missing["gaps"][0]["kind"], "RECOVERY_GAP_UNAPPLIED_OUTBOX")
 
         # 2. Lost outbox tail (inbox has seq 1..3, restored outbox truncated at 1..2) -> RECOVERY_GAP_MISSING_OUTBOX_TAIL
         inbox_tail = inbox + [
-            {"source_system": "refinery_sqlite", "branch_id": "baseline", "source_sequence": 3, "delivery_key": "k3", "payload_digest": "d3"}
+            {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "default", "source_sequence": 3, "delivery_key": "k3", "payload_digest": "d3"}
         ]
-        tail_loss = check_recovery_gaps(outbox, inbox_tail)
+        tail_loss = check_recovery_gaps(outbox, inbox_tail, r2_raw_high_water=r2_ok)
         self.assertEqual(tail_loss["status"], "RECOVERY_GAP")
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_TAIL" for g in tail_loss["gaps"]))
 
@@ -64,34 +72,34 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
             {"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 1, "delivery_key": "k1", "payload_digest": "d1"},
             {"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 2, "delivery_key": "k1", "payload_digest": "d2"},
         ]
-        reused_res = check_recovery_gaps(reused_key_outbox, [dict(r) for r in reused_key_outbox])
+        reused_res = check_recovery_gaps(reused_key_outbox, [dict(r) for r in reused_key_outbox], r2_raw_high_water={("s", "b", "p"): 2})
         self.assertEqual(reused_res["status"], "RECOVERY_GAP")
         self.assertTrue(any(c["kind"] == "PAYLOAD_DIGEST_CONFLICT" for c in reused_res["conflicts"]))
 
-        # 4. Sequence hole (1 -> 3) -> RECOVERY_GAP_SEQUENCE_HOLE
+        # 5. Sequence hole (1 -> 3) -> RECOVERY_GAP_SEQUENCE_HOLE
         hole_outbox = [outbox[0], {**outbox[1], "source_sequence": 3, "delivery_key": "k3"}]
         hole_inbox = [inbox[0], {**inbox[1], "source_sequence": 3, "delivery_key": "k3"}]
-        hole = check_recovery_gaps(hole_outbox, hole_inbox)
+        hole = check_recovery_gaps(hole_outbox, hole_inbox, r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 3})
         self.assertEqual(hole["status"], "RECOVERY_GAP")
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_SEQUENCE_HOLE" for g in hole["gaps"]))
 
-        # 5. Delivery key mismatch at same sequence -> DELIVERY_KEY_MISMATCH
-        dkey_bad = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "delivery_key": "k2-other"}])
+        # 6. Delivery key mismatch at same sequence -> DELIVERY_KEY_MISMATCH
+        dkey_bad = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "delivery_key": "k2-other"}], r2_raw_high_water=r2_ok)
         self.assertEqual(dkey_bad["status"], "RECOVERY_GAP")
         self.assertTrue(any(c["kind"] == "DELIVERY_KEY_MISMATCH" for c in dkey_bad["conflicts"]))
 
-        # 6. Duplicate outbox sequence with distinct delivery_key -> duplicate_outbox
+        # 7. Duplicate outbox sequence with distinct delivery_key -> duplicate_outbox
         dup_outbox = outbox + [{**outbox[0], "delivery_key": "k1-dup"}]
-        dup_res = check_recovery_gaps(dup_outbox, inbox)
+        dup_res = check_recovery_gaps(dup_outbox, inbox, r2_raw_high_water=r2_ok)
         self.assertEqual(dup_res["status"], "RECOVERY_GAP")
         self.assertEqual(len(dup_res["duplicate_outbox"]), 1)
 
-        # 7. Digest conflict -> PAYLOAD_DIGEST_CONFLICT
-        conflict = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "payload_digest": "DIFFERENT"}])
+        # 8. Digest conflict -> PAYLOAD_DIGEST_CONFLICT
+        conflict = check_recovery_gaps(outbox, [inbox[0], {**inbox[1], "payload_digest": "DIFFERENT"}], r2_raw_high_water=r2_ok)
         self.assertEqual(conflict["status"], "RECOVERY_GAP")
         self.assertEqual(conflict["conflicts"][0]["kind"], "PAYLOAD_DIGEST_CONFLICT")
 
-        # 8. Multi-partition streams (same source+branch, distinct partition_key) MUST pass CLEAN (PPC-INT-001 §2)
+        # 9. Multi-partition streams (same source+branch, distinct partition_key) MUST pass CLEAN (PPC-INT-001 §2)
         multi_part_outbox = [
             {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P1", "source_sequence": 1, "delivery_key": "k1:p1", "payload_digest": "d1"},
             {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P1", "source_sequence": 2, "delivery_key": "k2:p1", "payload_digest": "d2"},
@@ -99,7 +107,8 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
             {"source_system": "refinery_sqlite", "branch_id": "baseline", "partition_key": "P2", "source_sequence": 2, "delivery_key": "k2:p2", "payload_digest": "d4"},
         ]
         multi_part_inbox = [dict(r) for r in multi_part_outbox]
-        self.assertEqual(check_recovery_gaps(multi_part_outbox, multi_part_inbox)["status"], "CLEAN")
+        multi_r2 = {("refinery_sqlite", "baseline", "P1"): 2, ("refinery_sqlite", "baseline", "P2"): 2}
+        self.assertEqual(check_recovery_gaps(multi_part_outbox, multi_part_inbox, r2_raw_high_water=multi_r2)["status"], "CLEAN")
 
     def test_sqlite_stub_writer_corruption_and_restore_drill_passes(self):
         result = run_sqlite_stub_restore_drill(row_count=25)
