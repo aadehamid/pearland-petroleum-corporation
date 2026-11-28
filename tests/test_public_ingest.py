@@ -60,7 +60,7 @@ class TestPublicIngest(unittest.TestCase):
             public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: missing_total)
         # Truncated pagination (total=100, page 1 returns 1 row, page 2 returns []) must raise loudly
         pages = iter([
-            json.dumps({"response": {"total": "100", "data": [{"period": "2025-01-02", "value": "70.0"}]}}).encode("utf-8"),
+            json.dumps({"response": {"total": "100", "data": [{"period": "2025-01-02", "series": entry["series_id"], "value": "70.0"}]}}).encode("utf-8"),
             json.dumps({"response": {"total": "100", "data": []}}).encode("utf-8"),
         ])
         with self.assertRaises(ValueError):
@@ -68,21 +68,33 @@ class TestPublicIngest(unittest.TestCase):
         # Malformed HURDAT2 row (<8 cols) must fail closed
         with self.assertRaises(ValueError):
             public_ingest.parse_hurdat2_storms("AL092017, HARVEY, 1,\n20170825, 1800, , HU, 27.3N\n", min_year=0)
-        # Duplicate EIA period or series filter mismatch must fail closed
+        # Duplicate EIA period, missing/wrong series key, or out-of-window period must fail closed
         dup_periods = json.dumps(
-            {"response": {"total": "2", "data": [{"period": "2025-01-02", "value": "70.0"}, {"period": "2025-01-02", "value": "71.0"}]}}
+            {"response": {"total": "2", "data": [
+                {"period": "2025-01-02", "series": entry["series_id"], "value": "70.0"},
+                {"period": "2025-01-02", "series": entry["series_id"], "value": "71.0"},
+            ]}}
         ).encode("utf-8")
         with self.assertRaises(ValueError):
             public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: dup_periods)
-        wrong_series = json.dumps(
-            {"response": {"total": "1", "data": [{"period": "2025-01-02", "series": "WRONG_ID", "value": "70.0"}]}}
+        missing_series = json.dumps(
+            {"response": {"total": "1", "data": [{"period": "2025-01-02", "value": "70.0"}]}}
         ).encode("utf-8")
         with self.assertRaises(ValueError):
-            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: wrong_series)
-        # EPA NAICS/state filter mismatch must fail closed
-        wrong_epa = json.dumps([{"FACILITY_ID": 1, "NAICS_CODE": "221100", "STATE": "OK"}]).encode("utf-8")
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: missing_series)
+        out_of_window = json.dumps(
+            {"response": {"total": "1", "data": [{"period": "2026-06-01", "series": entry["series_id"], "value": "70.0"}]}}
+        ).encode("utf-8")
         with self.assertRaises(ValueError):
-            public_ingest.fetch_epa_ghgrp_state("TX", http_get=lambda _u: wrong_epa)
+            public_ingest.fetch_eia_series(entry, "KEY", "2025-01-01", "2025-12-31", http_get=lambda _u: out_of_window)
+        # EPA missing/wrong NAICS or state filter must fail closed
+        for bad_epa in (
+            [{"FACILITY_ID": 1, "NAICS_CODE": "221100", "STATE": "TX"}],
+            [{"FACILITY_ID": 1, "STATE": "TX"}],
+            [{"FACILITY_ID": 1, "NAICS_CODE": "324110"}],
+        ):
+            with self.assertRaises(ValueError):
+                public_ingest.fetch_epa_ghgrp_state("TX", http_get=lambda _u, b=bad_epa: json.dumps(b).encode("utf-8"))
         sanitized = public_ingest.sanitize_url_for_logs("https://api.eia.gov/v2/x?api_key=SUPERSECRET123&length=5000")
         self.assertNotIn("SUPERSECRET123", sanitized)
         self.assertIn("api_key=REDACTED", sanitized)
@@ -93,9 +105,12 @@ class TestPublicIngest(unittest.TestCase):
         def fake_get(url: str) -> bytes:
             calls.append(url)
             if "ROWS/0:1/" in url:
-                return json.dumps([{"FACILITY_ID": 1001}, {"FACILITY_ID": 1002}]).encode("utf-8")
+                return json.dumps([
+                    {"FACILITY_ID": 1001, "STATE": "TX", "NAICS_CODE": "324110"},
+                    {"FACILITY_ID": 1002, "STATE": "TX", "NAICS_CODE": "324110"},
+                ]).encode("utf-8")
             if "ROWS/2:3/" in url:
-                return json.dumps([{"facility_id": 1003}]).encode("utf-8")
+                return json.dumps([{"facility_id": 1003, "state": "TX", "naics_code": "324110"}]).encode("utf-8")
             raise AssertionError(f"Unexpected EPA URL: {url}")
 
         rows = public_ingest.fetch_epa_ghgrp_state("TX", http_get=fake_get, page_size=2)
@@ -117,17 +132,33 @@ class TestPublicIngest(unittest.TestCase):
         self.assertEqual(len(phmsa_rows), 2)
         self.assertEqual(phmsa_rows[0]["provenance_class"], "OBSERVED")
 
-        # Zero data rows must fail rather than report INGESTED
+        # Zero data rows OR row missing REPORT_NUMBER must fail closed
         with self.assertRaises(ValueError):
             public_ingest.parse_phmsa_liquid_zip(_make_phmsa_zip(include_readme=True, empty_rows=True))
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr(
+                "partial.csv",
+                "REPORT_NUMBER,I_YEAR,ACCIDENT_STATE_ABBREVIATION,COMMODITY_RELEASED_TYPE,CAUSE\n"
+                "20240001,2024,TX,CRUDE OIL,CORROSION\n"
+                ",2024,LA,CRUDE OIL,CORROSION\n",
+            )
+        with self.assertRaises(ValueError):
+            public_ingest.parse_phmsa_liquid_zip(buf.getvalue())
 
     def test_run_public_ingest_offline_upload_and_dry_run_modes(self):
         uploaded: dict[str, bytes] = {}
 
         def fake_get(url: str) -> bytes:
             if "api.eia.gov" in url:
+                import urllib.parse
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+                sid = qs["facets[series][]"][0]
                 return json.dumps(
-                    {"response": {"total": "2", "data": [{"period": "2025-01-02", "value": "73.12"}, {"period": "2025-01-03", "value": "74.05"}]}}
+                    {"response": {"total": "2", "data": [
+                        {"period": "2025-01-02", "series": sid, "value": "73.12"},
+                        {"period": "2025-01-03", "series": sid, "value": "74.05"},
+                    ]}}
                 ).encode("utf-8")
             if "nhc.noaa.gov" in url:
                 return SAMPLE_HURDAT2.encode("utf-8")

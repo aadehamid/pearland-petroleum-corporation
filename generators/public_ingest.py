@@ -241,9 +241,14 @@ def fetch_eia_series(
             )
         for row in batch:
             row_series = row.get("series")
-            if row_series is not None and str(row_series) != entry["series_id"]:
+            if row_series is None or str(row_series) != entry["series_id"]:
                 raise ValueError(
                     f"EIA series filter mismatch: requested {entry['series_id']}, got {row_series!r}"
+                )
+            row_period = str(row.get("period", "")).strip()
+            if not row_period or not (start_date <= row_period <= end_date):
+                raise ValueError(
+                    f"EIA period {row_period!r} outside pinned window [{start_date}, {end_date}] for {entry['series_id']}"
                 )
         rows.extend(batch)
         offset += len(batch)
@@ -285,10 +290,10 @@ def fetch_epa_ghgrp_state(
             raise ValueError(f"Unexpected EPA Envirofacts response structure for state {state}")
         for rec in parsed:
             rec_state = rec.get("state") if rec.get("state") is not None else rec.get("STATE")
-            if rec_state is not None and str(rec_state).strip().upper() != state.upper():
+            if rec_state is None or str(rec_state).strip().upper() != state.upper():
                 raise ValueError(f"EPA state filter mismatch: requested {state}, got {rec_state!r}")
             rec_naics = rec.get("naics_code") if rec.get("naics_code") is not None else rec.get("NAICS_CODE")
-            if rec_naics is not None and str(rec_naics).strip() != "324110":
+            if rec_naics is None or str(rec_naics).strip() != "324110":
                 raise ValueError(f"EPA NAICS filter mismatch: requested 324110, got {rec_naics!r}")
         records.extend(parsed)
         if len(parsed) < page_size:
@@ -364,9 +369,11 @@ def parse_phmsa_liquid_zip(zip_bytes: bytes) -> list[dict[str, Any]]:
                 matched_member = member
                 text.seek(0)
                 reader = csv.DictReader(text, delimiter=delimiter)
-                for row in reader:
-                    if not row.get("REPORT_NUMBER"):
+                for row_num, row in enumerate(reader, start=2):
+                    if not any((v or "").strip() for v in row.values()):
                         continue
+                    if not (row.get("REPORT_NUMBER") or "").strip():
+                        raise ValueError(f"PHMSA archive member {member} row {row_num} missing REPORT_NUMBER")
                     rows.append(
                         {
                             "report_number": row.get("REPORT_NUMBER", "").strip(),
@@ -668,9 +675,11 @@ def main() -> None:
         raise KeyError(f"EIA_API_KEY missing from {args.eia_env}")
 
     upload_fn = None
-    target_bucket = "pearland-petroleum-corp"
-    if not args.no_upload:
-        r2_env = load_env_file(args.r2_env)
+    r2_env_path = Path(args.r2_env).expanduser()
+    if args.no_upload:
+        target_bucket = load_env_file(r2_env_path).get("R2_BUCKET", "UNCONFIGURED_LOCAL_DRY_RUN") if r2_env_path.exists() else "UNCONFIGURED_LOCAL_DRY_RUN"
+    else:
+        r2_env = load_env_file(r2_env_path)
         target_bucket = r2_env["R2_BUCKET"]
         if "hidden" in target_bucket.lower():
             raise ValueError("Public raw ingestion must never write to the hidden-truth bucket (ADR-0057)")

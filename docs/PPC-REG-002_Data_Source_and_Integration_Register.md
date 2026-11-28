@@ -52,4 +52,4 @@ mapping, SLA, retry, failure behavior, DQ and owner.
 - **Retry:** Single 2-second backoff retry on HTTP 429; 60-second request timeout.
 - **Failure behavior:** Fail-closed on HTTP 4xx/5xx (with `api_key` redacted), missing/zero/truncated EIA `total`, duplicate EIA periods, filter mismatches (EIA series ID, EPA NAICS `324110`/state), malformed HURDAT2 rows, missing PHMSA `REPORT_NUMBER` data, or R2 ETag-vs-MD5 mismatch.
 - **DQ:** Recomputable SHA-256 and MD5/ETag per object, non-empty rows, unique EIA periods, filter conformance, and secret-free manifest verification (`tests/test_public_ingest.py`).
-- **Owner:** Refinery World & Public Data Engineer (`WP-1` accountable role in `PPC-PLAN-001`).
+- **Owner:** Refinery Process Modeling & Simulation Engineer (`WP-1` accountable role in `PPC-PLAN-001`).
