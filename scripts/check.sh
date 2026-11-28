@@ -49,6 +49,10 @@ echo "== WP-0 contracts, schemas, adapters, semantic, and infra =="
 uv run --no-project --with jsonschema --with referencing --with pyyaml --with rdflib --with pyshacl \
   python3 -m unittest tests/test_wp0_contracts.py
 
+echo
+echo "== WP-4A backup op-budget, recovery-gap checker, and SQLite restore drill =="
+python3 -m unittest -q tests/test_wp4a_backup_recovery.py
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   (cd infra && docker compose --profile all config -q) && echo "  ok  infra/docker-compose.yml parses"
 else
