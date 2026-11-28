@@ -80,10 +80,13 @@ def _find_next_magic_offset(buf: bytes) -> int | None:
     return best
 
 
-def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> tuple[bytes, bool]:
-    """Recover as much decompressed output as possible before a corrupt trailer or mid-stream error."""
+def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> tuple[bytes, bool, bool]:
+    """Recover as much decompressed output as possible before a corrupt trailer or mid-stream error.
+
+    Returns (recovered_bytes, budget_hit, reached_eof).
+    """
     if remaining_budget <= 0 or not data:
-        return b"", False
+        return b"", False, False
     dobj = zlib.decompressobj(wbits)
     out = bytearray()
     budget_hit = False
@@ -102,6 +105,8 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
                 out.extend(piece)
             if dobj.unconsumed_tail:
                 budget_hit = True
+                break
+            if dobj.eof:
                 break
             pos = end
         except zlib.error:
@@ -128,6 +133,8 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
                         if dobj.unconsumed_tail:
                             budget_hit = True
                             break
+                        if dobj.eof:
+                            break
                     except zlib.error:
                         break
             break
@@ -139,7 +146,7 @@ def _recover_partial_stream(wbits: int, data: bytes, remaining_budget: int) -> t
                 out.extend(flushed[:rem_cap])
     except zlib.error:
         pass
-    return bytes(out), budget_hit
+    return bytes(out), budget_hit, bool(dobj.eof)
 
 
 def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool, bool]:
@@ -181,17 +188,39 @@ def _decompress_all_members(buf: bytes) -> tuple[list[bytes], bool, bool]:
                 # Recover any bytes decompressed before a corrupt trailer or mid-stream error
                 # instead of silently discarding them, and fail closed if a compressed header
                 # failed decompression.
-                partial, partial_budget = _recover_partial_stream(wbits, rem, remaining_budget)
+                partial, partial_budget, _ = _recover_partial_stream(wbits, rem, remaining_budget)
+                # If a 2-byte zlib header (CMF/FLG) or 10-byte gzip header was corrupted,
+                # also probe raw-deflate immediately past the header; only treat it as a
+                # header-corrupted compressed stream when raw-deflate reaches EOF or hits budget
+                # (avoiding false positives on plain ASCII/JSON or the other container format).
+                header_skip_partial = b""
+                if not partial and wbits == zlib.MAX_WBITS and len(rem) > 2 and not rem.startswith(b"\x1f\x8b"):
+                    cand, skip_budget, skip_eof = _recover_partial_stream(
+                        -zlib.MAX_WBITS, rem[2:], remaining_budget
+                    )
+                    if skip_eof or skip_budget:
+                        header_skip_partial = cand
+                        partial_budget = partial_budget or skip_budget
+                elif not partial and wbits == 16 + zlib.MAX_WBITS and len(rem) > 10 and not rem.startswith(
+                    (b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda")
+                ):
+                    cand, skip_budget, skip_eof = _recover_partial_stream(
+                        -zlib.MAX_WBITS, rem[10:], remaining_budget
+                    )
+                    if skip_eof or skip_budget:
+                        header_skip_partial = cand
+                        partial_budget = partial_budget or skip_budget
+                recovered = partial or header_skip_partial
                 if partial_budget:
                     budget_exceeded = True
-                if partial:
-                    total_out += len(partial)
-                    chunks.append(partial)
-                    results.append(partial)
-                if wbits == 16 + zlib.MAX_WBITS and (partial or rem.startswith(b"\x1f\x8b")):
+                if recovered:
+                    total_out += len(recovered)
+                    chunks.append(recovered)
+                    results.append(recovered)
+                if wbits == 16 + zlib.MAX_WBITS and (recovered or rem.startswith(b"\x1f\x8b")):
                     corrupt_unscanned = True
                 elif wbits == zlib.MAX_WBITS and (
-                    partial or rem.startswith((b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda"))
+                    recovered or rem.startswith((b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda"))
                 ):
                     corrupt_unscanned = True
                 next_off = _find_next_magic_offset(rem)

@@ -181,6 +181,14 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
                 + bytes([zlib.compress(b"evaluation/hidden/keys.json")[-1] ^ 0xFF]),
             ),
             (
+                "zlib_corrupt_flg_header",
+                b"\x78\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:],
+            ),
+            (
+                "zlib_corrupt_cmf_header",
+                b"\x79\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:],
+            ),
+            (
                 "gzip_truncated_then_garbage_then_clean",
                 gzip.compress(b"evaluation/hidden/keys.json" + b"A" * 100)[:40]
                 + b"MIDGARBAGE"
@@ -237,6 +245,25 @@ class TestWP8ParityAndWorldBundle(unittest.TestCase):
         self.assertTrue(
             any(f["marker"] == "DECOMPRESSION_BUDGET_EXCEEDED_UNSCANNED" for f in bomb_audit["findings"])
         )
+
+        # Explicitly pin DECOMPRESSION_ERROR_UNSCANNED as the sole failure signal on a corrupt clean stream
+        clean_gz = gzip.compress(b"all clean here")
+        corrupt_clean_gz = clean_gz[:-1] + bytes([clean_gz[-1] ^ 0xFF])
+        corrupt_clean_audit = audit_observable_for_hidden_leaks({"corrupt_clean.gz": corrupt_clean_gz})
+        self.assertEqual(corrupt_clean_audit["leak_audit"]["status"], "FAILED")
+        self.assertEqual(
+            [f["marker"] for f in corrupt_clean_audit["findings"]],
+            ["DECOMPRESSION_ERROR_UNSCANNED"],
+        )
+
+        # Verify corrupt zlib CMF/FLG headers both recover the hidden marker and emit DECOMPRESSION_ERROR_UNSCANNED
+        corrupt_hdr_audit = audit_observable_for_hidden_leaks(
+            {"bad_hdr.zlib": b"\x78\x9d" + zlib.compress(b"evaluation/hidden/keys.json")[2:]}
+        )
+        self.assertEqual(corrupt_hdr_audit["leak_audit"]["status"], "FAILED")
+        hdr_markers = {f["marker"] for f in corrupt_hdr_audit["findings"]}
+        self.assertIn("DECOMPRESSION_ERROR_UNSCANNED", hdr_markers)
+        self.assertIn("evaluation/hidden", hdr_markers)
 
         # Empty adapter_pins MUST be rejected
         with self.assertRaises(ValueError):
