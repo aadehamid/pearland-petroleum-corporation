@@ -68,6 +68,15 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
         )
         self.assertEqual(partial_ok["status"], "CLEAN")
         self.assertEqual(partial_ok["out_of_scope_r2_streams"], ["other_store:baseline:p"])
+        # Malformed expected_streams or missing binding fields MUST raise loudly
+        with self.assertRaises(ValueError):
+            check_recovery_gaps([], [], {("s", "b", "p"): 1}, expected_streams=["abc"])  # type: ignore[list-item]
+        with self.assertRaises(ValueError):
+            check_recovery_gaps(
+                [{"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 1}],
+                [{"source_system": "s", "branch_id": "b", "partition_key": "p", "source_sequence": 1}],
+                r2_raw_high_water={("s", "b", "p"): 1},
+            )
 
         # 1. Missing receipt for seq 2 -> RECOVERY_GAP_UNAPPLIED_OUTBOX
         missing = check_recovery_gaps(outbox, inbox[:1], r2_raw_high_water=r2_ok)

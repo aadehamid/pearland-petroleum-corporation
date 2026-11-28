@@ -20,12 +20,30 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 
+def _require_nonempty_str(row: Mapping[str, Any], field: str) -> str:
+    val = row.get(field)
+    if val is None or not str(val).strip():
+        raise ValueError(f"Row missing required non-empty binding field {field!r}: {dict(row)!r}")
+    return str(val).strip()
+
+
 def _stream_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     return (
-        str(row["source_system"]),
-        str(row["branch_id"]),
-        str(row.get("partition_key", "default")),
+        _require_nonempty_str(row, "source_system"),
+        _require_nonempty_str(row, "branch_id"),
+        _require_nonempty_str(row, "partition_key"),
     )
+
+
+def _validate_stream_tuple(k: Any, label: str) -> tuple[str, str, str]:
+    if isinstance(k, (str, bytes)) or not isinstance(k, (tuple, list)) or len(k) != 3:
+        raise ValueError(
+            f"{label} entries must be 3-tuples (source_system, branch_id, partition_key), got {k!r}"
+        )
+    parts = tuple(str(x).strip() for x in k)
+    if any(not p for p in parts):
+        raise ValueError(f"{label} tuple contains empty component: {k!r}")
+    return (parts[0], parts[1], parts[2])
 
 
 def _normalize_r2_hw(
@@ -33,14 +51,11 @@ def _normalize_r2_hw(
 ) -> dict[tuple[str, str, str], int]:
     out: dict[tuple[str, str, str], int] = {}
     for k, v in r2_raw_high_water.items():
-        if len(k) != 3:
-            raise ValueError(
-                f"r2_raw_high_water keys must be 3-tuples (source_system, branch_id, partition_key), got {k!r}"
-            )
+        stream = _validate_stream_tuple(k, "r2_raw_high_water")
         val = int(v)
         if val < 0:
             raise ValueError(f"r2_raw_high_water value for {k!r} must be non-negative, got {val}")
-        out[(str(k[0]), str(k[1]), str(k[2]))] = val
+        out[stream] = val
     return out
 
 
@@ -77,24 +92,23 @@ def check_recovery_gaps(
         else:
             inbox_by_key[key] = dict(row)
 
-        dkey = str(row.get("delivery_key") or "")
-        dig = str(row.get("payload_digest") or "")
-        if dkey:
-            if dkey in delivery_key_seen_inbox:
-                prev_dig, prev_key = delivery_key_seen_inbox[dkey]
-                conflicts.append(
-                    {
-                        "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
-                        "side": "inbox",
-                        "delivery_key": dkey,
-                        "first_key": prev_key,
-                        "second_key": key,
-                        "first_digest": prev_dig,
-                        "second_digest": dig,
-                    }
-                )
-            else:
-                delivery_key_seen_inbox[dkey] = (dig, key)
+        dkey = _require_nonempty_str(row, "delivery_key")
+        dig = _require_nonempty_str(row, "payload_digest")
+        if dkey in delivery_key_seen_inbox:
+            prev_dig, prev_key = delivery_key_seen_inbox[dkey]
+            conflicts.append(
+                {
+                    "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
+                    "side": "inbox",
+                    "delivery_key": dkey,
+                    "first_key": prev_key,
+                    "second_key": key,
+                    "first_digest": prev_dig,
+                    "second_digest": dig,
+                }
+            )
+        else:
+            delivery_key_seen_inbox[dkey] = (dig, key)
 
     gaps: list[dict[str, Any]] = []
     duplicate_outbox: list[dict[str, Any]] = []
@@ -111,24 +125,23 @@ def check_recovery_gaps(
         else:
             outbox_by_key[key] = dict(row)
 
-        dkey = str(row.get("delivery_key") or "")
-        dig = str(row.get("payload_digest") or "")
-        if dkey:
-            if dkey in delivery_key_seen_outbox:
-                prev_dig, prev_key = delivery_key_seen_outbox[dkey]
-                conflicts.append(
-                    {
-                        "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
-                        "side": "outbox",
-                        "delivery_key": dkey,
-                        "first_key": prev_key,
-                        "second_key": key,
-                        "first_digest": prev_dig,
-                        "second_digest": dig,
-                    }
-                )
-            else:
-                delivery_key_seen_outbox[dkey] = (dig, key)
+        dkey = _require_nonempty_str(row, "delivery_key")
+        dig = _require_nonempty_str(row, "payload_digest")
+        if dkey in delivery_key_seen_outbox:
+            prev_dig, prev_key = delivery_key_seen_outbox[dkey]
+            conflicts.append(
+                {
+                    "kind": "PAYLOAD_DIGEST_CONFLICT" if prev_dig != dig else "DELIVERY_KEY_REUSED_ACROSS_SEQUENCES",
+                    "side": "outbox",
+                    "delivery_key": dkey,
+                    "first_key": prev_key,
+                    "second_key": key,
+                    "first_digest": prev_dig,
+                    "second_digest": dig,
+                }
+            )
+        else:
+            delivery_key_seen_outbox[dkey] = (dig, key)
 
         receipt = inbox_by_key.get(key)
         if receipt is None:
@@ -175,7 +188,7 @@ def check_recovery_gaps(
         streams_to_check = restored_streams | {k for k, v in r2_hw.items() if v > 0}
         out_of_scope_r2_streams: list[str] = []
     else:
-        scoped = {(str(s[0]), str(s[1]), str(s[2])) for s in expected_streams}
+        scoped = {_validate_stream_tuple(s, "expected_streams") for s in expected_streams}
         streams_to_check = restored_streams | scoped
         out_of_scope_r2_streams = sorted(f"{s}:{b}:{p}" for s, b, p in (set(r2_hw) - streams_to_check))
     for stream in sorted(streams_to_check):
