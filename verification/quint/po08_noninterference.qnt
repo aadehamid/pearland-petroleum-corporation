@@ -18,14 +18,17 @@ module po08_noninterference {
   var reader_cutoff: int
   var reader_has_grant: bool
 
-  pure def is_visible(p: Pub, cutoff: int, has_grant: bool): bool =
-    has_grant
-      and (not(p.restricted))
+  // Record-level visibility independent of dynamic grant toggles
+  pure def record_eligible_at_cutoff(p: Pub, cutoff: int): bool =
+    (not(p.restricted))
       and (p.recorded_at <= cutoff)
       and (p.published_at <= cutoff)
       and (p.receipt_at >= p.published_at)
       and (p.receipt_at <= cutoff)
       and (p.retracted_at == -1 or p.retracted_at > cutoff)
+
+  pure def is_visible(p: Pub, cutoff: int, has_grant: bool): bool =
+    has_grant and record_eligible_at_cutoff(p, cutoff)
 
   pure def visible_projection(w: Set[Pub], cutoff: int, has_grant: bool): Set[Pub] =
     w.filter(p => is_visible(p, cutoff, has_grant))
@@ -34,24 +37,26 @@ module po08_noninterference {
     reader_cutoff' = 100,
     reader_has_grant' = true,
     world_a' = Set(
-      { id: "P1", ordinal: 1, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
-      { id: "P_FUTURE", ordinal: 2, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 111 },
+      { id: "P1", ordinal: 0, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
+      { id: "P_FUTURE", ordinal: 1, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 111 },
+      { id: "P_RETRACTED", ordinal: 2, recorded_at: 70, published_at: 75, receipt_at: 80, retracted_at: 95, restricted: false, payload: 333 },
       { id: "P_SECRET", ordinal: 3, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: -1, restricted: true, payload: 999 }
     ),
     world_b' = Set(
-      { id: "P1", ordinal: 1, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
-      { id: "P_FUTURE", ordinal: 2, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 222 },
+      { id: "P1", ordinal: 0, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: 115, restricted: false, payload: 10 },
+      { id: "P_FUTURE", ordinal: 1, recorded_at: 80, published_at: 120, receipt_at: 125, retracted_at: -1, restricted: false, payload: 222 },
+      { id: "P_RETRACTED", ordinal: 2, recorded_at: 70, published_at: 75, receipt_at: 80, retracted_at: 95, restricted: false, payload: 444 },
       { id: "P_SECRET", ordinal: 3, recorded_at: 80, published_at: 85, receipt_at: 90, retracted_at: -1, restricted: true, payload: 888 }
     )
   }
 
-  // Mutate hidden/future payloads or advance/rewind cutoff while keeping visible facts identical
-  action mutate_invisible_in_b = all {
+  // Mutate only records permanently ineligible at reader_cutoff (future, retracted, or restricted)
+  action mutate_ineligible_in_b = all {
     reader_cutoff' = reader_cutoff,
     reader_has_grant' = reader_has_grant,
     world_a' = world_a,
     world_b' = world_b.map(p =>
-      if (not(is_visible(p, reader_cutoff, reader_has_grant))) { ...p, payload: p.payload + 1 } else p
+      if (not(record_eligible_at_cutoff(p, reader_cutoff))) { ...p, payload: p.payload + 1 } else p
     )
   }
 
@@ -63,11 +68,11 @@ module po08_noninterference {
   }
 
   action step = any {
-    mutate_invisible_in_b,
+    mutate_ineligible_in_b,
     toggle_grant
   }
 
-  // PO-08 invariant: invisible (future, restricted, unreceipted, or already-retracted) mutations never change reader view
+  // PO-08 invariant: ineligible (future, restricted, unreceipted, or cutoff-retracted) mutations never alter reader view
   val non_interference =
     visible_projection(world_a, reader_cutoff, reader_has_grant)
       == visible_projection(world_b, reader_cutoff, reader_has_grant)

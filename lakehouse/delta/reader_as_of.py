@@ -40,6 +40,11 @@ class AccessGrant:
     valid_from_utc: str
     valid_until_utc: str | None = None
     effect: str = "ALLOW"  # ALLOW | DENY
+    recorded_at_utc: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.effect not in ("ALLOW", "DENY"):
+            raise ValueError(f"AccessGrant.effect must be 'ALLOW' or 'DENY', got {self.effect!r}")
 
 
 @dataclass(frozen=True)
@@ -73,6 +78,7 @@ class PublicationRecord:
     supersedes_publication_id: str | None
     payload: Mapping[str, Any]
     provenance_class: str = "SYNTHETIC"
+    effective_end_utc: str | None = None
 
 
 def _validate_supersession_chain(pubs: Sequence[PublicationRecord]) -> str | None:
@@ -80,7 +86,7 @@ def _validate_supersession_chain(pubs: Sequence[PublicationRecord]) -> str | Non
     by_id: dict[str, PublicationRecord] = {}
     children_of: dict[str, list[str]] = {}
     for p in pubs:
-        if p.supersession_ordinal < 1:
+        if p.supersession_ordinal < 0:
             return "INVALID_ORDINAL"
         if p.publication_id in by_id:
             return "NON_UNIQUE"
@@ -114,7 +120,12 @@ def _grant_allows(
 ) -> bool:
     applicable: list[AccessGrant] = []
     for g in grants:
+        if g.effect not in ("ALLOW", "DENY"):
+            raise ValueError(f"AccessGrant.effect must be 'ALLOW' or 'DENY', got {g.effect!r}")
         if g.role != role or g.channel != channel or g.purpose != purpose:
+            continue
+        rec_at = parse_utc_timestamp(g.recorded_at_utc or g.valid_from_utc)
+        if rec_at > cutoff:
             continue
         start = parse_utc_timestamp(g.valid_from_utc)
         end = parse_utc_timestamp(g.valid_until_utc) if g.valid_until_utc is not None else None
@@ -174,9 +185,11 @@ def select_reader_as_of(
     grants: Sequence[AccessGrant],
     channel: str = "portal",
     purpose: str = "operations",
+    event_time_utc: str | None = None,
 ) -> dict[str, Any]:
     """Select the single authoritative publication visible to (reader_role, channel, purpose, cutoff)."""
     cutoff = parse_utc_timestamp(reader_cutoff_utc)
+    event_dt = parse_utc_timestamp(event_time_utc) if event_time_utc is not None else None
     branch_pubs = [p for p in publications if p.subject_key == subject_key and p.branch_id == branch_id]
     if not branch_pubs:
         return {
@@ -231,6 +244,11 @@ def select_reader_as_of(
             continue
         if not _release_is_active_at_cutoff(p.release_id, release_events, cutoff):
             continue
+        if event_dt is not None:
+            eff_start = parse_utc_timestamp(p.effective_at_utc)
+            eff_end = parse_utc_timestamp(p.effective_end_utc) if p.effective_end_utc is not None else None
+            if not (eff_start <= event_dt and (eff_end is None or event_dt < eff_end)):
+                continue
         eligible.append(p)
 
     if not eligible:

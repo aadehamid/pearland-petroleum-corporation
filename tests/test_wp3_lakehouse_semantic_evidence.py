@@ -78,8 +78,18 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
                 delta_tables={"kpi_store_facts": r1["delta_version"]},
                 kpi_rows=rows,
             )
+            man_replay = build_release_manifest(
+                release_id="REL-20260615-01",
+                branch_id="baseline",
+                status="PUBLISHED",
+                published_at_utc="2026-06-15T08:15:00Z",
+                cutoff_utc="2026-06-15T08:15:00Z",
+                delta_tables={"kpi_store_facts": r1["delta_version"]},
+                kpi_rows=rows,
+            )
             self.assertEqual(man["kpi_row_count"], 2)
             self.assertEqual(len(man["manifest_sha256"]), 64)
+            self.assertEqual(man["manifest_sha256"], man_replay["manifest_sha256"])
             with self.assertRaises(ValueError):
                 build_release_manifest(
                     release_id="REL-20260615-01",
@@ -308,6 +318,87 @@ class TestWP3LakehouseSemanticEvidence(unittest.TestCase):
         )
         self.assertEqual(forked["status"], "REJECTED_CHAIN")
         self.assertEqual(forked["reason"], "FORKED_SUCCESSOR")
+
+        # 6. Malformed AccessGrant.effect MUST raise ValueError (never fail open)
+        with self.assertRaises(ValueError):
+            AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "deny")
+
+        # 7. Post-cutoff recorded grant MUST be ineligible at earlier cutoff (PO-08)
+        late_grant = select_reader_as_of(
+            subject_key="LOT:CRUDE-2026-009",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T10:00:00Z",
+            publications=pubs,
+            release_events=release_events,
+            receipts=receipts,
+            grants=[AccessGrant("PLANNER", "portal", "operations", "2026-06-15T00:00:00Z", None, "ALLOW", recorded_at_utc="2026-06-15T12:00:00Z")],
+        )
+        self.assertEqual(late_grant["status"], "UNRESOLVED")
+
+        # 8. 0-based ordinal + event_time_utc selection matching INFO-001 §3 (09:59 -> A, 10:30 -> B)
+        et_pubs = [
+            PublicationRecord(
+                publication_id="P0",
+                subject_key="SLOT:S",
+                branch_id="baseline",
+                release_id="S2-L1",
+                supersession_ordinal=0,
+                effective_at_utc="2026-06-15T08:00:00Z",
+                effective_end_utc="2026-06-15T10:00:00Z",
+                recorded_at_utc="2026-06-15T08:05:00Z",
+                published_at_utc="2026-06-15T08:10:00Z",
+                allowed_roles=("PLANNER",),
+                supersedes_publication_id=None,
+                payload={"occupant": "A"},
+            ),
+            PublicationRecord(
+                publication_id="P1",
+                subject_key="SLOT:S",
+                branch_id="baseline",
+                release_id="S2-L2",
+                supersession_ordinal=1,
+                effective_at_utc="2026-06-15T10:00:00Z",
+                effective_end_utc=None,
+                recorded_at_utc="2026-06-15T10:05:00Z",
+                published_at_utc="2026-06-15T11:30:00Z",
+                allowed_roles=("PLANNER",),
+                supersedes_publication_id="P0",
+                payload={"occupant": "B"},
+            ),
+        ]
+        et_rels = [
+            ReleaseEvent("S2-L1", "PUBLISHED", "2026-06-15T08:10:00Z", "2026-06-15T08:10:00Z", "2026-06-15T08:10:00Z"),
+            ReleaseEvent("S2-L2", "PUBLISHED", "2026-06-15T11:30:00Z", "2026-06-15T11:30:00Z", "2026-06-15T11:30:00Z"),
+        ]
+        et_rcpts = [
+            DeliveryReceipt("P0", "PLANNER", "portal", "2026-06-15T08:11:00Z"),
+            DeliveryReceipt("P1", "PLANNER", "portal", "2026-06-15T11:31:00Z"),
+        ]
+        res_a = select_reader_as_of(
+            subject_key="SLOT:S",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T13:00:00Z",
+            event_time_utc="2026-06-15T09:59:00Z",
+            publications=et_pubs,
+            release_events=et_rels,
+            receipts=et_rcpts,
+            grants=grants,
+        )
+        res_b = select_reader_as_of(
+            subject_key="SLOT:S",
+            branch_id="baseline",
+            reader_role="PLANNER",
+            reader_cutoff_utc="2026-06-15T13:00:00Z",
+            event_time_utc="2026-06-15T10:30:00Z",
+            publications=et_pubs,
+            release_events=et_rels,
+            receipts=et_rcpts,
+            grants=grants,
+        )
+        self.assertEqual(res_a["payload"]["occupant"], "A")
+        self.assertEqual(res_b["payload"]["occupant"], "B")
 
     def test_rdf_pyshacl_to_neo4j_cypher_projection_and_loss_report(self):
         ttl = REPO_ROOT / "semantic" / "ontology" / "ppc_core.ttl"

@@ -139,6 +139,7 @@ def build_release_manifest(
     kpi_rows: Sequence[Mapping[str, Any]],
     supersedes_release_id: str | None = None,
     retraction_reason: str | None = None,
+    created_at_utc: str | None = None,
 ) -> dict[str, Any]:
     """Construct a deterministic SHA-256 digest-verified ReleaseManifest for PUBLISHED / SUPERSEDED / RETRACTED."""
     if status not in LEGAL_RELEASE_STATUSES:
@@ -159,7 +160,7 @@ def build_release_manifest(
         "kpi_row_count": len(kpi_rows),
         "kpi_rows_digest": canonical_digest(list(kpi_rows)),
         "provenance_class": "DERIVED",
-        "created_at_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at_utc": created_at_utc if created_at_utc is not None else published_at_utc,
     }
     body["manifest_sha256"] = canonical_digest(body)
     return body
