@@ -355,9 +355,19 @@ OBSOLETE_SCAFFOLD_DIRS = (
     ("integration/kafka", "ADR-0046 replaces Apache Kafka with NATS JetStream for Slice 1"),
     ("lakehouse/ducklake", "ADR-0045 replaces DuckLake with Delta Lake on Cloudflare R2"),
 )
-ALLOWED_EPM_BINDING_STATES = {"CONSUMED_PROVISIONAL", "PENDING_UPSTREAM_RELEASE"}
+ALLOWED_EPM_ADAPTER_STATES = {"CONSUMED_PROVISIONAL", "PENDING_UPSTREAM_RELEASE"}
+ALLOWED_EPM_BINDING_STATES = {"CONSUMED_PROVISIONAL", "PENDING_UPSTREAM_RELEASE", "pending"}
 LEGAL_PHASES = {"liquid", "gas", "solid", "utility"}
 LIQUID_VOLUME_UNITS = {"bbl", "bbl_60F", "bbl/day", "bbl_60F/day", "bbl/h", "m3", "m3/h"}
+
+# Code regex matching KPI formula / registration definitions in runtime modules (Q1)
+KPI_CODE_PATTERN = re.compile(
+    r"\b(KPI_DEFINITIONS|KPIDefinition|define_kpi|compute_kpi)\b|"
+    r"['\"]kpi_id['\"]\s*:|"
+    r"['\"]measure_class['\"]\s*:\s*['\"]KPI['\"]"
+)
+# Flowsheet unit/sink code tokens explicitly used in PPC-REVIEW-002 (e.g. `4A`, `4B`, `5A`..`5D`, `6`, `BL`, `FT`, `9`)
+FLOWSHEET_CODE_RE = re.compile(r"`([45][A-D]|6|9|BL|FT|SRU|NHT|DHT|FDS|CDU|VDU|FCC|HCU|SMR)`")
 
 
 def _word_or_int(token):
@@ -383,7 +393,6 @@ def _parse_pandoc_simple_table(text, section_heading=None):
 
     rule_re = re.compile(r"^\s*-{5,}(\s+-{3,})*\s*$")
     sublines = lines[start:]
-    # Stop at next ## heading when scanning a specific section
     if section_heading is not None:
         end = len(sublines)
         for idx, line in enumerate(sublines):
@@ -483,7 +492,7 @@ def _parse_epm_adapter(graph, legal_classes):
     for art in artifacts:
         path = art.get("upstream_path")
         status = art.get("status")
-        if not path or status not in ALLOWED_EPM_BINDING_STATES:
+        if not path or status not in ALLOWED_EPM_ADAPTER_STATES:
             graph.problem(f"{EPM_ADAPTER}: unreadable EPM artifact entry {art!r}")
             continue
         graph.node("EPMArtifact", path, EPM_ADAPTER, name=art.get("name", path), status=status)
@@ -512,8 +521,49 @@ def _parse_world_001_promises(graph, text):
     return promises
 
 
-def _parse_review_002(graph, legal_classes):
+def _extract_flowsheet_endpoints(cell_text):
+    """Extract declared parenthesized/backticked flowsheet codes from a PPC-REVIEW-002 table cell."""
+    # Look for backticked codes like `4A`, `4B`, `5A`, `5B`, `5C`, `5D`, `6`, `BL`, `FT`, `9`, `SRU`
+    # Also accept arbitrary backticked uppercase codes like `99` or `GHOST` inside parens so unknown codes fail Check 2.
+    codes = []
+    for m in re.finditer(r"`([A-Za-z0-9_-]+)`", cell_text):
+        tok = m.group(1)
+        if tok in ("G1-5", "G1-6", "PO-02", "ADR-0054", "H2S", "NH3", "SO2", "N2", "C1", "C2", "C3", "C4"):
+            continue
+        if tok not in codes:
+            codes.append(tok)
+    return codes
+
+
+def _parse_mermaid_flowsheet_nodes(raw_text):
+    """Read declared flowsheet box IDs and labels from PPC-REVIEW-002's mermaid flowchart."""
+    declared = {}
+    in_mermaid = False
+    for line in raw_text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("```mermaid"):
+            in_mermaid = True
+            continue
+        if in_mermaid and stripped.startswith("```"):
+            in_mermaid = False
+            continue
+        if not in_mermaid:
+            continue
+        for m in re.finditer(r'\b([A-Z0-9_]+)\["([^"]+)"\]', line):
+            box_id, label = m.group(1), m.group(2).replace("\\n", " ")
+            declared[box_id] = label
+            # Also extract numbered codes inside the box label like "4A.", "4B.", "5A.".."5D.", "6.", "9."
+            m_num = re.match(r"^([45][A-D]|6|9)\.\s+", label)
+            if m_num:
+                declared[m_num.group(1)] = label
+    return declared
+
+
+def _parse_review_002(graph, legal_classes, declared_aliases=None):
+    """Parse PPC-REVIEW-002 flowsheet, bounded interfaces, tank register, lines, and C2 spelling checks."""
     text = graph.read(PPC_REVIEW_002)
+    raw_text = graph.read_raw(PPC_REVIEW_002)
+    declared_aliases = declared_aliases or {}
     info = {
         "promised_tanks": 0,
         "promised_lines": [],
@@ -522,9 +572,17 @@ def _parse_review_002(graph, legal_classes):
         "doc_tanks": set(),
         "doc_lines": set(),
         "doc_units": set(),
+        "doc_pumps": set(),
+        "spellings_by_code": {},
     }
-    if text is None:
+    if text is None or raw_text is None:
         return info
+
+    # 0. Declared flowsheet nodes from the mermaid diagram (the authoritative unit/sink code inventory in PPC-REVIEW-002)
+    mermaid_nodes = _parse_mermaid_flowsheet_nodes(raw_text)
+    for code, label in sorted(mermaid_nodes.items()):
+        graph.node("Unit", code, PPC_REVIEW_002, flowsheet_label=label)
+        info["doc_units"].add(code)
 
     # 1. Parse internal bounded interface count from locked flowsheet closure item 1 (C3)
     m_internal = re.search(r"1\.\s+\*\*Internal bounded interfaces:\*\*\s+([^\n]+)", text)
@@ -559,41 +617,29 @@ def _parse_review_002(graph, legal_classes):
     else:
         info["promised_lines"] = re.findall(r"`(LINE-[A-Z0-9-]+)`", m_n4.group(1))
 
-    # 5. Walk markdown pipe tables
+    # 5. Walk markdown pipe tables (process bounded interfaces FIRST so declared units exist before stream table checks!)
     tables = markdown_tables(text)
     found_stream_table = False
     found_iface_table = False
     found_tank_table = False
+    stream_rows_to_check = []
+    interface_names = set()
+    surface_names_by_code = {}
+
+    def record_spelling(code, surface):
+        cleaned = surface.strip()
+        if cleaned:
+            surface_names_by_code.setdefault(code, set()).add(cleaned)
 
     for header, rows in tables:
-        # Check classification tag in Hydrogen header table header if present (C7)
         if header and "Hydrogen header term" in header[0]:
             m_h2_cls = re.search(r"`([A-Z_]+)`\)", header[0])
             if not m_h2_cls or (legal_classes and m_h2_cls.group(1) not in legal_classes):
                 graph.problem(f"{PPC_REVIEW_002}: Hydrogen header table header has missing/invalid classification")
-
-        if header == ["Source unit", "Output stream", "Declared v1 destination / sink"]:
-            found_stream_table = True
             for r in rows:
-                if r["_cells"] != len(header):
-                    graph.problem(f"{PPC_REVIEW_002}:{r['_line']}: stream row has {r['_cells']} cells, header {len(header)}")
-                    continue
-                src_unit = r["Source unit"].replace("`", "").strip()
-                out_stream = r["Output stream"].replace("`", "").strip()
-                dest_text = r["Declared v1 destination / sink"].replace("`", "").strip()
-                if not src_unit or not out_stream or not dest_text:
-                    graph.problem(f"{PPC_REVIEW_002}:{r['_line']}: empty cell in stream-to-sink closure table")
-                    continue
-                graph.node("Unit", src_unit, PPC_REVIEW_002)
-                info["doc_units"].add(src_unit)
-                # Ensure destination codes/names stated in the table exist as declared targets
-                dest_id = dest_text.split("->")[0].split(";")[0].strip()
-                graph.node("Unit", dest_id, PPC_REVIEW_002)
-                info["doc_units"].add(dest_id)
-                stream_id = f"{src_unit} :: {out_stream}"
-                graph.node("Stream", stream_id, PPC_REVIEW_002, output_stream=out_stream)
-                graph.link(stream_id, "FROM_ENDPOINT", src_unit, PPC_REVIEW_002)
-                graph.link(stream_id, "TO_ENDPOINT", dest_id, PPC_REVIEW_002)
+                term = r.get(header[0], "")
+                if "HCU" in term:
+                    record_spelling("4B", "HCU")
 
         elif header == ["Interface", "Inputs", "Outputs and closure rule", "Capacity & operating limits"]:
             found_iface_table = True
@@ -609,6 +655,14 @@ def _parse_review_002(graph, legal_classes):
                 graph.node("Unit", name, PPC_REVIEW_002,
                            interface_scope="terminal" if is_terminal else "refinery_internal")
                 info["doc_units"].add(name)
+                interface_names.add(name)
+                # Map interface table short names to flowsheet codes for C2 spelling check
+                code_hint = {
+                    "DHT": "5A", "FCC Selective HDS": "5B", "Catalytic Reformer": "5C",
+                    "NHT": "5D", "SMR": "6", "SRU": "9",
+                }.get(name)
+                if code_hint:
+                    record_spelling(code_hint, name)
                 if is_terminal:
                     terminal_count += 1
                     # C3: Terminal Ethanol sits in terminals, NEVER linked to SITE-REF-A
@@ -625,6 +679,10 @@ def _parse_review_002(graph, legal_classes):
                     f"{PPC_REVIEW_002}: expected 1 terminal ethanol interface row alongside internal interfaces (C3), "
                     f"found {terminal_count}"
                 )
+
+        elif header == ["Source unit", "Output stream", "Declared v1 destination / sink"]:
+            found_stream_table = True
+            stream_rows_to_check.extend((header, rows))
 
         elif len(header) == 4 and header[0] == "Tank ID" and header[1] == "Service":
             found_tank_table = True
@@ -646,6 +704,8 @@ def _parse_review_002(graph, legal_classes):
                 info["promised_tanks"] += expected_row_tanks
 
                 notes = r[header[3]]
+                if "-> HCU" in notes:
+                    record_spelling("4B", "HCU")
                 lines_in_row = re.findall(r"`(LINE-[A-Z0-9-]+)`", notes)
                 pumps_in_row = re.findall(r"`(P-[A-Z0-9/]+)`", notes)
                 for tid in tank_ids:
@@ -659,10 +719,84 @@ def _parse_review_002(graph, legal_classes):
                     graph.link(lid, "LOCATED_AT", "SITE-REF-A", PPC_REVIEW_002)
                     info["doc_lines"].add(lid)
                 for pid in pumps_in_row:
+                    # C2: Detect slash-grouped pump pairs like P-101A/B vs individual pumps
+                    if "/" in pid:
+                        base_match = re.fullmatch(r"(P-\d+)([A-Z])/([A-Z])", pid)
+                        if base_match:
+                            p_a = f"{base_match.group(1)}{base_match.group(2)}"
+                            p_b = f"{base_match.group(1)}{base_match.group(3)}"
+                            if pid not in declared_aliases:
+                                graph.problem(
+                                    f"{PPC_REVIEW_002}:{r['_line']}: pump pair {pid!r} groups two physical pumps "
+                                    f"({p_a}, {p_b}) under one label (name stated two ways, ADR-0060 C2)"
+                                )
                     graph.node("Pump", pid, PPC_REVIEW_002)
                     graph.link(pid, "LOCATED_AT", "SITE-REF-A", PPC_REVIEW_002)
+                    info["doc_pumps"].add(pid)
                     for lid in lines_in_row:
                         graph.link(pid, "DRIVES", lid, PPC_REVIEW_002)
+
+    # Now validate stream-to-sink closure table rows WITHOUT minting destination nodes from prose!
+    # Every endpoint code must already exist as a declared flowsheet/interface unit (Finding 1 fix).
+    if stream_rows_to_check:
+        s_header, s_rows = stream_rows_to_check[0], stream_rows_to_check[1]
+        for r in s_rows:
+            if r["_cells"] != len(s_header):
+                graph.problem(f"{PPC_REVIEW_002}:{r['_line']}: stream row has {r['_cells']} cells, header {len(s_header)}")
+                continue
+            src_cell = r["Source unit"]
+            out_stream = r["Output stream"].replace("`", "").strip()
+            dest_cell = r["Declared v1 destination / sink"]
+            if not src_cell.strip() or not out_stream or not dest_cell.strip():
+                graph.problem(f"{PPC_REVIEW_002}:{r['_line']}: empty cell in stream-to-sink closure table")
+                continue
+
+            # Resolve source endpoint code(s): CDU + VDU -> CDU, or backticked codes (`4A`, `4B`, `5A`/`5B`/`5D`)
+            src_codes = _extract_flowsheet_endpoints(src_cell)
+            if not src_codes and "CDU" in src_cell:
+                src_codes = ["CDU"]
+            if not src_codes:
+                graph.problem(f"{PPC_REVIEW_002}:{r['_line']}: unreadable stream source unit {src_cell!r}")
+                continue
+            # Record surface spelling for C2 check (e.g. Hydrocracker vs HCU, FDS vs FCC Selective HDS)
+            src_surface = re.sub(r"\([^)]*\)", "", src_cell).replace("`", "").strip()
+            if len(src_codes) == 1 and src_surface:
+                record_spelling(src_codes[0], src_surface)
+            elif "FDS" in src_cell:
+                record_spelling("5B", "FDS")
+
+            dest_codes = _extract_flowsheet_endpoints(dest_cell)
+            if not dest_codes:
+                graph.problem(
+                    f"{PPC_REVIEW_002}:{r['_line']}: stream {out_stream!r} destination {dest_cell!r} "
+                    f"names no declared flowsheet endpoint code"
+                )
+                continue
+            # Record destination surface spellings right before parenthesized unit codes (`4A`..`5D`)
+            for chunk in re.split(r"->|;|\band\b|\bbetween\b|\bor\b", dest_cell):
+                m_ds = re.search(r"([A-Z][A-Za-z0-9 /-]{1,35}?)\s*\(`([45][A-D])`", chunk.strip())
+                if m_ds:
+                    record_spelling(m_ds.group(2), m_ds.group(1).strip())
+
+            # Emit Stream node and link to EVERY source and destination code WITHOUT minting unknown targets
+            stream_id = f"{'+'.join(src_codes)} :: {out_stream}"
+            graph.node("Stream", stream_id, PPC_REVIEW_002, output_stream=out_stream)
+            for sc in src_codes:
+                graph.link(stream_id, "FROM_ENDPOINT", sc, PPC_REVIEW_002)
+            for dc in dest_codes:
+                # Map SRU alias in destination text (`SRU`, `9`) only to declared unit if present; never mint unknown!
+                graph.link(stream_id, "TO_ENDPOINT", dc, PPC_REVIEW_002)
+
+    # C2: Report "name stated two ways" whenever one flowsheet code has multiple distinct surface spellings
+    # not covered by an explicit source alias map
+    info["spellings_by_code"] = surface_names_by_code
+    for code, spellings in sorted(surface_names_by_code.items()):
+        unresolved = sorted(s for s in spellings if s != code and s not in declared_aliases.get(code, set()))
+        if len(unresolved) > 1:
+            graph.problem(
+                f"{PPC_REVIEW_002}: unit code {code!r} is stated {len(unresolved)} ways without a source alias table: "
+                f"{', '.join(repr(s) for s in unresolved)} (name stated two ways, ADR-0060 C2)"
+            )
 
     if not found_stream_table:
         graph.problem(f"{PPC_REVIEW_002}: stream-to-sink closure table not found")
@@ -744,7 +878,14 @@ def _parse_reg_002_and_scaffolds(graph):
 
 
 def _parse_r2_prefix_map_and_configs(graph, legal_classes):
-    hidden_cfg = {"bucket": None, "probe_prefix": None, "prefixes": []}
+    """Parse R2 prefix map (including C5 permitted writers and probe scripts) and config provenance (C7)."""
+    hidden_cfg = {
+        "bucket": None,
+        "probe_prefix": None,
+        "prefixes": [],
+        "permitted_writers": [],
+        "permitted_probe_scripts": [],
+    }
     for rel in (R2_PREFIX_MAP, POLICY_THRESHOLDS, RUNTIME_FREEZE):
         raw = graph.read_raw(rel)
         if raw is None:
@@ -767,9 +908,34 @@ def _parse_r2_prefix_map_and_configs(graph, legal_classes):
             forbidden_consumers = hid.get("forbidden_consumers")
             if not isinstance(forbidden_consumers, list) or not forbidden_consumers:
                 graph.problem(f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.forbidden_consumers list")
+
+            # C5: Read permitted writers and permitted probe scripts from source; report if unstated!
+            permitted_writers = hid.get("permitted_writers")
+            if not isinstance(permitted_writers, list) or not permitted_writers:
+                graph.problem(
+                    f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.permitted_writers list "
+                    f"(no source states permitted hidden-bucket writers, ADR-0060 C5)"
+                )
+            else:
+                hidden_cfg["permitted_writers"] = [str(w) for w in permitted_writers]
+
+            permitted_probes = hid.get("permitted_probe_scripts")
+            if not isinstance(permitted_probes, list) or not permitted_probes:
+                graph.problem(
+                    f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.permitted_probe_scripts list "
+                    f"(probe exemption must be declared in source, ADR-0060 C5)"
+                )
+            else:
+                hidden_cfg["permitted_probe_scripts"] = [str(p) for p in permitted_probes]
+
             if hidden_cfg["bucket"]:
-                graph.node("HiddenWorld", hidden_cfg["bucket"], R2_PREFIX_MAP,
-                           forbidden_consumers=forbidden_consumers if isinstance(forbidden_consumers, list) else [])
+                graph.node(
+                    "HiddenWorld",
+                    hidden_cfg["bucket"],
+                    R2_PREFIX_MAP,
+                    forbidden_consumers=forbidden_consumers if isinstance(forbidden_consumers, list) else [],
+                    permitted_writers=hidden_cfg["permitted_writers"],
+                )
             else:
                 graph.problem(f"{R2_PREFIX_MAP}: missing buckets.hidden_truth.bucket_name")
 
@@ -785,7 +951,6 @@ def _parse_r2_prefix_map_and_configs(graph, legal_classes):
             if isinstance(data, dict):
                 _check_provenance(graph, legal_classes, rel, rel, data.get("provenance_class"))
 
-    # Read docker-compose to confirm reconciled Slice 1 services parse cleanly
     compose_raw = graph.read_raw(DOCKER_COMPOSE)
     if compose_raw is not None:
         try:
@@ -800,6 +965,7 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
     """Check 5 (hidden-world isolation, C5/C6) + Q1 (no unbound KPI definitions in code)."""
     hidden_bucket = hidden_cfg.get("bucket")
     probe_prefix = hidden_cfg.get("probe_prefix")
+    permitted_probes = set(hidden_cfg.get("permitted_probe_scripts", []))
 
     for d in PENDING_CHECK_DIRS:
         if not os.path.isdir(os.path.join(graph.root, d)):
@@ -822,7 +988,6 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
                 graph.node("Pipeline", rel, rel)
                 content = read(graph.root, rel)
 
-                # Extract string literals via AST for Python files, or scan raw text otherwise
                 strings_to_check = []
                 imports = []
                 if fname.endswith(".py"):
@@ -847,19 +1012,12 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
                         graph.node("HiddenWorld", imp, rel)
                         graph.link(rel, "READS_OR_WRITES", imp, rel)
 
-                # Check forbidden references to evaluation/hidden/ or hidden bucket (C5)
-                is_declared_wp0_probe = (rel == "lakehouse/delta/wp0_probes.py" and probe_prefix)
+                # C5: Probe exemption comes strictly from permitted_probe_scripts + probe_prefix in r2_prefix_map.yaml
+                is_declared_probe = (rel in permitted_probes and bool(probe_prefix))
                 for s in strings_to_check:
                     if "evaluation/hidden/" in s:
-                        if is_declared_wp0_probe:
-                            # C5: Allow ONLY the exact probe prefix declared in r2_prefix_map.yaml
-                            # (or exact bucket-prefix list check "evaluation/hidden/" in isolation negative probe)
-                            allowed_probe = (
-                                s == "evaluation/hidden/"
-                                or s.startswith(probe_prefix)
-                            )
-                            if allowed_probe:
-                                continue
+                        if is_declared_probe and (s == "evaluation/hidden/" or s.startswith(probe_prefix)):
+                            continue
                         target = hidden_bucket or "evaluation/hidden/"
                         graph.node("HiddenWorld", target, rel)
                         graph.link(rel, "READS_OR_WRITES", target, rel)
@@ -870,8 +1028,8 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
                 # Q1: Code defining KPIs without an EPM binding or claiming PPC_EXTENSION fails from run 1
                 if "PPC_EXTENSION" in content:
                     graph.problem(f"{rel}: uses rejected KPI disposition 'PPC_EXTENSION' (forbidden by ADR-0060 Q1)")
-                if fname.endswith(".py") and rel != "lakehouse/delta/wp0_probes.py":
-                    if re.search(r"\bKPI_DEFINITIONS\b|\"kpi_id\"\s*:|'kpi_id'\s*:", content):
+                if fname.endswith(".py") and rel not in permitted_probes:
+                    if KPI_CODE_PATTERN.search(content):
                         if not has_epm_bindings:
                             graph.problem(
                                 f"{rel}: defines KPI records/formulas without an EPM binding file "
@@ -882,7 +1040,30 @@ def _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings):
         graph.meta["pending"].append("pipeline runtime modules")
 
 
-def _parse_optional_built_sources(graph, legal_classes, review_info, world_promises):
+def _load_declared_aliases(root):
+    """Read explicit unit/pump aliases from fixtures/golden/refinery_a_design_basis.yaml when built."""
+    db_abs = os.path.join(root, DESIGN_BASIS)
+    if not os.path.isfile(db_abs):
+        return {}
+    try:
+        db = yaml.safe_load(read(root, DESIGN_BASIS))
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(db, dict):
+        return {}
+    aliases = {}
+    for u in db.get("units", []):
+        uid = u.get("id")
+        if uid and isinstance(u.get("aliases"), list):
+            aliases[uid] = set(str(a) for a in u["aliases"])
+    for p in db.get("pumps", []):
+        pair = p.get("doc_pair_label")
+        if pair:
+            aliases[pair] = {str(p.get("id", ""))}
+    return aliases
+
+
+def _parse_optional_built_sources(graph, legal_classes, review_info, world_promises, kpis, dps):
     """Parse WP-1+ built sources automatically when present; report pending otherwise (Q3)."""
     # 1. Design basis YAML (WP-1)
     db_abs = os.path.join(graph.root, DESIGN_BASIS)
@@ -900,7 +1081,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
         if isinstance(db, dict):
             _check_provenance(graph, legal_classes, DESIGN_BASIS, DESIGN_BASIS, db.get("provenance_class"))
 
-            # Assays
             assays = db.get("crude_assays", [])
             for a in assays:
                 aid = a.get("id")
@@ -908,7 +1088,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.node("CrudeAssay", aid, DESIGN_BASIS)
                     _check_provenance(graph, legal_classes, DESIGN_BASIS, aid, a.get("provenance_class"))
 
-            # Terminals
             terminals = db.get("terminals", [])
             for t in terminals:
                 tid = t.get("id")
@@ -916,7 +1095,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.node("Terminal", tid, DESIGN_BASIS)
                     _check_provenance(graph, legal_classes, DESIGN_BASIS, tid, t.get("provenance_class"))
 
-            # Customers
             customers = db.get("customers", [])
             for c in customers:
                 cid = c.get("id")
@@ -924,7 +1102,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.node("Customer", cid, DESIGN_BASIS)
                     _check_provenance(graph, legal_classes, DESIGN_BASIS, cid, c.get("provenance_class"))
 
-            # Units
             for u in db.get("units", []):
                 uid = u.get("id")
                 if uid:
@@ -933,7 +1110,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                         graph.link(uid, "LOCATED_AT", u["facility"], DESIGN_BASIS)
                     _check_provenance(graph, legal_classes, DESIGN_BASIS, uid, u.get("provenance_class"))
 
-            # Tanks: must come from PPC-REVIEW-002 (Check 1)
             for t in db.get("tanks", []):
                 tid = t.get("id")
                 if not tid:
@@ -944,7 +1120,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                 graph.link(tid, "LOCATED_AT", db.get("facility_id", "SITE-REF-A"), DESIGN_BASIS)
                 _check_provenance(graph, legal_classes, DESIGN_BASIS, tid, t.get("provenance_class"))
 
-            # Transfer lines: must come from PPC-REVIEW-002 and validate endpoints/phase/units (Check 1 & 2)
             for ln in db.get("transfer_lines", []):
                 lid = ln.get("id")
                 if not lid:
@@ -959,7 +1134,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.link(lid, "CONNECTS_TO", ln["destination"], DESIGN_BASIS)
                 _check_provenance(graph, legal_classes, DESIGN_BASIS, lid, ln.get("provenance_class"))
 
-            # Streams: validate endpoints, phase agreement, and unit/phase rules (Check 2)
             for st in db.get("streams", []):
                 sid = st.get("id")
                 if not sid:
@@ -986,7 +1160,6 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                     graph.problem(f"{DESIGN_BASIS}: gas Stream {sid} cannot declare liquid volume_unit {vu!r}")
                 _check_provenance(graph, legal_classes, DESIGN_BASIS, sid, st.get("provenance_class"))
 
-            # Promised counts in built mode (Check 3, C4)
             if review_info["promised_assays"] is not None and len(assays) != review_info["promised_assays"]:
                 graph.problem(
                     f"CrudeAssay: {DESIGN_BASIS} defines {len(assays)}, "
@@ -1025,10 +1198,10 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
                         graph.link(tid, "MEASURES", eq, OT_TAGS)
                     _check_provenance(graph, legal_classes, OT_TAGS, tid, tag.get("provenance_class"))
 
-    # 3. EPM KPI bindings YAML (Q1)
+    # 3. EPM KPI bindings YAML (Q1 strict completeness check when file exists; Finding 3 & 5 fix)
     if not os.path.isfile(os.path.join(graph.root, EPM_KPI_BINDINGS)):
         graph.meta["modes"]["epm_kpi_bindings"] = "planned"
-        graph.meta["pending"].append(f"{EPM_KPI_BINDINGS} (15 KPI candidates and 7 data products pending EPM bindings)")
+        graph.meta["pending"].append(f"{EPM_KPI_BINDINGS} ({len(kpis)} KPI candidates and {len(dps)} data products pending EPM bindings)")
     else:
         graph.meta["modes"]["epm_kpi_bindings"] = "built"
         try:
@@ -1038,18 +1211,38 @@ def _parse_optional_built_sources(graph, legal_classes, review_info, world_promi
             bdata = None
         if isinstance(bdata, dict):
             _check_provenance(graph, legal_classes, EPM_KPI_BINDINGS, EPM_KPI_BINDINGS, bdata.get("provenance_class"))
+            covered_kpis = set()
+            covered_dps = set()
             for item in bdata.get("bindings", []):
-                kpi = item.get("kpi") or item.get("data_product")
+                kpi = item.get("kpi")
+                dp = item.get("data_product")
+                name = kpi or dp
                 status = item.get("status")
                 artifact = item.get("epm_artifact")
                 if status == "PPC_EXTENSION":
-                    graph.problem(f"{EPM_KPI_BINDINGS}: {kpi!r} uses rejected disposition 'PPC_EXTENSION' (ADR-0060 Q1)")
+                    graph.problem(f"{EPM_KPI_BINDINGS}: {name!r} uses rejected disposition 'PPC_EXTENSION' (ADR-0060 Q1)")
                     continue
                 if status not in ALLOWED_EPM_BINDING_STATES:
-                    graph.problem(f"{EPM_KPI_BINDINGS}: {kpi!r} has invalid EPM binding status {status!r}")
+                    graph.problem(f"{EPM_KPI_BINDINGS}: {name!r} has invalid EPM binding status {status!r}")
                     continue
-                if kpi and artifact:
-                    graph.link(kpi, "DEFINED_BY_EPM", artifact, EPM_KPI_BINDINGS)
+                if status != "pending":
+                    if not artifact:
+                        graph.problem(f"{EPM_KPI_BINDINGS}: {name!r} with status {status!r} is missing epm_artifact")
+                        continue
+                    graph.link(name, "DEFINED_BY_EPM", artifact, EPM_KPI_BINDINGS)
+                if kpi:
+                    covered_kpis.add(kpi)
+                if dp:
+                    covered_dps.add(dp)
+            # Strict completeness: every KPI and DataProduct in PPC-REG-003 must be covered!
+            for missing_kpi in sorted(set(kpis) - covered_kpis):
+                graph.problem(
+                    f"{missing_kpi}: a KPI with no EPM binding entry in {EPM_KPI_BINDINGS} (ADR-0060 Q1 strict mode)"
+                )
+            for missing_dp in sorted(set(dps) - covered_dps):
+                graph.problem(
+                    f"{missing_dp}: a DataProduct with no EPM binding entry in {EPM_KPI_BINDINGS} (ADR-0060 Q1 strict mode)"
+                )
 
 
 def EXPECTED_COUNTS(graph):
@@ -1065,7 +1258,6 @@ def EXPECTED_COUNTS(graph):
 
 def PROJECT_CHECKS(graph):
     findings = []
-    # Forbidden hidden-world links from any Pipeline node (Check 5)
     for (src, kind, dst), sources in sorted(graph.edges.items()):
         if kind == "READS_OR_WRITES":
             findings.append(
@@ -1078,23 +1270,24 @@ def PROJECT_CHECKS(graph):
 def build(root):
     graph = Graph(root)
     world_text = graph.read(PPC_WORLD_001)
-    graph.read(PPC_017)  # verify semantic authority contract exists
+    graph.read(PPC_017)
     legal_classes = _parse_legal_classifications(graph, world_text)
     world_promises = _parse_world_001_promises(graph, world_text)
+    declared_aliases = _load_declared_aliases(root)
 
     _parse_ppc_core_ttl(graph, legal_classes)
     _parse_epm_adapter(graph, legal_classes)
-    review_info = _parse_review_002(graph, legal_classes)
+    review_info = _parse_review_002(graph, legal_classes, declared_aliases=declared_aliases)
     graph.meta["promised_tanks"] = review_info["promised_tanks"]
     graph.meta["promised_lines_count"] = len(review_info["promised_lines"])
     graph.meta["derived_counts"]["Pump"] = sum(1 for n in graph.nodes.values() if n["label"] == "Pump")
 
-    _parse_reg_003(graph)
+    kpis, dps = _parse_reg_003(graph)
     _parse_reg_002_and_scaffolds(graph)
     hidden_cfg = _parse_r2_prefix_map_and_configs(graph, legal_classes)
     has_epm_bindings = os.path.isfile(os.path.join(root, EPM_KPI_BINDINGS))
     _scan_pipelines_and_kpi_code(graph, hidden_cfg, has_epm_bindings)
-    _parse_optional_built_sources(graph, legal_classes, review_info, world_promises)
+    _parse_optional_built_sources(graph, legal_classes, review_info, world_promises, kpis, dps)
     return graph
 
 

@@ -31,15 +31,29 @@ MINIMAL_REVIEW_002 = """# PPC-REVIEW-002
 
 1. **Internal bounded interfaces:** **Steam Methane Reformer (SMR)**, **Naphtha Hydrotreater (NHT)**, **Catalytic Reformer**, **FCC Naphtha Selective HDS**, **Diesel Hydrotreater (DHT)**, **Sulfur Recovery Unit (SRU)**, and **Steam and Power** are declared bounded mass, element, and utility interfaces inside Refinery A v1.
 
+```mermaid
+flowchart LR
+    CDU["3. CDU + VDU"] --> FCC["4A. FCC Unit"]
+    CDU --> HCU["4B. Hydrocracker"]
+    CDU --> DHT["5A. DHT Interface"]
+    CDU --> NHT["5D. NHT Interface"]
+    FCC --> FDS["5B. FCC Selective HDS"]
+    NHT --> REF["5C. Catalytic Reformer"]
+    SMR["6. SMR"] --> HCU
+    NHT --> BL["7. Product Blending"]
+    BL --> FT["8. Finished Tankage"]
+    CDU --> EX["9. Priced Boundary & SRU Sinks"]
+```
+
 ### Complete Refinery A v1 stream-to-sink closure table (`PO-02`, `ADR-0054`)
 
 | Source unit | Output stream | Declared v1 destination / sink |
 |---|---|---|
-| CDU + VDU | Light Straight-Run (LSR) Naphtha | Naphtha Hydrotreater (`5D`, NHT) -> Gasoline Blending (`BL`) or priced Naphtha Export Boundary (`9`) |
+| CDU + VDU | Light Straight-Run (LSR) Naphtha | NHT (`5D`) -> Blending (`BL`) or Export (`9`) |
 | CDU + VDU | Vacuum Gas Oil (VGO) | Split between FCC (`4A`) and Hydrocracker (`4B`) |
-| FCC (`4A`) | FCC Naphtha (Gasoline) | FCC Selective HDS (`5B`) -> Gasoline Blending (`BL`) |
-| Hydrocracker (`4B`) | ULSD | ULSD Blending & Finished Tankage (`BL` -> `FT`) |
-| NHT / DHT / FDS (`5A`/`5B`/`5D`) | Sour off-gas (`H2S`) | Sulfur Recovery Unit (`SRU`, `9`) |
+| FCC (`4A`) | FCC Naphtha (Gasoline) | FCC Selective HDS (`5B`) -> Blending (`BL`) |
+| Hydrocracker (`4B`) | ULSD | Blending & Tankage (`BL` -> `FT`) |
+| NHT / DHT / FDS (`5A`/`5B`/`5D`) | Sour off-gas (`H2S`) | SRU (`9`) |
 
 ### Refinery A v1 nominal design basis, interface limits, tank register, and transfer paths
 
@@ -70,12 +84,12 @@ All figures below are `SYNTHETIC` design-basis specifications locked by ADR-0054
 |---|---|---|---|
 | `TK-101` | Paper arithmetic / active crude test tank | `1,000` / `12,000` | Preserved for T125 |
 | `TK-101H` | Segregated crude receipt hold tank | `0` / `150,000` | Hold tank |
-| `TK-102`, `TK-103`, `TK-104` | Active crude blend charge tanks (3x) | `30,000` / `300,000` each | Path `LINE-CRUDE-CHG` (pump `P-101A/B`) -> CDU charge |
-| `TK-201` | VGO intermediate feed tank | `15,000` / `150,000` | Path `LINE-VGO-HCU` (`P-201A/B`) -> HCU |
+| `TK-102`, `TK-103`, `TK-104` | Active crude blend charge tanks (3x) | `30,000` / `300,000` each | Path `LINE-CRUDE-CHG` (pump `P-101`) -> CDU charge |
+| `TK-201` | VGO intermediate feed tank | `15,000` / `150,000` | Path `LINE-VGO-HCU` (`P-201`) -> Hydrocracker |
 | `TK-202` | Catalytic Reformer intermediate feed tank | `15,000` / `150,000` | Feed tank |
-| `TK-301`, `TK-302` | Finished ULSD blend & release tanks (2x) | `20,000` / `200,000` each | Path `LINE-ULSD-DISP` (`P-301A/B`) -> dispatch (`TERM-01`..`03`) |
-| `TK-303`, `TK-304` | Finished RBOB/CBOB blend & release tanks (2x) | `20,000` / `200,000` each | Path `LINE-BOB-DISP` (`P-302A/B`) -> terminal (`TERM-01`..`03`) |
-| `TK-401` | Finished Jet A-1 export tank | `10,000` / `120,000` | Path `LINE-JET-EXP` (`P-401A/B`) -> export |
+| `TK-301`, `TK-302` | Finished ULSD blend & release tanks (2x) | `20,000` / `200,000` each | Path `LINE-ULSD-DISP` (`P-301`) -> dispatch (`TERM-01`..`03`) |
+| `TK-303`, `TK-304` | Finished RBOB/CBOB blend & release tanks (2x) | `20,000` / `200,000` each | Path `LINE-BOB-DISP` (`P-302`) -> terminal (`TERM-01`..`03`) |
+| `TK-401` | Finished Jet A-1 export tank | `10,000` / `120,000` | Path `LINE-JET-EXP` (`P-401`) -> export |
 | `TK-402` | Heavy Resid / Slurry export tank | `10,000` / `120,000` | Path `LINE-RESID-EXP` (`P-402`) -> export |
 
 *Holdup and hydraulic parameters (`N4`):* Pipe diameters, lengths, fitting K-factors, and pump curve coefficients for `LINE-CRUDE-CHG`, `LINE-VGO-HCU`, `LINE-ULSD-DISP`, `LINE-BOB-DISP`, `LINE-JET-EXP`, and `LINE-RESID-EXP` are populated in `fixtures/golden/refinery_a_design_basis.yaml` during `WP-1`.
@@ -195,6 +209,11 @@ buckets:
       probe: "_probe/"
   hidden_truth:
     bucket_name: "pearland-petroleum-hidden"
+    permitted_writers:
+      - "generators/"
+      - "verification/"
+    permitted_probe_scripts:
+      - "lakehouse/delta/wp0_probes.py"
     forbidden_consumers:
       - "integration_pipelines"
       - "operational_retrieval_agents"
@@ -228,19 +247,13 @@ BUILT_DESIGN_BASIS = """schema_version: "1.0.0"
 provenance_class: "SYNTHETIC"
 facility_id: "SITE-REF-A"
 crude_assays:
-  - id: "ASSAY-LIGHT-SWEET"
-    provenance_class: "SYNTHETIC"
-  - id: "ASSAY-MEDIUM-SOUR"
-    provenance_class: "SYNTHETIC"
-  - id: "ASSAY-HEAVY-SOUR"
-    provenance_class: "SYNTHETIC"
+  - {id: "ASSAY-LIGHT-SWEET", provenance_class: "SYNTHETIC"}
+  - {id: "ASSAY-MEDIUM-SOUR", provenance_class: "SYNTHETIC"}
+  - {id: "ASSAY-HEAVY-SOUR", provenance_class: "SYNTHETIC"}
 terminals:
-  - id: "TERM-01"
-    provenance_class: "SYNTHETIC"
-  - id: "TERM-02"
-    provenance_class: "SYNTHETIC"
-  - id: "TERM-03"
-    provenance_class: "SYNTHETIC"
+  - {id: "TERM-01", provenance_class: "SYNTHETIC"}
+  - {id: "TERM-02", provenance_class: "SYNTHETIC"}
+  - {id: "TERM-03", provenance_class: "SYNTHETIC"}
 customers:
   - {id: "CUST-01", provenance_class: "SYNTHETIC"}
   - {id: "CUST-02", provenance_class: "SYNTHETIC"}
@@ -255,17 +268,11 @@ customers:
   - {id: "CUST-11", provenance_class: "SYNTHETIC"}
   - {id: "CUST-12", provenance_class: "SYNTHETIC"}
 units:
-  - {id: "CDU + VDU", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "FCC (4A)", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "Hydrocracker (4B)", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "NHT", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "FCC Selective HDS", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "DHT", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "Catalytic Reformer", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "SMR", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "SRU", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "Steam and power", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
-  - {id: "BL", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
+  - {id: "CDU", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
+  - {id: "4A", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
+  - {id: "4B", facility: "SITE-REF-A", aliases: ["Hydrocracker", "HCU"], provenance_class: "SYNTHETIC"}
+  - {id: "5B", facility: "SITE-REF-A", aliases: ["FCC Selective HDS", "FDS"], provenance_class: "SYNTHETIC"}
+  - {id: "9", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
   - {id: "FT", facility: "SITE-REF-A", provenance_class: "SYNTHETIC"}
 tanks:
   - {id: "TK-101", provenance_class: "SYNTHETIC"}
@@ -282,15 +289,15 @@ tanks:
   - {id: "TK-401", provenance_class: "SYNTHETIC"}
   - {id: "TK-402", provenance_class: "SYNTHETIC"}
 transfer_lines:
-  - {id: "LINE-CRUDE-CHG", source: "TK-102", destination: "CDU + VDU", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
-  - {id: "LINE-VGO-HCU", source: "TK-201", destination: "Hydrocracker (4B)", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "LINE-CRUDE-CHG", source: "TK-102", destination: "CDU", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "LINE-VGO-HCU", source: "TK-201", destination: "4B", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
   - {id: "LINE-ULSD-DISP", source: "TK-301", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
   - {id: "LINE-BOB-DISP", source: "TK-303", destination: "TERM-01", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
   - {id: "LINE-JET-EXP", source: "TK-401", destination: "FT", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
   - {id: "LINE-RESID-EXP", source: "TK-402", destination: "FT", phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
 streams:
-  - {id: "STR-VGO-HCU", source: "CDU + VDU", destination: "Hydrocracker (4B)", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
-  - {id: "STR-ACID-GAS", source: "Hydrocracker (4B)", destination: "SRU", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
+  - {id: "STR-VGO-HCU", source: "CDU", destination: "4B", source_phase: "liquid", destination_phase: "liquid", mass_unit: "t/day", volume_unit: "bbl_60F/day", provenance_class: "SYNTHETIC"}
+  - {id: "STR-ACID-GAS", source: "4B", destination: "9", source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null, provenance_class: "SYNTHETIC"}
 """
 
 
@@ -344,14 +351,13 @@ class Generic(Fixture):
         g = physical_graph.Graph(self.root)
         g.node("Valve", "V-1", "a.md", size="3", open=True)
         g.node("Valve", "V-1", "b.json", size=3, open=1)
-        clashes = g.clashes()
-        self.assertEqual(len(clashes), 2, clashes)
+        self.assertEqual(len(g.clashes()), 2)
 
     def test_one_source_stating_a_value_twice_compares_type(self):
         g = physical_graph.Graph(self.root)
         g.node("Valve", "V-1", "a.json", open=True, n=1)
         g.node("Valve", "V-1", "a.json", open=1, n=1.0)
-        self.assertEqual(len([p for p in g.problems if "states" in p and "twice" in p]), 2, g.problems)
+        self.assertEqual(len([p for p in g.problems if "states" in p and "twice" in p]), 2)
 
     def test_one_source_stating_a_list_twice_compares_element_types(self):
         g = physical_graph.Graph(self.root)
@@ -388,7 +394,7 @@ class Generic(Fixture):
     def test_reserved_property_names_are_refused(self):
         g = physical_graph.Graph(self.root)
         g.node("Pump", "P-1", "a.md", id="other", sources="x")
-        self.assertEqual(len([p for p in g.problems if "reserved property" in p]), 2, g.problems)
+        self.assertEqual(len([p for p in g.problems if "reserved property" in p]), 2)
 
     def test_argument_errors_come_before_reading_sources(self):
         empty = tempfile.TemporaryDirectory()
@@ -411,83 +417,134 @@ class Generic(Fixture):
 
 
 class PhysicalModelChecks(Fixture):
-    def test_clean_planned_fixture_passes_and_reports_pending_sections(self):
+    def test_clean_planned_fixture_reports_only_declared_c2_spelling_and_pending(self):
+        # MINIMAL_REVIEW_002 intentionally has `FDS` + `FCC Selective HDS` on code 5B (1 C2 finding)
+        # Replace FDS -> FCC Selective HDS to make a zero-finding baseline
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("NHT / DHT / FDS (`5A`/`5B`/`5D`)", "NHT / DHT / FCC Selective HDS (`5A`/`5B`/`5D`)"))
         self.assertEqual(self.findings(), [])
         p = self.cli("check")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertIn("physical_graph: the sources agree", p.stdout)
-        self.assertIn("mode:", p.stdout)
         summary = json.loads(self.cli("summary").stdout)
         self.assertEqual(summary["nodes"]["Tank"], 13)
         self.assertEqual(summary["nodes"]["TransferLine"], 6)
         self.assertEqual(summary["modes"]["design_basis"], "planned")
-        # C6: missing directories reported explicitly as pending
         self.assertIn("ot/", summary["pending"])
         self.assertIn("api/", summary["pending"])
         self.assertIn("verification/", summary["pending"])
+
+    def test_finding1_closure_table_does_not_mint_unknown_destinations(self):
+        # Unknown endpoint code `99` in closure table MUST fail Check 2 (never minted)
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("SRU (`9`)", "Ghost Unit (`99`)"))
+        findings = self.findings()
+        self.assertTrue(any("99 is not defined by any source" in f for f in findings), findings)
+
+        # Multi-destination row `Split between FCC (4A) and Hydrocracker (4B)` creates TWO clean links, not prose unit
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("NHT / DHT / FDS (`5A`/`5B`/`5D`)", "NHT / DHT / FCC Selective HDS (`5A`/`5B`/`5D`)"))
+        g = physical_graph.build(self.root)
+        self.assertIn(("CDU :: Vacuum Gas Oil (VGO)", "TO_ENDPOINT", "4A"), g.edges)
+        self.assertIn(("CDU :: Vacuum Gas Oil (VGO)", "TO_ENDPOINT", "4B"), g.edges)
+        self.assertIn(("4B :: ULSD", "TO_ENDPOINT", "BL"), g.edges)
+        self.assertIn(("4B :: ULSD", "TO_ENDPOINT", "FT"), g.edges)
+
+    def test_finding2_c2_reports_name_stated_two_ways_for_units_and_pump_pairs(self):
+        # Default MINIMAL_REVIEW_002 has FDS vs FCC Selective HDS on 5B
+        findings = self.findings()
+        self.assertTrue(any("5B" in f and "name stated two ways" in f for f in findings), findings)
+
+        # Adding HCU alongside Hydrocracker on 4B reports 4B stated two ways
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("-> Hydrocracker", "-> HCU"))
+        findings2 = self.findings()
+        self.assertTrue(any("4B" in f and "HCU" in f and "Hydrocracker" in f for f in findings2), findings2)
+
+        # Grouping pumps as P-101A/B without alias table reports C2 finding
+        write(self.root, physical_graph.PPC_REVIEW_002,
+              MINIMAL_REVIEW_002.replace("`P-101`", "`P-101A/B`"))
+        findings3 = self.findings()
+        self.assertTrue(any("P-101A/B" in f and "name stated two ways" in f for f in findings3), findings3)
 
     def test_c3_interface_count_7_plus_1_and_terminal_ethanol_not_in_refinery(self):
         g = physical_graph.build(self.root)
         self.assertNotIn(("Terminal ethanol", "LOCATED_AT", "SITE-REF-A"), g.edges)
         self.assertIn(("SMR", "LOCATED_AT", "SITE-REF-A"), g.edges)
-        # Drop one internal interface -> fails 7 internal interfaces check
         write(self.root, physical_graph.PPC_REVIEW_002,
               MINIMAL_REVIEW_002.replace("| SRU | H2S, NH3 | Elemental sulfur | 250 t/day |\n", ""))
-        findings = self.findings()
-        self.assertTrue(any("internal bounded interface" in f.lower() for f in findings), findings)
+        self.assertTrue(any("internal bounded interface" in f.lower() for f in self.findings()))
 
     def test_c4_tank_multiplicity_and_line_count_checks(self):
-        # Break (3x) multiplicity by dropping TK-104
         write(self.root, physical_graph.PPC_REVIEW_002,
               MINIMAL_REVIEW_002.replace("`TK-102`, `TK-103`, `TK-104`", "`TK-102`, `TK-103`"))
-        findings = self.findings()
-        self.assertTrue(any("3x" in f or "TK-102" in f for f in findings), findings)
+        self.assertTrue(any("3x" in f or "TK-102" in f for f in self.findings()))
 
-        # Restore and drop a line from N4 paragraph
         write(self.root, physical_graph.PPC_REVIEW_002,
               MINIMAL_REVIEW_002.replace(", and `LINE-RESID-EXP`", ""))
-        findings2 = self.findings()
-        self.assertTrue(any("LINE-RESID-EXP" in f or "TransferLine" in f for f in findings2), findings2)
+        self.assertTrue(any("LINE-RESID-EXP" in f or "TransferLine" in f for f in self.findings()))
 
-    def test_c5_hidden_world_isolation_allows_declared_probe_and_blocks_leaks(self):
-        # Clean fixture with wp0_probes.py referencing evaluation/hidden/_probe/ passes
-        self.assertEqual(self.findings(), [])
+    def test_c5_permitted_writers_and_probe_exemption_must_come_from_source(self):
+        # Removing permitted_writers or permitted_probe_scripts from r2_prefix_map.yaml MUST be reported
+        no_writers = MINIMAL_PREFIX_MAP.replace(
+            '    permitted_writers:\n      - "generators/"\n      - "verification/"\n', ""
+        )
+        write(self.root, physical_graph.R2_PREFIX_MAP, no_writers)
+        self.assertTrue(any("permitted_writers" in f for f in self.findings()))
+
+        no_probes = MINIMAL_PREFIX_MAP.replace(
+            '    permitted_probe_scripts:\n      - "lakehouse/delta/wp0_probes.py"\n', ""
+        )
+        write(self.root, physical_graph.R2_PREFIX_MAP, no_probes)
+        findings = self.findings()
+        self.assertTrue(any("permitted_probe_scripts" in f for f in findings), findings)
+        # Without source exemption, wp0_probes.py referencing evaluation/hidden/_probe/ is flagged too
+        self.assertTrue(any("READS_OR_WRITES" in f for f in findings), findings)
 
         # Integration pipeline reading evaluation/hidden/world_version=... MUST fail
+        write(self.root, physical_graph.R2_PREFIX_MAP, MINIMAL_PREFIX_MAP)
         write(self.root, "integration/dagster/bad_asset.py",
               'def load():\n    return "s3://pearland-petroleum-hidden/evaluation/hidden/world_version=v1/ckpt.json"\n')
-        findings = self.findings()
-        self.assertTrue(any("READS_OR_WRITES" in f or "hidden" in f.lower() for f in findings), findings)
-
-        # Even inside wp0_probes.py, referencing non-probe hidden path MUST fail
-        os.remove(os.path.join(self.root, "integration/dagster/bad_asset.py"))
-        write(self.root, "lakehouse/delta/wp0_probes.py",
-              'def bad():\n    return "evaluation/hidden/world_version=v1/secret.json"\n')
-        findings2 = self.findings()
-        self.assertTrue(any("READS_OR_WRITES" in f or "hidden" in f.lower() for f in findings2), findings2)
+        self.assertTrue(any("READS_OR_WRITES" in f for f in self.findings()))
 
     def test_c7_invalid_or_missing_provenance_class_fails(self):
         write(self.root, physical_graph.POLICY_THRESHOLDS, 'policy_version: "1.0.0"\nprovenance_class: "MADE_UP"\n')
-        findings = self.findings()
-        self.assertTrue(any("provenance_class" in f and "MADE_UP" in f for f in findings), findings)
+        self.assertTrue(any("provenance_class" in f and "MADE_UP" in f for f in self.findings()))
 
         write(self.root, physical_graph.POLICY_THRESHOLDS, 'policy_version: "1.0.0"\n')
-        findings2 = self.findings()
-        self.assertTrue(any("provenance_class" in f and "policy_thresholds.yaml" in f for f in findings2), findings2)
+        self.assertTrue(any("provenance_class" in f and "policy_thresholds.yaml" in f for f in self.findings()))
 
-    def test_q1_rejects_ppc_extension_and_unbound_kpi_code(self):
-        # PPC_EXTENSION is rejected per ADR-0060 Q1
-        write(self.root, "semantic/mappings/epm_kpi_bindings.yaml",
+    def test_q1_strict_epm_bindings_completeness_and_pending_state(self):
+        clean_r2 = MINIMAL_REVIEW_002.replace("NHT / DHT / FDS (`5A`/`5B`/`5D`)", "NHT / DHT / FCC Selective HDS (`5A`/`5B`/`5D`)")
+        write(self.root, physical_graph.PPC_REVIEW_002, clean_r2)
+
+        # 1. PPC_EXTENSION is rejected (Q1)
+        write(self.root, physical_graph.EPM_KPI_BINDINGS,
               'schema_version: "1.0.0"\nprovenance_class: "OBSERVED"\nbindings:\n  - kpi: "ULSD Netback CPG"\n    status: "PPC_EXTENSION"\n')
-        findings = self.findings()
-        self.assertTrue(any("PPC_EXTENSION" in f for f in findings), findings)
+        self.assertTrue(any("PPC_EXTENSION" in f for f in self.findings()))
 
-        # Code defining a KPI without an EPM binding fails from run 1
-        os.remove(os.path.join(self.root, "semantic/mappings/epm_kpi_bindings.yaml"))
+        # 2. Partial bindings file fails strict completeness for uncovered KPIs and DataProducts (Finding 3 fix)
+        write(self.root, physical_graph.EPM_KPI_BINDINGS,
+              'schema_version: "1.0.0"\nprovenance_class: "OBSERVED"\nbindings:\n'
+              '  - kpi: "ULSD Netback CPG"\n    status: "CONSUMED_PROVISIONAL"\n    epm_artifact: "ontology/kpi_ontology_class_hierarchy.md"\n')
+        findings = self.findings()
+        self.assertTrue(any("Refinery Utilization" in f and "strict mode" in f for f in findings), findings)
+        self.assertTrue(any("Commercial Margin" in f and "strict mode" in f for f in findings), findings)
+
+        # 3. Complete bindings file using CONSUMED_PROVISIONAL and literal "pending" passes (Finding 5 fix)
+        write(self.root, physical_graph.EPM_KPI_BINDINGS,
+              'schema_version: "1.0.0"\nprovenance_class: "OBSERVED"\nbindings:\n'
+              '  - kpi: "ULSD Netback CPG"\n    status: "CONSUMED_PROVISIONAL"\n    epm_artifact: "ontology/kpi_ontology_class_hierarchy.md"\n'
+              '  - kpi: "Refinery Utilization"\n    status: "pending"\n'
+              '  - data_product: "Event"\n    status: "PENDING_UPSTREAM_RELEASE"\n    epm_artifact: "ontology/PROPOSED-release-packaging.md"\n'
+              '  - data_product: "Commercial Margin"\n    status: "pending"\n')
+        self.assertEqual(self.findings(), [])
+
+        # 4. Code defining a KPI without bindings file fails from run 1
+        os.remove(os.path.join(self.root, physical_graph.EPM_KPI_BINDINGS))
         write(self.root, "lakehouse/delta/kpi_calc.py",
-              'KPI_DEFINITIONS = [{"kpi_id": "PPC-INVENTED-KPI", "formula": "x / y"}]\n')
-        findings2 = self.findings()
-        self.assertTrue(any("PPC-INVENTED-KPI" in f or "EPM" in f for f in findings2), findings2)
+              'def compute_kpi(x, y):\n    return {"measure_class": "KPI", "val": x / y}\n')
+        self.assertTrue(any("EPM binding" in f for f in self.findings()))
 
     def test_q2_reports_stale_ppc_reg_002_and_obsolete_scaffold_folders(self):
         write(self.root, physical_graph.PPC_REG_002, MINIMAL_REG_002_LEGACY)
@@ -496,7 +553,6 @@ class PhysicalModelChecks(Fixture):
         self.assertTrue(any("D1" in f for f in findings), findings)
         self.assertTrue(any("DuckLake" in f for f in findings), findings)
 
-        # Obsolete empty scaffold folders
         write(self.root, physical_graph.PPC_REG_002, MINIMAL_REG_002_CLEAN)
         write(self.root, "integration/kafka/.gitkeep", "")
         write(self.root, "lakehouse/ducklake/.gitkeep", "")
@@ -516,38 +572,30 @@ class PhysicalModelChecks(Fixture):
             '  - {id: "TK-402", provenance_class: "SYNTHETIC"}\n  - {id: "TK-999", provenance_class: "SYNTHETIC"}',
         )
         write(self.root, physical_graph.DESIGN_BASIS, bad_invented)
-        findings1 = self.findings()
-        self.assertTrue(any("TK-999" in f for f in findings1), findings1)
+        self.assertTrue(any("TK-999" in f for f in self.findings()))
 
         # 2. Stream with nonexistent destination fails Check 2
-        bad_dest = BUILT_DESIGN_BASIS.replace('destination: "SRU"', 'destination: "GHOST-UNIT"')
-        write(self.root, physical_graph.DESIGN_BASIS, bad_dest)
-        findings2 = self.findings()
-        self.assertTrue(any("GHOST-UNIT" in f for f in findings2), findings2)
+        write(self.root, physical_graph.DESIGN_BASIS, BUILT_DESIGN_BASIS.replace('destination: "9"', 'destination: "GHOST-UNIT"'))
+        self.assertTrue(any("GHOST-UNIT" in f for f in self.findings()))
 
         # 3. Gas stream declaring liquid bbl volume fails Check 2
-        bad_phase_unit = BUILT_DESIGN_BASIS.replace(
+        write(self.root, physical_graph.DESIGN_BASIS, BUILT_DESIGN_BASIS.replace(
             'source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: null',
             'source_phase: "gas", destination_phase: "gas", mass_unit: "t/day", volume_unit: "bbl_60F/day"',
-        )
-        write(self.root, physical_graph.DESIGN_BASIS, bad_phase_unit)
-        findings3 = self.findings()
-        self.assertTrue(any("STR-ACID-GAS" in f and "gas" in f.lower() for f in findings3), findings3)
+        ))
+        self.assertTrue(any("STR-ACID-GAS" in f and "gas" in f.lower() for f in self.findings()))
 
         # 4. Endpoint phase disagreement fails Check 2
-        bad_phase = BUILT_DESIGN_BASIS.replace(
+        write(self.root, physical_graph.DESIGN_BASIS, BUILT_DESIGN_BASIS.replace(
             'source_phase: "liquid", destination_phase: "liquid"',
             'source_phase: "liquid", destination_phase: "gas"',
-        )
-        write(self.root, physical_graph.DESIGN_BASIS, bad_phase)
-        findings4 = self.findings()
-        self.assertTrue(any("STR-VGO-HCU" in f and "phase" in f.lower() for f in findings4), findings4)
+        ))
+        self.assertTrue(any("STR-VGO-HCU" in f and "phase" in f.lower() for f in self.findings()))
 
         # 5. Customer count mismatch against PPC-WORLD-001 ("twelve customers") fails Check 3
-        bad_cust = BUILT_DESIGN_BASIS.replace('  - {id: "CUST-12", provenance_class: "SYNTHETIC"}\n', '')
-        write(self.root, physical_graph.DESIGN_BASIS, bad_cust)
-        findings5 = self.findings()
-        self.assertTrue(any("Customer" in f and "12" in f for f in findings5), findings5)
+        write(self.root, physical_graph.DESIGN_BASIS,
+              BUILT_DESIGN_BASIS.replace('  - {id: "CUST-12", provenance_class: "SYNTHETIC"}\n', ''))
+        self.assertTrue(any("Customer" in f and "12" in f for f in self.findings()))
 
 
 @unittest.skipUnless(shutil.which("relate"), "relate is not installed")
