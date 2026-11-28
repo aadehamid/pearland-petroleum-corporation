@@ -51,14 +51,23 @@ class TestWP4ABackupAndRecovery(unittest.TestCase):
         self.assertTrue(any(g["kind"] == "RECOVERY_GAP_R2_LAGS_OUTBOX" for g in zero_r2["gaps"]))
         with self.assertRaises(ValueError):
             check_recovery_gaps(outbox, inbox, r2_raw_high_water={("refinery_sqlite", "baseline", "default"): -1})
-        # Out-of-scope R2 stream in a partial-store restore does not cause false-positive halt
-        extra_r2 = check_recovery_gaps(
+        # Full-scope check (expected_streams=None) MUST halt if R2 proves a totally lost second stream!
+        mixed_loss = check_recovery_gaps(
             outbox,
             inbox,
             r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 2, ("other_store", "baseline", "p"): 9},
         )
-        self.assertEqual(extra_r2["status"], "CLEAN")
-        self.assertEqual(extra_r2["out_of_scope_r2_streams"], ["other_store:baseline:p"])
+        self.assertEqual(mixed_loss["status"], "RECOVERY_GAP")
+        self.assertTrue(any(g["kind"] == "RECOVERY_GAP_MISSING_OUTBOX_VS_R2" for g in mixed_loss["gaps"]))
+        # Explicit partial-store restore scope (expected_streams) tracks other R2 streams without false halt
+        partial_ok = check_recovery_gaps(
+            outbox,
+            inbox,
+            r2_raw_high_water={("refinery_sqlite", "baseline", "default"): 2, ("other_store", "baseline", "p"): 9},
+            expected_streams=[("refinery_sqlite", "baseline", "default")],
+        )
+        self.assertEqual(partial_ok["status"], "CLEAN")
+        self.assertEqual(partial_ok["out_of_scope_r2_streams"], ["other_store:baseline:p"])
 
         # 1. Missing receipt for seq 2 -> RECOVERY_GAP_UNAPPLIED_OUTBOX
         missing = check_recovery_gaps(outbox, inbox[:1], r2_raw_high_water=r2_ok)

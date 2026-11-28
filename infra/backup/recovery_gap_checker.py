@@ -48,8 +48,16 @@ def check_recovery_gaps(
     outbox_rows: Sequence[Mapping[str, Any]],
     inbox_rows: Sequence[Mapping[str, Any]],
     r2_raw_high_water: Mapping[tuple[str, str, str], int],
+    expected_streams: Sequence[tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Compare source outbox entries against InboxReceipts and mandatory R2 raw-log high-water marks."""
+    """Compare source outbox entries against InboxReceipts and mandatory R2 raw-log high-water marks.
+
+    When `expected_streams` is None (default full-scope restore check), EVERY stream present
+    in outbox, inbox, or `r2_raw_high_water` is checked so total loss of any stream fails closed.
+    When `expected_streams` is explicitly provided (partial-store restore), streams in
+    `expected_streams | outbox | inbox` are checked and other R2 streams are recorded separately
+    in `out_of_scope_r2_streams`.
+    """
     inbox_by_key: dict[tuple[str, str, str, int], dict[str, Any]] = {}
     duplicate_inbox: list[dict[str, Any]] = []
     inbox_seqs_by_stream: dict[tuple[str, str, str], list[int]] = {}
@@ -163,9 +171,13 @@ def check_recovery_gaps(
 
     r2_hw = _normalize_r2_hw(r2_raw_high_water)
     restored_streams = set(outbox_seqs_by_stream) | set(inbox_seqs_by_stream)
-    out_of_scope_r2_streams = sorted(f"{s}:{b}:{p}" for s, b, p in (set(r2_hw) - restored_streams))
-    # If both outbox and inbox are completely empty, any positive R2 high-water proves total loss
-    streams_to_check = restored_streams if restored_streams else {k for k, v in r2_hw.items() if v > 0}
+    if expected_streams is None:
+        streams_to_check = restored_streams | {k for k, v in r2_hw.items() if v > 0}
+        out_of_scope_r2_streams: list[str] = []
+    else:
+        scoped = {(str(s[0]), str(s[1]), str(s[2])) for s in expected_streams}
+        streams_to_check = restored_streams | scoped
+        out_of_scope_r2_streams = sorted(f"{s}:{b}:{p}" for s, b, p in (set(r2_hw) - streams_to_check))
     for stream in sorted(streams_to_check):
         src, branch, part = stream
         out_seqs = sorted(set(outbox_seqs_by_stream.get(stream, [])))

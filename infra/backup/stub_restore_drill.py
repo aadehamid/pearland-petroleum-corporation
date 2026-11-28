@@ -51,8 +51,9 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
         root = Path(tmp)
         live_db = root / "refinery_live.sqlite3"
         backup_db = root / "backup_snapshot.sqlite3"
+        r2_raw_log = root / "r2_raw_events_stub.jsonl"
 
-        # 1. Seed synthetic stub outbox transactions in WAL mode
+        # 1. Seed synthetic stub outbox transactions in WAL mode + independent stub R2 raw event log
         con = sqlite3.connect(str(live_db))
         con.execute("PRAGMA journal_mode=WAL;")
         con.execute(
@@ -69,6 +70,7 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
             """
         )
         inbox_rows: list[dict[str, Any]] = []
+        raw_log_lines: list[str] = []
         for seq in range(1, row_count + 1):
             pdig = hashlib.sha256(f"stub-payload-{seq}".encode("utf-8")).hexdigest()
             dkey = f"refinery_lims:stub:default:{seq}"
@@ -76,17 +78,18 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
                 "INSERT INTO outbox_entries VALUES (?, ?, ?, ?, ?, ?)",
                 ("refinery_lims", "baseline", "default", seq, dkey, pdig),
             )
-            inbox_rows.append(
-                {
-                    "source_system": "refinery_lims",
-                    "branch_id": "baseline",
-                    "partition_key": "default",
-                    "source_sequence": seq,
-                    "delivery_key": dkey,
-                    "payload_digest": pdig,
-                }
-            )
+            row_doc = {
+                "source_system": "refinery_lims",
+                "branch_id": "baseline",
+                "partition_key": "default",
+                "source_sequence": seq,
+                "delivery_key": dkey,
+                "payload_digest": pdig,
+            }
+            inbox_rows.append(row_doc)
+            raw_log_lines.append(json.dumps(row_doc, sort_keys=True))
         con.commit()
+        r2_raw_log.write_text("\n".join(raw_log_lines) + "\n", encoding="utf-8")
 
         # 2. Consistent online SQLite backup API snapshot (matches Litestream / WAL snapshot semantics)
         bcon = sqlite3.connect(str(backup_db))
@@ -104,14 +107,18 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
                 wal_file.unlink()
 
         # 4. Timed restore from backup snapshot including mandatory RECOVERY_GAP verification
+        # Derive R2 high-water marks by reading the independent stub raw-event log file
         t0 = time.monotonic()
         shutil.copy2(backup_db, live_db)
         post_digest, restored_outbox = _canonical_db_digest(live_db)
-        gap_report = check_recovery_gaps(
-            restored_outbox,
-            inbox_rows,
-            r2_raw_high_water={("refinery_lims", "baseline", "default"): row_count},
-        )
+        r2_hw: dict[tuple[str, str, str], int] = {}
+        for line in r2_raw_log.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            ev = json.loads(line)
+            skey = (str(ev["source_system"]), str(ev["branch_id"]), str(ev["partition_key"]))
+            r2_hw[skey] = max(r2_hw.get(skey, 0), int(ev["source_sequence"]))
+        gap_report = check_recovery_gaps(restored_outbox, inbox_rows, r2_raw_high_water=r2_hw)
         rto_seconds = time.monotonic() - t0
         passed = (pre_digest == post_digest) and (gap_report["status"] == "CLEAN") and (rto_seconds <= 3600.0)
         return {
@@ -123,6 +130,7 @@ def run_sqlite_stub_restore_drill(row_count: int = 25) -> dict[str, Any]:
             "hash_equal": pre_digest == post_digest,
             "stub_drill_elapsed_seconds": round(rto_seconds, 6),
             "stub_drill_scope": "sqlite_only_baseline_not_wp4b_live_rto_proof",
+            "r2_evidence_source": "independent_stub_raw_event_log_file",
             "recovery_gap_status": gap_report["status"],
             "status": "PASSED" if passed else "FAILED",
         }
